@@ -10,6 +10,8 @@ type Config struct {
 	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3000"`
 	LogFormat     string `env:"LOG_FORMAT,default=json"`
 	LogLevel      string `env:"LOG_LEVEL,default=info"`
+	InsecureGRPC  bool   `env:"INSECURE_GRPC"`
+	GRPCTarget    string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

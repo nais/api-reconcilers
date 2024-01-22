@@ -10,9 +10,14 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -21,11 +26,6 @@ const (
 	exitCodeRunError
 	exitCodeConfigError
 	exitCodeEnvFileError
-)
-
-const (
-	reconcilerWorkers    = 10
-	fullTeamSyncInterval = time.Minute * 30
 )
 
 func Run(ctx context.Context) {
@@ -66,8 +66,6 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	ctx, signalStop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer signalStop()
 
-	fullTeamSyncTimer := time.NewTimer(time.Second * 1)
-
 	wg, ctx := errgroup.WithContext(ctx)
 
 	// HTTP server
@@ -83,31 +81,21 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		cancel()
 	}()
 
-	defer log.Info("main program context canceled; exiting.")
+	var opts []grpc.DialOption
+	if cfg.InsecureGRPC {
+		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
 
-	for ctx.Err() == nil {
-		select {
-		case <-ctx.Done():
-			return nil
+	client, err := apiclient.New(cfg.GRPCTarget, opts...)
+	if err != nil {
+		return err
+	}
 
-		case <-fullTeamSyncTimer.C:
-			log.Infof("start full team sync")
+	reconcilerManager := reconcilers.NewManager(client, log)
+	githubReconciler := github_team_reconciler.New()
 
-			// correlationID := uuid.New()
-
-			/*
-				teams, err := teamSync.ScheduleAllTeams(ctx, correlationID)
-				if err != nil {
-					log.WithError(err).Errorf("full team sync")
-					fullTeamSyncTimer.Reset(time.Second * 1)
-					break
-				}
-
-			*/
-
-			// log.Infof("%d teams scheduled for sync", len(teams))
-			fullTeamSyncTimer.Reset(fullTeamSyncInterval)
-		}
+	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
+		return err
 	}
 
 	return nil
