@@ -27,16 +27,33 @@ type Manager struct {
 	log         logrus.FieldLogger
 }
 
+func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
+	return &Manager{
+		apiclient: c,
+		log:       log,
+	}
+}
+
 func (m *Manager) Register(r Reconciler) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.reconcilers = append(m.reconcilers, r)
 }
 
-func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
-	return &Manager{
-		apiclient: c,
-		log:       log,
+func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error {
+	if err := m.syncWithAPI(ctx); err != nil {
+		return err
+	}
+
+	for {
+		if err := m.run(ctx); err != nil {
+			m.log.WithError(err).Errorf("error in run()")
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(fullSyncInterval):
+		}
 	}
 }
 
@@ -51,24 +68,6 @@ func (m *Manager) syncWithAPI(ctx context.Context) error {
 
 	_, err := m.apiclient.Reconcilers().Register(ctx, r)
 	return err
-}
-
-func getTeams(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
-	resp, err := client.List(ctx, &protoapi.ListTeamsRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.Nodes, nil
-}
-
-func getReconcilers(ctx context.Context, client protoapi.ReconcilersClient) ([]*protoapi.Reconciler, error) {
-	resp, err := client.List(ctx, &protoapi.ListReconcilersRequest{})
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.Nodes, nil
 }
 
 func (m *Manager) enabledReconcilers(ctx context.Context) ([]Reconciler, error) {
@@ -120,28 +119,49 @@ func (m *Manager) run(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error {
-	if err := m.syncWithAPI(ctx); err != nil {
-		return err
+func getTeams(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
+	teams := make([]*protoapi.Team, 0)
+	limit, offset := int64(100), int64(0)
+	for {
+		resp, err := client.List(ctx, &protoapi.ListTeamsRequest{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		teams = append(teams, resp.Nodes...)
+
+		if !resp.PageInfo.HasNextPage {
+			break
+		}
+
+		offset += limit
 	}
 
-	for {
-		if err := m.run(ctx); err != nil {
-			m.log.WithError(err).Errorf("error in run()")
-		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(fullSyncInterval):
-		}
-	}
+	return teams, nil
 }
 
-// Reconciler Interface for all reconcilers
-type Reconciler interface {
-	Configuration() *protoapi.NewReconciler
-	Name() string
-	Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error
-	Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error
-	Delete(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error
+func getReconcilers(ctx context.Context, client protoapi.ReconcilersClient) ([]*protoapi.Reconciler, error) {
+	reconcilers := make([]*protoapi.Reconciler, 0)
+	limit, offset := int64(100), int64(0)
+	for {
+		resp, err := client.List(ctx, &protoapi.ListReconcilersRequest{
+			Limit:  limit,
+			Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		reconcilers = append(reconcilers, resp.Nodes...)
+
+		if !resp.PageInfo.HasNextPage {
+			break
+		}
+
+		offset += limit
+	}
+	return reconcilers, nil
 }
