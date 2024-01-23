@@ -34,7 +34,6 @@ type Manager struct {
 func (m *Manager) Register(r Reconciler) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-
 	m.reconcilers = append(m.reconcilers, r)
 }
 
@@ -59,6 +58,8 @@ func (m *Manager) run() error {
 		}
 
 	*/
+
+	return nil
 }
 
 func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error {
@@ -76,7 +77,7 @@ func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error
 
 // Reconciler Interface for all reconcilers
 type Reconciler interface {
-	Register() *protoapi.Reconciler
+	Configuration() *protoapi.Reconciler
 	Name() string
 	Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error
 	Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error

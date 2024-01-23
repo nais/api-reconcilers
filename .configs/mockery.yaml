@@ -4,33 +4,19 @@ inpackage: true
 dir: "{{.InterfaceDir}}"
 filename: "mock_{{.InterfaceNameSnake}}.go"
 packages:
-  github.com/nais/api-reconcilers/internal/auditlogger:
-    interfaces:
-      AuditLogger:
-  github.com/nais/api-reconcilers/internal/authn:
-    interfaces:
-      Handler:
   github.com/nais/api-reconcilers/internal/azureclient:
     interfaces:
       Client:
-  github.com/nais/api-reconcilers/internal/db:
-    interfaces:
-      AuthenticatedUser:
-      Database:
   github.com/nais/api-reconcilers/internal/logger:
     interfaces:
       Logger:
   github.com/nais/api-reconcilers/internal/reconcilers:
     interfaces:
       Reconciler:
-  github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack:
-    interfaces:
-      Client:
+  #github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack:
+  #  interfaces:
+  #    Client:
   github.com/nais/api-reconcilers/internal/reconcilers/github/team:
     interfaces:
       TeamsService:
       GraphClient:
-  github.com/nais/api-reconcilers/internal/teamsync:
-    interfaces:
-      Queue:
-      Handler:

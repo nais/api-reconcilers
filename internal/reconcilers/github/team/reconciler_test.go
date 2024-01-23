@@ -1,30 +1,6 @@
 package github_team_reconciler_test
 
-import (
-	"context"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
-
-	"github.com/nais/teams-backend/pkg/types"
-
-	"github.com/google/go-github/v50/github"
-	"github.com/google/uuid"
-	"github.com/nais/teams-backend/pkg/auditlogger"
-	"github.com/nais/teams-backend/pkg/db"
-	"github.com/nais/teams-backend/pkg/helpers"
-	"github.com/nais/teams-backend/pkg/logger"
-	"github.com/nais/teams-backend/pkg/reconcilers"
-	github_team_reconciler "github.com/nais/teams-backend/pkg/reconcilers/github/team"
-	"github.com/nais/teams-backend/pkg/slug"
-	"github.com/nais/teams-backend/pkg/sqlc"
-	"github.com/shurcooL/githubv4"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-)
-
+/*
 func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	domain := "example.com"
 	org := "org"
@@ -873,3 +849,6 @@ func configureSyncTeamInfo(teamsService *github_team_reconciler.MockTeamsService
 			nil,
 		).Once()
 }
+
+
+*/

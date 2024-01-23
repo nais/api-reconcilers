@@ -10,12 +10,6 @@ func Register(ctx context.Context, client protoapi.ReconcilersClient) error {
 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 		Reconcilers: []*protoapi.Reconciler{
 			{
-				Name:        "github:team",
-				DisplayName: "GitHub teams",
-				Description: "Create and maintain GitHub teams for the Console teams.",
-				Enabled:     false,
-			},
-			{
 				Name:        "azure:group",
 				DisplayName: "Azure AD groups",
 				Description: "Create and maintain Azure AD security groups for the Console teams.",

@@ -22,6 +22,8 @@ import (
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
+const reconcilerName = "github:team"
+
 type OptFunc func(*githubTeamReconciler)
 
 func WithTeamsService(teamsService TeamsService) OptFunc {
@@ -36,10 +38,9 @@ func WithGraphClient(graphClient GraphClient) OptFunc {
 	}
 }
 
-func New(ctx context.Context, org, domain, authEndpoint, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, org, authEndpoint, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &githubTeamReconciler{
-		org:    org,
-		domain: domain,
+		org: org,
 	}
 
 	for _, opt := range opts {
@@ -69,18 +70,21 @@ func New(ctx context.Context, org, domain, authEndpoint, googleManagementProject
 	return r, nil
 }
 
-func (r *githubTeamReconciler) Register() *protoapi.Reconciler {
+func (r *githubTeamReconciler) Configuration() *protoapi.Reconciler {
 	return &protoapi.Reconciler{
-		Name: r.Name(),
+		Name:        r.Name(),
+		DisplayName: "GitHub teams",
+		Description: "Create and maintain GitHub teams for the Console teams.",
+		Enabled:     false,
 	}
 }
 
 func (r *githubTeamReconciler) Name() string {
-	return "github:team"
+	return reconcilerName
 }
 
-func (r *githubTeamReconciler) Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error {
-	panic("not implemented")
+func (r *githubTeamReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
+	return nil
 }
 
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
@@ -130,24 +134,19 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
-	state := &reconcilers.GitHubState{}
-	err := r.database.LoadReconcilerStateForTeam(ctx, r.Name(), teamSlug, state)
+	state, err := r.loadState(ctx, client, teamSlug)
 	if err != nil {
-		return fmt.Errorf("load reconciler state for team %q in reconciler %q: %w", teamSlug, r.Name(), err)
+		return err
 	}
 
-	if state.Slug == nil {
-		r.log.Warnf("missing slug in reconciler state for team %q in reconciler %q, assume already deleted", teamSlug, r.Name())
-		return r.database.RemoveReconcilerStateForTeam(ctx, r.Name(), teamSlug)
+	if state.Slug == "" {
+		log.Warnf("missing slug in reconciler state for team %q in reconciler %q, assume team has already been deleted", teamSlug, r.Name())
 	}
 
-	gitHubTeamSlug := *state.Slug
-
-	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, string(gitHubTeamSlug))
+	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, state.Slug)
 	if err != nil {
-		return fmt.Errorf("delete GitHub team %q for team %q: %w", gitHubTeamSlug, teamSlug, err)
+		return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, teamSlug, err)
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
@@ -155,7 +154,15 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
 	}
 
-	return r.database.RemoveReconcilerStateForTeam(ctx, r.Name(), teamSlug)
+	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+		ReconcilerName: r.Name(),
+		TeamSlug:       teamSlug,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *protoapi.Team, githubTeam *github.Team) error {

@@ -26,6 +26,10 @@ func (_m *MockClient) EXPECT() *MockClient_Expecter {
 func (_m *MockClient) AddMemberToGroup(ctx context.Context, grp *Group, member *Member) error {
 	ret := _m.Called(ctx, grp, member)
 
+	if len(ret) == 0 {
+		panic("no return value specified for AddMemberToGroup")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *Group, *Member) error); ok {
 		r0 = rf(ctx, grp, member)
@@ -69,6 +73,10 @@ func (_c *MockClient_AddMemberToGroup_Call) RunAndReturn(run func(context.Contex
 // CreateGroup provides a mock function with given fields: ctx, grp
 func (_m *MockClient) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
 	ret := _m.Called(ctx, grp)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateGroup")
+	}
 
 	var r0 *Group
 	var r1 error
@@ -125,6 +133,10 @@ func (_c *MockClient_CreateGroup_Call) RunAndReturn(run func(context.Context, *G
 func (_m *MockClient) DeleteGroup(ctx context.Context, grpID uuid.UUID) error {
 	ret := _m.Called(ctx, grpID)
 
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteGroup")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, uuid.UUID) error); ok {
 		r0 = rf(ctx, grpID)
@@ -167,6 +179,10 @@ func (_c *MockClient_DeleteGroup_Call) RunAndReturn(run func(context.Context, uu
 // GetGroupById provides a mock function with given fields: ctx, id
 func (_m *MockClient) GetGroupById(ctx context.Context, id uuid.UUID) (*Group, error) {
 	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupById")
+	}
 
 	var r0 *Group
 	var r1 error
@@ -222,6 +238,10 @@ func (_c *MockClient_GetGroupById_Call) RunAndReturn(run func(context.Context, u
 // GetOrCreateGroup provides a mock function with given fields: ctx, existingGroupID, name, description
 func (_m *MockClient) GetOrCreateGroup(ctx context.Context, existingGroupID uuid.UUID, name string, description string) (*Group, bool, error) {
 	ret := _m.Called(ctx, existingGroupID, name, description)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetOrCreateGroup")
+	}
 
 	var r0 *Group
 	var r1 bool
@@ -287,6 +307,10 @@ func (_c *MockClient_GetOrCreateGroup_Call) RunAndReturn(run func(context.Contex
 func (_m *MockClient) GetUser(ctx context.Context, email string) (*Member, error) {
 	ret := _m.Called(ctx, email)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetUser")
+	}
+
 	var r0 *Member
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string) (*Member, error)); ok {
@@ -341,6 +365,10 @@ func (_c *MockClient_GetUser_Call) RunAndReturn(run func(context.Context, string
 // ListGroupMembers provides a mock function with given fields: ctx, grp
 func (_m *MockClient) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, error) {
 	ret := _m.Called(ctx, grp)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListGroupMembers")
+	}
 
 	var r0 []*Member
 	var r1 error
@@ -397,6 +425,10 @@ func (_c *MockClient_ListGroupMembers_Call) RunAndReturn(run func(context.Contex
 func (_m *MockClient) ListGroupOwners(ctx context.Context, grp *Group) ([]*Member, error) {
 	ret := _m.Called(ctx, grp)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ListGroupOwners")
+	}
+
 	var r0 []*Member
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *Group) ([]*Member, error)); ok {
@@ -451,6 +483,10 @@ func (_c *MockClient_ListGroupOwners_Call) RunAndReturn(run func(context.Context
 // RemoveMemberFromGroup provides a mock function with given fields: ctx, grp, member
 func (_m *MockClient) RemoveMemberFromGroup(ctx context.Context, grp *Group, member *Member) error {
 	ret := _m.Called(ctx, grp, member)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveMemberFromGroup")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *Group, *Member) error); ok {

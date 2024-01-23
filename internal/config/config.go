@@ -3,7 +3,6 @@ package config
 import (
 	"strings"
 
-	"github.com/kelseyhightower/envconfig"
 	"github.com/nais/api-reconcilers/internal/gcp"
 )
 
@@ -135,19 +134,6 @@ type Config struct {
 
 	// TenantName The name of the tenant.
 	TenantName string `envconfig:"TEAMS_BACKEND_TENANT_NAME" default:"example"`
-}
-
-func New() (*Config, error) {
-	cfg := &Config{}
-
-	err := envconfig.Process("", cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg.ParseEnvironments()
-
-	return cfg, nil
 }
 
 func (cfg *Config) ParseEnvironments() {

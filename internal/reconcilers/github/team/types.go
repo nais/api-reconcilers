@@ -28,7 +28,6 @@ type githubTeamReconciler struct {
 	teamsService TeamsService
 	graphClient  GraphClient
 	org          string
-	domain       string
 }
 
 type GitHubUser struct {

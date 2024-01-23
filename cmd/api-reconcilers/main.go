@@ -7,6 +7,5 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
-	reconciler.Run(ctx)
+	reconciler.Run(context.Background())
 }

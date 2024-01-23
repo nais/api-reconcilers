@@ -7,11 +7,14 @@ import (
 )
 
 type Config struct {
-	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3000"`
-	LogFormat     string `env:"LOG_FORMAT,default=json"`
-	LogLevel      string `env:"LOG_LEVEL,default=info"`
-	InsecureGRPC  bool   `env:"INSECURE_GRPC"`
-	GRPCTarget    string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
+	ListenAddress             string `env:"LISTEN_ADDRESS,default=127.0.0.1:3000"`
+	LogFormat                 string `env:"LOG_FORMAT,default=json"`
+	LogLevel                  string `env:"LOG_LEVEL,default=info"`
+	InsecureGRPC              bool   `env:"INSECURE_GRPC"`
+	GRPCTarget                string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
+	GitHubOrg                 string `env:"GITHUB_ORG,default=navikt-dev"`
+	GitHubAuthEndpoint        string `env:"GITHUB_AUTH_ENDPOINT"`
+	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

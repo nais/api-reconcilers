@@ -67,8 +67,6 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	defer signalStop()
 
 	wg, ctx := errgroup.WithContext(ctx)
-
-	// HTTP server
 	wg.Go(func() error {
 		return runHttpServer(ctx, cfg.ListenAddress, log)
 	})
@@ -92,7 +90,12 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	}
 
 	reconcilerManager := reconcilers.NewManager(client, log)
-	githubReconciler := github_team_reconciler.New()
+	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHubOrg, cfg.GitHubAuthEndpoint, cfg.GoogleManagementProjectID)
+	if err != nil {
+		return err
+	}
+
+	reconcilerManager.Register(githubReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err

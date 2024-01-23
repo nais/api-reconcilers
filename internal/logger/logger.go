@@ -29,10 +29,5 @@ func New(format, level string) (logrus.FieldLogger, error) {
 
 	log.SetLevel(parsedLevel)
 
-	// set an internal logger for klog (used by k8s client-go)
-	klogLogger := logrus.New()
-	klogLogger.SetLevel(logrus.WarnLevel)
-	klogLogger.SetFormatter(log.Formatter)
-
 	return log, nil
 }
