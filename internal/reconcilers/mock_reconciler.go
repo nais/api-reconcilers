@@ -28,19 +28,19 @@ func (_m *MockReconciler) EXPECT() *MockReconciler_Expecter {
 }
 
 // Configuration provides a mock function with given fields:
-func (_m *MockReconciler) Configuration() *protoapi.Reconciler {
+func (_m *MockReconciler) Configuration() *protoapi.NewReconciler {
 	ret := _m.Called()
 
 	if len(ret) == 0 {
 		panic("no return value specified for Configuration")
 	}
 
-	var r0 *protoapi.Reconciler
-	if rf, ok := ret.Get(0).(func() *protoapi.Reconciler); ok {
+	var r0 *protoapi.NewReconciler
+	if rf, ok := ret.Get(0).(func() *protoapi.NewReconciler); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*protoapi.Reconciler)
+			r0 = ret.Get(0).(*protoapi.NewReconciler)
 		}
 	}
 
@@ -64,12 +64,12 @@ func (_c *MockReconciler_Configuration_Call) Run(run func()) *MockReconciler_Con
 	return _c
 }
 
-func (_c *MockReconciler_Configuration_Call) Return(_a0 *protoapi.Reconciler) *MockReconciler_Configuration_Call {
+func (_c *MockReconciler_Configuration_Call) Return(_a0 *protoapi.NewReconciler) *MockReconciler_Configuration_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockReconciler_Configuration_Call) RunAndReturn(run func() *protoapi.Reconciler) *MockReconciler_Configuration_Call {
+func (_c *MockReconciler_Configuration_Call) RunAndReturn(run func() *protoapi.NewReconciler) *MockReconciler_Configuration_Call {
 	_c.Call.Return(run)
 	return _c
 }

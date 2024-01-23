@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -17,11 +18,6 @@ const (
 	// TeamNamePrefix Prefix that can be used for team-like objects in external systems
 	TeamNamePrefix              = "nais-team-"
 	CnrmServiceAccountAccountID = "nais-sa-cnrm"
-)
-
-const (
-	reconcilerWorkers    = 10
-	fullTeamSyncInterval = time.Minute * 30
 )
 
 type Manager struct {
@@ -57,28 +53,76 @@ func (m *Manager) syncWithAPI(ctx context.Context) error {
 	return err
 }
 
-func (m *Manager) run() error {
-	m.log.Infof("start full team sync")
+func getTeams(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
+	resp, err := client.List(ctx, &protoapi.ListTeamsRequest{})
+	if err != nil {
+		return nil, err
+	}
 
-	/*
-		correlationID := uuid.New()
+	return resp.Nodes, nil
+}
 
-		teams, err := teamSync.ScheduleAllTeams(ctx, correlationID)
-		if err != nil {
-			log.WithError(err).Errorf("full team sync")
-			fullTeamSyncTimer.Reset(time.Second * 1)
-			break
+func getReconcilers(ctx context.Context, client protoapi.ReconcilersClient) ([]*protoapi.Reconciler, error) {
+	resp, err := client.List(ctx, &protoapi.ListReconcilersRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Nodes, nil
+}
+
+func (m *Manager) enabledReconcilers(ctx context.Context) ([]Reconciler, error) {
+	reconcilers, err := getReconcilers(ctx, m.apiclient.Reconcilers())
+	if err != nil {
+		return nil, err
+	}
+
+	ret := make([]Reconciler, 0)
+	for _, r := range m.reconcilers {
+		for _, er := range reconcilers {
+			if r.Name() == er.Name && er.Enabled {
+				ret = append(ret, r)
+			}
 		}
+	}
+	return ret, nil
+}
 
-	*/
+func (m *Manager) run(ctx context.Context) error {
+	reconcilers, err := m.enabledReconcilers(ctx)
+	if err != nil {
+		return err
+	}
+
+	teams, err := getTeams(ctx, m.apiclient.Teams())
+	if err != nil {
+		return err
+	}
+
+	correlationID := uuid.New()
+	log := m.log.WithField("correlation_id", correlationID)
+
+	for _, t := range teams {
+		log := log.WithField("team", t.Slug)
+		for _, r := range reconcilers {
+			log := log.WithField("reconciler", r.Name())
+			if err := r.Reconcile(ctx, m.apiclient, t.Slug, log); err != nil {
+				log.WithError(err).Errorf("error during team reconciler")
+			}
+		}
+	}
 
 	return nil
 }
 
 func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error {
+	if err := m.syncWithAPI(ctx); err != nil {
+		return err
+	}
+
 	for {
-		if err := m.run(); err != nil {
-			return err
+		if err := m.run(ctx); err != nil {
+			m.log.WithError(err).Errorf("error in run()")
 		}
 		select {
 		case <-ctx.Done():
