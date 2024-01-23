@@ -94,6 +94,11 @@ func (m *Manager) run(ctx context.Context) error {
 		return err
 	}
 
+	if len(reconcilers) == 0 {
+		m.log.Info("no reconcilers enabled")
+		return nil
+	}
+
 	teams, err := getTeams(ctx, m.apiclient.Teams())
 	if err != nil {
 		return err
