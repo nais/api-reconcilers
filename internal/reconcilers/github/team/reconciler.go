@@ -70,12 +70,12 @@ func New(ctx context.Context, org, authEndpoint, googleManagementProjectID strin
 	return r, nil
 }
 
-func (r *githubTeamReconciler) Configuration() *protoapi.Reconciler {
-	return &protoapi.Reconciler{
+func (r *githubTeamReconciler) Configuration() *protoapi.NewReconciler {
+	return &protoapi.NewReconciler{
 		Name:        r.Name(),
 		DisplayName: "GitHub teams",
 		Description: "Create and maintain GitHub teams for the Console teams.",
-		Enabled:     false,
+		MemberAware: true,
 	}
 }
 

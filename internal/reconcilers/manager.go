@@ -44,6 +44,19 @@ func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
 	}
 }
 
+func (m *Manager) syncWithAPI(ctx context.Context) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	r := &protoapi.RegisterReconcilerRequest{}
+	for _, rec := range m.reconcilers {
+		r.Reconcilers = append(r.Reconcilers, rec.Configuration())
+	}
+
+	_, err := m.apiclient.Reconcilers().Register(ctx, r)
+	return err
+}
+
 func (m *Manager) run() error {
 	m.log.Infof("start full team sync")
 
@@ -77,7 +90,7 @@ func (m *Manager) Run(ctx context.Context, fullSyncInterval time.Duration) error
 
 // Reconciler Interface for all reconcilers
 type Reconciler interface {
-	Configuration() *protoapi.Reconciler
+	Configuration() *protoapi.NewReconciler
 	Name() string
 	Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error
 	Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error
