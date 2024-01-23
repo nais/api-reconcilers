@@ -84,6 +84,7 @@ func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.
 			if err := json.Unmarshal(resource.Metadata, repo); err != nil {
 				return nil, err
 			}
+			s.Repositories = append(s.Repositories, repo)
 		}
 	}
 
