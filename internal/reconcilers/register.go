@@ -3,12 +3,7 @@ package reconcilers
 // func Register(ctx context.Context, client protoapi.ReconcilersClient) error {
 // 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 // 		Reconcilers: []*protoapi.NewReconciler{
-// 			{
-// 				Name:        "google:workspace-admin",
-// 				DisplayName: "Google workspace group",
-// 				Description: "Create and maintain Google workspace groups for the Console teams.",
-// 				Enabled:     false,
-// 			},
+//
 // 			{
 // 				Name:        "google:gcp:project",
 // 				DisplayName: "GCP projects",
