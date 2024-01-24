@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v50/github"
+	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	strhelper "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
@@ -153,6 +154,16 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		return err
 	}
 
+	_, _ = client.AuditLogs().Create(ctx, &protoapi.CreateAuditLogsRequest{
+		Targets: []*protoapi.AuditLogTarget{
+			{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: naisTeam.Slug}},
+		},
+		Action:         "github:team:delete",
+		CorrelationId:  uuid.New().String(),
+		ReconcilerName: r.Name(),
+		Message:        fmt.Sprintf("Delete GitHub team with slug %q", state.Slug),
+	})
+
 	return nil
 }
 
@@ -208,7 +219,7 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 	return nil
 }
 
-func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, team *protoapi.Team, state *gitHubState) (*github.Team, error) {
+func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, team *protoapi.Team, state *gitHubState) (*github.Team, error) {
 	desiredTeamSlug := team.Slug
 	if state.Slug != "" {
 		desiredTeamSlug = state.Slug
@@ -237,6 +248,16 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, team *protoa
 	if err != nil {
 		return nil, fmt.Errorf("unable to create GitHub team: %w", err)
 	}
+
+	_, _ = client.AuditLogs().Create(ctx, &protoapi.CreateAuditLogsRequest{
+		Targets: []*protoapi.AuditLogTarget{
+			{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: team.Slug}},
+		},
+		Action:         "github:team:create",
+		CorrelationId:  uuid.New().String(),
+		ReconcilerName: r.Name(),
+		Message:        fmt.Sprintf("Created GitHub team %q", *githubTeam.Slug),
+	})
 
 	return githubTeam, nil
 }
@@ -283,15 +304,36 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 				email = nil
 			}
 		}
+
+		_, _ = client.AuditLogs().Create(ctx, &protoapi.CreateAuditLogsRequest{
+			Targets: []*protoapi.AuditLogTarget{
+				{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: teamSlug}},
+			},
+			Action:         "github:team:delete-member",
+			CorrelationId:  uuid.New().String(),
+			ReconcilerName: r.Name(),
+			Message:        fmt.Sprintf("Deleted member %q from GitHub team %q", username, *githubTeam.Slug),
+		})
 	}
 
 	membersToAdd := localOnlyMembers(gitHubUsersToApiUsers, membersAccordingToGitHub)
-	for username := range membersToAdd {
+	for username, apiUser := range membersToAdd {
 		_, resp, err := r.teamsService.AddTeamMembershipBySlug(ctx, r.org, *githubTeam.Slug, username, &github.TeamAddTeamMembershipOptions{})
 		if err := httpError(http.StatusOK, resp, err); err != nil {
 			log.WithError(err).Warnf("add member %q to GitHub team %q", username, *githubTeam.Slug)
 			continue
 		}
+
+		_, _ = client.AuditLogs().Create(ctx, &protoapi.CreateAuditLogsRequest{
+			Targets: []*protoapi.AuditLogTarget{
+				{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: teamSlug}},
+				{AuditLogTargetType: &protoapi.AuditLogTarget_User{User: apiUser.Email}},
+			},
+			Action:         "github:team:add-member",
+			CorrelationId:  uuid.New().String(),
+			ReconcilerName: r.Name(),
+			Message:        fmt.Sprintf("Added member %q to GitHub team %q", username, *githubTeam.Slug),
+		})
 	}
 
 	return nil
