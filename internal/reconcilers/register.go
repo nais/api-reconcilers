@@ -16,12 +16,7 @@ package reconcilers
 // 				Description: "Create NAIS namespaces for the Console teams.",
 // 				Enabled:     false,
 // 			},
-// 			{
-// 				Name:        "nais:deploy",
-// 				DisplayName: "NAIS deploy",
-// 				Description: "Provision NAIS deploy key for Console teams.",
-// 				Enabled:     false,
-// 			},
+// 			,
 // 			{
 // 				Name:        "google:gcp:gar",
 // 				DisplayName: "Google Artifact Registry",

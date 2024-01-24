@@ -16,6 +16,8 @@ type Config struct {
 	GitHubAuthEndpoint        string `env:"GITHUB_AUTH_ENDPOINT"`
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 	TenantDomain              string `env:"TENANT_DOMAIN,default=example.com"`
+	NaisDeployEndpoint        string `env:"NAIS_DEPLOY_ENDPOINT,default=http://localhost:8080/api/v1/provision"`
+	NaisDeployProvisionKey    string `env:"NAIS_DEPLOY_PROVISION_KEY"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

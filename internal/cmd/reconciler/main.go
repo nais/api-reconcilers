@@ -14,6 +14,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
@@ -108,9 +109,15 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
+	naisDeployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeployEndpoint, cfg.NaisDeployProvisionKey)
+	if err != nil {
+		return err
+	}
+
 	reconcilerManager.Register(azureGroupReconciler)
 	reconcilerManager.Register(githubReconciler)
 	reconcilerManager.Register(googleWorkspaceAdminReconciler)
+	reconcilerManager.Register(naisDeployReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err
