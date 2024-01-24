@@ -4,31 +4,6 @@ package reconcilers
 // 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 // 		Reconcilers: []*protoapi.NewReconciler{
 // 			{
-// 				Name:        "azure:group",
-// 				DisplayName: "Azure AD groups",
-// 				Description: "Create and maintain Azure AD security groups for the Console teams.",
-// 				Config: []*protoapi.ReconcilerConfig{
-// 					{
-// 						Key:         "azure:client_secret",
-// 						DisplayName: "Client secret",
-// 						Description: "The client secret of the application registration.",
-// 						Secret:      true,
-// 					},
-// 					{
-// 						Key:         "azure:client_id",
-// 						DisplayName: "Client ID",
-// 						Description: "The client ID of the application registration that Console will use when communicating with the Azure AD APIs. The application must have the following API permissions: Group.Create, GroupMember.ReadWrite.All.",
-// 						Secret:      false,
-// 					},
-// 					{
-// 						Key:         "azure:tenant_id",
-// 						DisplayName: "Tenant ID",
-// 						Description: "The ID of the Azure AD tenant.",
-// 						Secret:      false,
-// 					},
-// 				},
-// 			},
-// 			{
 // 				Name:        "google:workspace-admin",
 // 				DisplayName: "Google workspace group",
 // 				Description: "Create and maintain Google workspace groups for the Console teams.",

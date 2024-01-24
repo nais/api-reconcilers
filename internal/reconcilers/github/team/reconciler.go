@@ -132,17 +132,17 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 
 	if state.Slug == "" {
 		log.Warnf("missing slug in reconciler state, assume team has already been deleted")
-	}
+	} else {
+		resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, state.Slug)
+		if err != nil {
+			return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, naisTeam.Slug, err)
+		}
+		defer resp.Body.Close()
 
-	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, state.Slug)
-	if err != nil {
-		return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, naisTeam.Slug, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
+		if resp.StatusCode != http.StatusNoContent {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
+		}
 	}
 
 	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{

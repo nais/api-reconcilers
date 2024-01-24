@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
+	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
@@ -90,11 +91,16 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	}
 
 	reconcilerManager := reconcilers.NewManager(client, log)
+	azureGroupReconciler, err := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
+	if err != nil {
+		return err
+	}
 	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHubOrg, cfg.GitHubAuthEndpoint, cfg.GoogleManagementProjectID)
 	if err != nil {
 		return err
 	}
 
+	reconcilerManager.Register(azureGroupReconciler)
 	reconcilerManager.Register(githubReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {

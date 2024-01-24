@@ -15,6 +15,7 @@ type Config struct {
 	GitHubOrg                 string `env:"GITHUB_ORG,default=navikt-dev"`
 	GitHubAuthEndpoint        string `env:"GITHUB_AUTH_ENDPOINT"`
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
+	TenantDomain              string `env:"TENANT_DOMAIN,default=example.com"`
 }
 
 // NewConfig creates a new configuration instance from environment variables
