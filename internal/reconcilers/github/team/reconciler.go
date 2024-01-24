@@ -96,7 +96,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, state)
+	githubTeam, err := r.getOrCreateTeam(ctx, client, naisTeam, state)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a GitHub team for team %q in system %q: %w", naisTeam.Slug, r.Name(), err)
 	}
