@@ -9,6 +9,9 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -22,12 +25,27 @@ type Manager struct {
 	lock        sync.Mutex
 	reconcilers []Reconciler
 	log         logrus.FieldLogger
+
+	metricReconcilerTime metric.Int64Histogram
+	metricReconcileTeam  metric.Int64Histogram
 }
 
 func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
+	meter := otel.Meter("reconcilers")
+	recTime, err := meter.Int64Histogram("reconciler_duration", metric.WithDescription("Duration of a specific reconciler, regardless of team, in milliseconds"))
+	if err != nil {
+		log.WithError(err).Errorf("error when creating metric")
+	}
+	teamTime, err := meter.Int64Histogram("reconcile_team_duration", metric.WithDescription("Duration when reconciling an entire team, in milliseconds"))
+	if err != nil {
+		log.WithError(err).Errorf("error when creating metric")
+	}
+
 	return &Manager{
-		apiclient: c,
-		log:       log,
+		apiclient:            c,
+		log:                  log,
+		metricReconcilerTime: recTime,
+		metricReconcileTeam:  teamTime,
 	}
 }
 
@@ -104,13 +122,28 @@ func (m *Manager) run(ctx context.Context) error {
 	log := m.log.WithField("correlation_id", correlationID)
 
 	for _, team := range teams {
+		teamStart := time.Now()
 		log := log.WithField("team", team.Slug)
 		for _, r := range reconcilers {
 			log := log.WithField("reconciler", r.Name())
+			start := time.Now()
+			hasError := false
 			if err := r.Reconcile(ctx, m.apiclient, team, log); err != nil {
+				hasError = true
 				log.WithError(err).Errorf("error during team reconciler")
 			}
+
+			m.metricReconcilerTime.Record(
+				ctx,
+				time.Since(start).Milliseconds(),
+				metric.WithAttributes(
+					attribute.String("reconciler", r.Name()),
+					attribute.Bool("error", hasError),
+				),
+			)
 		}
+
+		m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds())
 	}
 
 	return nil

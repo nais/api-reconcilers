@@ -17,6 +17,7 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/impersonate"
 	"k8s.io/utils/ptr"
 )
@@ -58,6 +59,7 @@ func New(ctx context.Context, org, authEndpoint, googleManagementProjectID strin
 		}
 
 		httpClient := NewGitHubAuthClient(ctx, authEndpoint, ts)
+		httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
 
 		if r.teamsService == nil {
 			r.teamsService = github.NewClient(httpClient).Teams

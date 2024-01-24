@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -16,10 +17,11 @@ import (
 func runHttpServer(
 	ctx context.Context,
 	listenAddress string,
+	promRegistry prometheus.Gatherer,
 	log logrus.FieldLogger,
 ) error {
 	router := chi.NewRouter()
-	router.Handle("/metrics", promhttp.Handler())
+	router.Handle("/metrics", promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{}))
 	router.Get("/healthz", func(_ http.ResponseWriter, _ *http.Request) {})
 
 	srv := &http.Server{

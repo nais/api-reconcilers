@@ -11,13 +11,14 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
-	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -69,20 +70,19 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	ctx, signalStop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer signalStop()
 
+	_, promRegistry, err := newMeterProvider()
+	if err != nil {
+		return err
+	}
+
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
-		return runHttpServer(ctx, cfg.ListenAddress, log)
+		return runHttpServer(ctx, cfg.ListenAddress, promRegistry, log)
 	})
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		sig := <-signals
-		log.Infof("received signal %s, terminating...", sig)
-		cancel()
-	}()
-
-	var opts []grpc.DialOption
+	opts := []grpc.DialOption{
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	}
 	if cfg.InsecureGRPC {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
