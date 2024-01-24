@@ -119,7 +119,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	if err != nil {
 		return err
 	}
-	slackAlertsChannels := resp.Nodes
+	slackAlertsChannels := resp.Channels
 
 	for _, cluster := range r.onpremClusters {
 		gcpProjects[cluster] = ""
