@@ -8,9 +8,7 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 )
 
-const (
-	stateKeyGroupID = "groupID"
-)
+const stateKeyGroupID = "groupID"
 
 type azureState struct {
 	groupID uuid.UUID
@@ -57,4 +55,23 @@ func (r *azureGroupReconciler) loadState(ctx context.Context, client *apiclient.
 	}
 
 	return s, nil
+}
+
+func GetAzureGroupID(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (uuid.UUID, error) {
+	resp, err := client.List(ctx, &protoapi.ListReconcilerResourcesRequest{
+		ReconcilerName: reconcilerName,
+		TeamSlug:       teamSlug,
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	for _, resource := range resp.Nodes {
+		switch resource.Name {
+		case stateKeyGroupID:
+			return uuid.Parse(resource.Value)
+		}
+	}
+
+	return uuid.Nil, nil
 }

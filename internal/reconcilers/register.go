@@ -4,12 +4,6 @@ package reconcilers
 // 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 // 		Reconcilers: []*protoapi.NewReconciler{
 // 			{
-// 				Name:        "nais:namespace",
-// 				DisplayName: "NAIS namespace",
-// 				Description: "Create NAIS namespaces for the Console teams.",
-// 				Enabled:     false,
-// 			},
-// 			{
 // 				Name:        "nais:dependencytrack",
 // 				DisplayName: "DependencyTrack",
 // 				Description: "Create teams and users in dependencytrack",

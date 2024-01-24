@@ -34,27 +34,27 @@ const (
 	googleProjectDisplayNameMaxLength = 30
 	managedByLabelName                = "managed-by"
 	managedByLabelValue               = "api-reconcilers"
-	cnrmServiceAccountAccountID       = "nais-sa-cnrm"
 )
 
 type GcpServices struct {
 	CloudBillingProjectsService           *cloudbilling.ProjectsService
-	CloudResourceManagerProjectsService   *cloudresourcemanager.ProjectsService
 	CloudResourceManagerOperationsService *cloudresourcemanager.OperationsService
-	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
-	ServiceUsageService                   *serviceusage.ServicesService
-	ServiceUsageOperationsService         *serviceusage.OperationsService
-	FirewallService                       *compute.FirewallsService
+	CloudResourceManagerProjectsService   *cloudresourcemanager.ProjectsService
 	ComputeGlobalOperationsService        *compute.GlobalOperationsService
+	FirewallService                       *compute.FirewallsService
+	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
+	ServiceUsageOperationsService         *serviceusage.OperationsService
+	ServiceUsageService                   *serviceusage.ServicesService
 }
 
 type googleGcpReconciler struct {
-	clusters       gcp.Clusters
-	gcpServices    *GcpServices
-	tenantName     string
-	tenantDomain   string
-	cnrmRoleName   string
-	billingAccount string
+	billingAccount       string
+	clusters             gcp.Clusters
+	cnrmRoleName         string
+	cnrmServiceAccountID string
+	gcpServices          *GcpServices
+	tenantDomain         string
+	tenantName           string
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -65,13 +65,14 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
-		clusters:       clusters,
-		tenantDomain:   tenantDomain,
-		cnrmRoleName:   cnrmRoleName,
-		billingAccount: billingAccount,
-		tenantName:     tenantName,
+		billingAccount:       billingAccount,
+		clusters:             clusters,
+		cnrmRoleName:         cnrmRoleName,
+		cnrmServiceAccountID: cnrmServiceAccountID,
+		tenantDomain:         tenantDomain,
+		tenantName:           tenantName,
 	}
 
 	for _, opt := range opts {
@@ -388,7 +389,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 // getOrCreateProjectCnrmServiceAccount Get the CNRM service account for the project in this env. If the service account
 // does not exist, attempt to create it, and then return it.
 func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.Context, teamProjectID string) (*iam.ServiceAccount, error) {
-	email := cnrmServiceAccountAccountID + "@" + teamProjectID + ".iam.gserviceaccount.com"
+	email := r.cnrmServiceAccountID + "@" + teamProjectID + ".iam.gserviceaccount.com"
 	name := "projects/-/serviceAccounts/" + email
 	serviceAccount, err := r.gcpServices.IamProjectsServiceAccountsService.Get(name).Context(ctx).Do()
 	if err == nil {
@@ -396,7 +397,7 @@ func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.C
 	}
 
 	createServiceAccountRequest := &iam.CreateServiceAccountRequest{
-		AccountId: cnrmServiceAccountAccountID,
+		AccountId: r.cnrmServiceAccountID,
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: "CNRM service account",
 			Description: "Managed by github.com/nais/api-reconcilers",

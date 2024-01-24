@@ -14,8 +14,10 @@ const (
 	envProjectIDSeparator = "::"
 )
 
+type gcpProjects map[string]string // env => projectID
+
 type googleGcpProjectState struct {
-	projects map[string]string // env => projectID
+	projects gcpProjects
 }
 
 func (r *googleGcpReconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, state *googleGcpProjectState) error {
@@ -39,8 +41,24 @@ func (r *googleGcpReconciler) saveState(ctx context.Context, client *apiclient.A
 }
 
 func (r *googleGcpReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*googleGcpProjectState, error) {
-	resp, err := client.ReconcilerResources().List(ctx, &protoapi.ListReconcilerResourcesRequest{
+	return getState(ctx, client.ReconcilerResources(), teamSlug)
+}
+
+func (r *googleGcpReconciler) deleteState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) error {
+	_, err := client.Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
+		TeamSlug:       teamSlug,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (*googleGcpProjectState, error) {
+	resp, err := client.List(ctx, &protoapi.ListReconcilerResourcesRequest{
+		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})
 	if err != nil {
@@ -48,7 +66,7 @@ func (r *googleGcpReconciler) loadState(ctx context.Context, client *apiclient.A
 	}
 
 	s := &googleGcpProjectState{
-		projects: make(map[string]string),
+		projects: make(gcpProjects),
 	}
 	for _, resource := range resp.Nodes {
 		switch resource.Name {
@@ -66,14 +84,10 @@ func (r *googleGcpReconciler) loadState(ctx context.Context, client *apiclient.A
 	return s, nil
 }
 
-func (r *googleGcpReconciler) deleteState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) error {
-	_, err := client.Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       teamSlug,
-	})
+func GetGcpProjects(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (gcpProjects, error) {
+	state, err := getState(ctx, client, teamSlug)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	return nil
+	return state.projects, nil
 }

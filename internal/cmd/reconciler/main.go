@@ -17,6 +17,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	"github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
+	"github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
@@ -116,12 +117,17 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.CNRMRole, cfg.BillingAccount)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.CNRMRole, cfg.BillingAccount, cfg.CNRMServiceAccountID)
 	if err != nil {
 		return err
 	}
 
 	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.WorkloadIdentityPoolName)
+	if err != nil {
+		return err
+	}
+
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.CNRMServiceAccountID, cfg.AzureEnabled, cfg.OnpremClusters)
 	if err != nil {
 		return err
 	}
@@ -132,6 +138,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	reconcilerManager.Register(naisDeployReconciler)
 	reconcilerManager.Register(googleGcpReconciler)
 	reconcilerManager.Register(garReconciler)
+	reconcilerManager.Register(namespaceReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err
