@@ -87,24 +87,15 @@ func (r *githubTeamReconciler) Reconfigure(_ context.Context, _ *apiclient.APICl
 	return nil
 }
 
-func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
-	getTeamResponse, err := client.Teams().Get(ctx, &protoapi.GetTeamRequest{
-		Slug: teamSlug,
-	})
-	if err != nil {
-		return err
-	}
-
-	naisTeam := getTeamResponse.Team
-
-	state, err := r.loadState(ctx, client, teamSlug)
+func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
 	}
 
 	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, state)
 	if err != nil {
-		return fmt.Errorf("unable to get or create a GitHub team for team %q in system %q: %w", teamSlug, r.Name(), err)
+		return fmt.Errorf("unable to get or create a GitHub team for team %q in system %q: %w", naisTeam.Slug, r.Name(), err)
 	}
 
 	state.Slug = *githubTeam.Slug
@@ -133,19 +124,19 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 	return nil
 }
 
-func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, teamSlug)
+func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
 	}
 
 	if state.Slug == "" {
-		log.Warnf("missing slug in reconciler state for team %q in reconciler %q, assume team has already been deleted", teamSlug, r.Name())
+		log.Warnf("missing slug in reconciler state, assume team has already been deleted")
 	}
 
 	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, state.Slug)
 	if err != nil {
-		return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, teamSlug, err)
+		return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, naisTeam.Slug, err)
 	}
 	defer resp.Body.Close()
 
@@ -156,7 +147,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 
 	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
-		TeamSlug:       teamSlug,
+		TeamSlug:       naisTeam.Slug,
 	})
 	if err != nil {
 		return err

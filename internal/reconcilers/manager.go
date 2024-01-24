@@ -106,11 +106,11 @@ func (m *Manager) run(ctx context.Context) error {
 	correlationID := uuid.New()
 	log := m.log.WithField("correlation_id", correlationID)
 
-	for _, t := range teams {
-		log := log.WithField("team", t.Slug)
+	for _, team := range teams {
+		log := log.WithField("team", team.Slug)
 		for _, r := range reconcilers {
 			log := log.WithField("reconciler", r.Name())
-			if err := r.Reconcile(ctx, m.apiclient, t.Slug, log); err != nil {
+			if err := r.Reconcile(ctx, m.apiclient, team, log); err != nil {
 				log.WithError(err).Errorf("error during team reconciler")
 			}
 		}

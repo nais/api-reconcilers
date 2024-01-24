@@ -74,17 +74,17 @@ func (_c *MockReconciler_Configuration_Call) RunAndReturn(run func() *protoapi.N
 	return _c
 }
 
-// Delete provides a mock function with given fields: ctx, client, teamSlug, log
-func (_m *MockReconciler) Delete(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
-	ret := _m.Called(ctx, client, teamSlug, log)
+// Delete provides a mock function with given fields: ctx, client, naisTeam, log
+func (_m *MockReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	ret := _m.Called(ctx, client, naisTeam, log)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *apiclient.APIClient, string, logrus.FieldLogger) error); ok {
-		r0 = rf(ctx, client, teamSlug, log)
+	if rf, ok := ret.Get(0).(func(context.Context, *apiclient.APIClient, *protoapi.Team, logrus.FieldLogger) error); ok {
+		r0 = rf(ctx, client, naisTeam, log)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -100,15 +100,15 @@ type MockReconciler_Delete_Call struct {
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
 //   - client *apiclient.APIClient
-//   - teamSlug string
+//   - naisTeam *protoapi.Team
 //   - log logrus.FieldLogger
-func (_e *MockReconciler_Expecter) Delete(ctx interface{}, client interface{}, teamSlug interface{}, log interface{}) *MockReconciler_Delete_Call {
-	return &MockReconciler_Delete_Call{Call: _e.mock.On("Delete", ctx, client, teamSlug, log)}
+func (_e *MockReconciler_Expecter) Delete(ctx interface{}, client interface{}, naisTeam interface{}, log interface{}) *MockReconciler_Delete_Call {
+	return &MockReconciler_Delete_Call{Call: _e.mock.On("Delete", ctx, client, naisTeam, log)}
 }
 
-func (_c *MockReconciler_Delete_Call) Run(run func(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger)) *MockReconciler_Delete_Call {
+func (_c *MockReconciler_Delete_Call) Run(run func(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger)) *MockReconciler_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*apiclient.APIClient), args[2].(string), args[3].(logrus.FieldLogger))
+		run(args[0].(context.Context), args[1].(*apiclient.APIClient), args[2].(*protoapi.Team), args[3].(logrus.FieldLogger))
 	})
 	return _c
 }
@@ -118,7 +118,7 @@ func (_c *MockReconciler_Delete_Call) Return(_a0 error) *MockReconciler_Delete_C
 	return _c
 }
 
-func (_c *MockReconciler_Delete_Call) RunAndReturn(run func(context.Context, *apiclient.APIClient, string, logrus.FieldLogger) error) *MockReconciler_Delete_Call {
+func (_c *MockReconciler_Delete_Call) RunAndReturn(run func(context.Context, *apiclient.APIClient, *protoapi.Team, logrus.FieldLogger) error) *MockReconciler_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -168,17 +168,17 @@ func (_c *MockReconciler_Name_Call) RunAndReturn(run func() string) *MockReconci
 	return _c
 }
 
-// Reconcile provides a mock function with given fields: ctx, client, teamSlug, log
-func (_m *MockReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger) error {
-	ret := _m.Called(ctx, client, teamSlug, log)
+// Reconcile provides a mock function with given fields: ctx, client, naisTeam, log
+func (_m *MockReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	ret := _m.Called(ctx, client, naisTeam, log)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Reconcile")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *apiclient.APIClient, string, logrus.FieldLogger) error); ok {
-		r0 = rf(ctx, client, teamSlug, log)
+	if rf, ok := ret.Get(0).(func(context.Context, *apiclient.APIClient, *protoapi.Team, logrus.FieldLogger) error); ok {
+		r0 = rf(ctx, client, naisTeam, log)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -194,15 +194,15 @@ type MockReconciler_Reconcile_Call struct {
 // Reconcile is a helper method to define mock.On call
 //   - ctx context.Context
 //   - client *apiclient.APIClient
-//   - teamSlug string
+//   - naisTeam *protoapi.Team
 //   - log logrus.FieldLogger
-func (_e *MockReconciler_Expecter) Reconcile(ctx interface{}, client interface{}, teamSlug interface{}, log interface{}) *MockReconciler_Reconcile_Call {
-	return &MockReconciler_Reconcile_Call{Call: _e.mock.On("Reconcile", ctx, client, teamSlug, log)}
+func (_e *MockReconciler_Expecter) Reconcile(ctx interface{}, client interface{}, naisTeam interface{}, log interface{}) *MockReconciler_Reconcile_Call {
+	return &MockReconciler_Reconcile_Call{Call: _e.mock.On("Reconcile", ctx, client, naisTeam, log)}
 }
 
-func (_c *MockReconciler_Reconcile_Call) Run(run func(ctx context.Context, client *apiclient.APIClient, teamSlug string, log logrus.FieldLogger)) *MockReconciler_Reconcile_Call {
+func (_c *MockReconciler_Reconcile_Call) Run(run func(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger)) *MockReconciler_Reconcile_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*apiclient.APIClient), args[2].(string), args[3].(logrus.FieldLogger))
+		run(args[0].(context.Context), args[1].(*apiclient.APIClient), args[2].(*protoapi.Team), args[3].(logrus.FieldLogger))
 	})
 	return _c
 }
@@ -212,7 +212,7 @@ func (_c *MockReconciler_Reconcile_Call) Return(_a0 error) *MockReconciler_Recon
 	return _c
 }
 
-func (_c *MockReconciler_Reconcile_Call) RunAndReturn(run func(context.Context, *apiclient.APIClient, string, logrus.FieldLogger) error) *MockReconciler_Reconcile_Call {
+func (_c *MockReconciler_Reconcile_Call) RunAndReturn(run func(context.Context, *apiclient.APIClient, *protoapi.Team, logrus.FieldLogger) error) *MockReconciler_Reconcile_Call {
 	_c.Call.Return(run)
 	return _c
 }
