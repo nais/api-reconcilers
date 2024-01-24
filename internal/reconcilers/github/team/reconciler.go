@@ -279,7 +279,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 				Email: *email,
 			})
 			if err != nil {
-				log.WithError(err).Warnf("get teams-backend user with email %q", *email)
+				log.WithError(err).Warnf("get NAIS teams user with email %q", *email)
 				email = nil
 			}
 		}
@@ -323,37 +323,37 @@ func (r *githubTeamReconciler) getTeamMembers(ctx context.Context, slug string) 
 	return allMembers, nil
 }
 
-// localOnlyMembers Given a mapping of GitHub usernames to teams-backend users, and a list of GitHub team members according to
-// GitHub, return members only present in the mapping.
-func localOnlyMembers(teamsBackendUsers map[string]*protoapi.User, membersAccordingToGitHub []*github.User) map[string]*protoapi.User {
+// localOnlyMembers Given a mapping of GitHub usernames to NAIS teams users, and a list of GitHub team members according
+// to GitHub, return members only present in the mapping.
+func localOnlyMembers(naisUsers map[string]*protoapi.User, membersAccordingToGitHub []*github.User) map[string]*protoapi.User {
 	gitHubUsernameMap := make(map[string]*github.User)
 	for _, gitHubUser := range membersAccordingToGitHub {
 		gitHubUsernameMap[gitHubUser.GetLogin()] = gitHubUser
 	}
 
 	localOnly := make(map[string]*protoapi.User)
-	for gitHubUsername, teamsBackendUser := range teamsBackendUsers {
+	for gitHubUsername, naisUser := range naisUsers {
 		if _, exists := gitHubUsernameMap[gitHubUsername]; !exists {
-			localOnly[gitHubUsername] = teamsBackendUser
+			localOnly[gitHubUsername] = naisUser
 		}
 	}
 	return localOnly
 }
 
-// remoteOnlyMembers Given a list of GitHub team members and a mapping of known GitHub usernames to teams-backend users,
+// remoteOnlyMembers Given a list of GitHub team members and a mapping of known GitHub usernames to NAIS teams users,
 // return members not present in the mapping.
-func remoteOnlyMembers(membersAccordingToGitHub []*github.User, teamsBackendUsers map[string]*protoapi.User) []*github.User {
+func remoteOnlyMembers(membersAccordingToGitHub []*github.User, naisUsers map[string]*protoapi.User) []*github.User {
 	unknownMembers := make([]*github.User, 0)
 	for _, member := range membersAccordingToGitHub {
-		if _, exists := teamsBackendUsers[member.GetLogin()]; !exists {
+		if _, exists := naisUsers[member.GetLogin()]; !exists {
 			unknownMembers = append(unknownMembers, member)
 		}
 	}
 	return unknownMembers
 }
 
-// mapSSOUsers Return a mapping of GitHub usernames to teams-backend user objects. teams-backend users with no matching
-// GitHub user will be ignored.
+// mapSSOUsers Return a mapping of GitHub usernames to NAIS teams users. NAIS teams users with no matching GitHub user
+// will be ignored.
 func (r *githubTeamReconciler) mapSSOUsers(ctx context.Context, members []*protoapi.TeamMember, log logrus.FieldLogger) (map[string]*protoapi.User, error) {
 	userMap := make(map[string]*protoapi.User)
 	for _, member := range members {
@@ -488,7 +488,7 @@ func httpError(expected int, resp *github.Response, err error) error {
 	return nil
 }
 
-// gitHubTeamIsUpdated check if a GitHub team is updated compared to the teams-backend team
+// gitHubTeamIsUpdated check if a GitHub team is updated compared to the NAIS team
 func gitHubTeamIsUpdated(naisTeam *protoapi.Team, gitHubTeam *github.Team) bool {
 	if naisTeam.Purpose != strhelper.WithFallback(gitHubTeam.Description, "") {
 		return false
