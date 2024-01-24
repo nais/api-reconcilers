@@ -23,6 +23,7 @@ type Config struct {
 	NaisDeployProvisionKey    string       `env:"NAIS_DEPLOY_PROVISION_KEY"`
 	TenantDomain              string       `env:"TENANT_DOMAIN,default=example.com"`
 	TenantName                string       `env:"TENANT_NAME,default=example"`
+	WorkloadIdentityPoolName  string       `env:"GCP_WORKLOAD_IDENTITY_POOL_NAME"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

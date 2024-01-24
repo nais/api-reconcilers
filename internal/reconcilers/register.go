@@ -3,19 +3,10 @@ package reconcilers
 // func Register(ctx context.Context, client protoapi.ReconcilersClient) error {
 // 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 // 		Reconcilers: []*protoapi.NewReconciler{
-//
-// 			,
 // 			{
 // 				Name:        "nais:namespace",
 // 				DisplayName: "NAIS namespace",
 // 				Description: "Create NAIS namespaces for the Console teams.",
-// 				Enabled:     false,
-// 			},
-// 			,
-// 			{
-// 				Name:        "google:gcp:gar",
-// 				DisplayName: "Google Artifact Registry",
-// 				Description: "Provision artifact registry repositories for Console teams.",
 // 				Enabled:     false,
 // 			},
 // 			{

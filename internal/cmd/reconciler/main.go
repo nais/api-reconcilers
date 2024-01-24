@@ -13,6 +13,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	"github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	"github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
@@ -120,11 +121,17 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
+	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.WorkloadIdentityPoolName)
+	if err != nil {
+		return err
+	}
+
 	reconcilerManager.Register(azureGroupReconciler)
 	reconcilerManager.Register(githubReconciler)
 	reconcilerManager.Register(googleWorkspaceAdminReconciler)
 	reconcilerManager.Register(naisDeployReconciler)
 	reconcilerManager.Register(googleGcpReconciler)
+	reconcilerManager.Register(garReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err
