@@ -11,10 +11,11 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
-	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
-	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
+	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
+	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	"github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
@@ -114,10 +115,16 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.CNRMRole, cfg.BillingAccount)
+	if err != nil {
+		return err
+	}
+
 	reconcilerManager.Register(azureGroupReconciler)
 	reconcilerManager.Register(githubReconciler)
 	reconcilerManager.Register(googleWorkspaceAdminReconciler)
 	reconcilerManager.Register(naisDeployReconciler)
+	reconcilerManager.Register(googleGcpReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err

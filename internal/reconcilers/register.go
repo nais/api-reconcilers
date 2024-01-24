@@ -4,12 +4,7 @@ package reconcilers
 // 	_, err := client.Register(ctx, &protoapi.RegisterReconcilerRequest{
 // 		Reconcilers: []*protoapi.NewReconciler{
 //
-// 			{
-// 				Name:        "google:gcp:project",
-// 				DisplayName: "GCP projects",
-// 				Description: "Create GCP projects for the Console teams.",
-// 				Enabled:     false,
-// 			},
+// 			,
 // 			{
 // 				Name:        "nais:namespace",
 // 				DisplayName: "NAIS namespace",

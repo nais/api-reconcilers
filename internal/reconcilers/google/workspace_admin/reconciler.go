@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	reconcilerName = "google:workspace-admin"
+	ReconcilerName = "google:workspace-admin"
 
 	googleGroupPrefix = "nais-team-"
 )
@@ -76,7 +76,7 @@ func (r *googleWorkspaceAdminReconciler) Configuration() *protoapi.NewReconciler
 }
 
 func (r *googleWorkspaceAdminReconciler) Name() string {
-	return reconcilerName
+	return ReconcilerName
 }
 
 func (r *googleWorkspaceAdminReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {

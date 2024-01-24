@@ -14,12 +14,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-const (
-	ManagedByLabelName          = "managed-by"
-	ManagedByLabelValue         = "teams-backend"
-	CnrmServiceAccountAccountID = "nais-sa-cnrm"
-)
-
 type Manager struct {
 	apiclient   *apiclient.APIClient
 	lock        sync.Mutex
