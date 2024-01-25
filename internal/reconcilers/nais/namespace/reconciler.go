@@ -11,7 +11,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -87,6 +86,10 @@ func (r *naisNamespaceReconciler) Reconfigure(_ context.Context, _ *apiclient.AP
 }
 
 func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	if naisTeam.GoogleGroupEmail == "" {
+		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
+	}
+
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
@@ -99,11 +102,6 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 	if len(gcpProjects) == 0 {
 		return fmt.Errorf("no GCP project state exists for team %q yet", naisTeam.Slug)
-	}
-
-	googleGroupEmail, err := google_workspace_admin_reconciler.GetGroupEmail(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	if err != nil {
-		return err
 	}
 
 	azureGroupID, err := r.getAzureGroupID(ctx, client.ReconcilerResources(), naisTeam.Slug)
@@ -141,7 +139,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			}
 		}
 
-		if err := r.createNamespace(ctx, naisTeam, environment, slackAlertsChannel, projectID, googleGroupEmail, azureGroupID); err != nil {
+		if err := r.createNamespace(ctx, naisTeam, environment, slackAlertsChannel, projectID, azureGroupID); err != nil {
 			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", projectID, environment, err)
 		}
 
@@ -222,8 +220,8 @@ func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, teamSlug,
 	return err
 }
 
-func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, environment, slackAlertsChannel, gcpProjectID, groupEmail string, azureGroupID uuid.UUID) error {
-	payload, err := createNamespacePayload(naisTeam.Slug, gcpProjectID, groupEmail, slackAlertsChannel, r.cnrmServiceAccountID, azureGroupID)
+func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, environment, slackAlertsChannel, gcpProjectID string, azureGroupID uuid.UUID) error {
+	payload, err := createNamespacePayload(naisTeam, gcpProjectID, slackAlertsChannel, r.cnrmServiceAccountID, azureGroupID)
 	if err != nil {
 		return err
 	}

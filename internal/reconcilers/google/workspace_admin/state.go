@@ -53,22 +53,3 @@ func (r *googleWorkspaceAdminReconciler) loadState(ctx context.Context, client *
 
 	return s, nil
 }
-
-func GetGroupEmail(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (string, error) {
-	resp, err := client.List(ctx, &protoapi.ListReconcilerResourcesRequest{
-		ReconcilerName: ReconcilerName,
-		TeamSlug:       teamSlug,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	for _, resource := range resp.Nodes {
-		switch resource.Name {
-		case stateKeyGroupEmail:
-			return resource.Value, nil
-		}
-	}
-
-	return "", nil
-}

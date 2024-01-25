@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/nais/api/pkg/protoapi"
 )
 
 const (
@@ -31,7 +32,7 @@ type naisdRequest struct {
 	Data json.RawMessage `json:"data"`
 }
 
-func createNamespacePayload(teamSlug, gcpProjectID, groupEmail, slackAlertsChannel, cnrmServiceAccountID string, azureGroupID uuid.UUID) ([]byte, error) {
+func createNamespacePayload(naisTeam *protoapi.Team, gcpProjectID, slackAlertsChannel, cnrmServiceAccountID string, azureGroupID uuid.UUID) ([]byte, error) {
 	cnrmEmail := ""
 	if gcpProjectID != "" {
 		cnrmEmail = cnrmServiceAccountID + "@" + gcpProjectID + ".iam.gserviceaccount.com"
@@ -39,9 +40,9 @@ func createNamespacePayload(teamSlug, gcpProjectID, groupEmail, slackAlertsChann
 
 	createReq, err := json.Marshal(
 		naisdCreateNamespace{
-			Name:       teamSlug,
+			Name:       naisTeam.Slug,
 			GcpProject: gcpProjectID,
-			GroupEmail: groupEmail,
+			GroupEmail: naisTeam.GoogleGroupEmail,
 			AzureGroupID: func(id uuid.UUID) string {
 				if id == uuid.Nil {
 					return ""

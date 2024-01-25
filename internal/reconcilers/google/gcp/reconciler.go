@@ -14,7 +14,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
@@ -109,16 +108,13 @@ func (r *googleGcpReconciler) Reconfigure(_ context.Context, _ *apiclient.APICli
 }
 
 func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	if naisTeam.GoogleGroupEmail == "" {
+		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
+	}
+
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
-	}
-
-	groupEmail, err := google_workspace_admin_reconciler.GetGroupEmail(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	if err != nil {
-		return fmt.Errorf("get Google Workspace group email: %w", err)
-	} else if groupEmail == "" {
-		return fmt.Errorf("no Google Workspace group exists for team %q yet, is the %q reconciler enabled? ", naisTeam.Slug, google_workspace_admin_reconciler.ReconcilerName)
 	}
 
 	teamProjects := make(map[string]*cloudresourcemanager.Project, len(r.clusters))
@@ -154,7 +150,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
 		}
 
-		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, groupEmail, cluster.ProjectID, cnrmServiceAccount); err != nil {
+		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
 		}
 
@@ -345,7 +341,7 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 
 // setProjectPermissions Make sure that the project has the necessary permissions, and don't remove permissions we don't
 // control
-func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, groupEmail, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount) error {
+func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount) error {
 	member := "serviceAccount:" + clusterProjectID + ".svc.id.goog[cnrm-system/cnrm-controller-manager-" + naisTeam.Slug + "]"
 	_, err := r.gcpServices.IamProjectsServiceAccountsService.SetIamPolicy(cnrmServiceAccount.Name, &iam.SetIamPolicyRequest{
 		Policy: &iam.Policy{
@@ -367,7 +363,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 	}
 
 	newBindings, updated := calculateRoleBindings(policy.Bindings, map[string]string{
-		"roles/owner":  "group:" + groupEmail,
+		"roles/owner":  "group:" + naisTeam.GoogleGroupEmail,
 		r.cnrmRoleName: "serviceAccount:" + cnrmServiceAccount.Email,
 	})
 

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ReconcilerName = "google:workspace-admin"
+	reconcilerName = "google:workspace-admin"
 
 	googleGroupPrefix = "nais-team-"
 )
@@ -76,7 +76,7 @@ func (r *googleWorkspaceAdminReconciler) Configuration() *protoapi.NewReconciler
 }
 
 func (r *googleWorkspaceAdminReconciler) Name() string {
-	return ReconcilerName
+	return reconcilerName
 }
 
 func (r *googleWorkspaceAdminReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
@@ -109,6 +109,16 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 
 	if err := r.addToGKESecurityGroup(ctx, googleGroup); err != nil {
 		return err
+	}
+
+	if googleGroup.Email != naisTeam.GoogleGroupEmail {
+		_, err := client.Teams().SetGoogleGroupEmailForTeam(ctx, &protoapi.SetGoogleGroupEmailForTeamRequest{
+			Slug:             naisTeam.Slug,
+			GoogleGroupEmail: googleGroup.Email,
+		})
+		if err != nil {
+			return fmt.Errorf("set Google group email for team %q: %w", naisTeam.Slug, err)
+		}
 	}
 
 	return nil

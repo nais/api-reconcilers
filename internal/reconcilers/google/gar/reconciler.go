@@ -12,7 +12,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
@@ -126,8 +125,7 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return err
 	}
 
-	googleGroupEmail, _ := google_workspace_admin_reconciler.GetGroupEmail(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	if err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, googleGroupEmail); err != nil {
+	if err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, naisTeam.GoogleGroupEmail); err != nil {
 		return err
 	}
 
