@@ -12,6 +12,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
+	"github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
 	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
@@ -132,6 +133,11 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
+	dependencyTrackReconciler, err := dependencytrack_reconciler.New(ctx, cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
+	if err != nil {
+		return err
+	}
+
 	reconcilerManager.Register(azureGroupReconciler)
 	reconcilerManager.Register(githubReconciler)
 	reconcilerManager.Register(googleWorkspaceAdminReconciler)
@@ -139,6 +145,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	reconcilerManager.Register(googleGcpReconciler)
 	reconcilerManager.Register(garReconciler)
 	reconcilerManager.Register(namespaceReconciler)
+	reconcilerManager.Register(dependencyTrackReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err

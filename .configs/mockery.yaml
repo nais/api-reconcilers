@@ -13,9 +13,9 @@ packages:
   github.com/nais/api-reconcilers/internal/reconcilers:
     interfaces:
       Reconciler:
-  #github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack:
-  #  interfaces:
-  #    Client:
+  github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack:
+    interfaces:
+      Client:
   github.com/nais/api-reconcilers/internal/reconcilers/github/team:
     interfaces:
       TeamsService:

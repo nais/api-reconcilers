@@ -189,3 +189,27 @@ func getReconcilers(ctx context.Context, client protoapi.ReconcilersClient) ([]*
 	}
 	return reconcilers, nil
 }
+
+func GetTeamMembers(ctx context.Context, client protoapi.TeamsClient, teamSlug string) ([]*protoapi.TeamMember, error) {
+	members := make([]*protoapi.TeamMember, 0)
+	limit, offset := int64(100), int64(0)
+	for {
+		resp, err := client.Members(ctx, &protoapi.ListTeamMembersRequest{
+			Limit:  limit,
+			Offset: offset,
+			Slug:   teamSlug,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		members = append(members, resp.Nodes...)
+
+		if !resp.PageInfo.HasNextPage {
+			break
+		}
+
+		offset += limit
+	}
+	return members, nil
+}
