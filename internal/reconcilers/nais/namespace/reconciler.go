@@ -9,9 +9,9 @@ import (
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
@@ -95,9 +95,16 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return err
 	}
 
-	gcpProjects, err := google_gcp_reconciler.GetGcpProjects(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	if err != nil {
-		return err
+	it := iterator.New(ctx, 20, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Slug: naisTeam.Slug})
+	})
+
+	gcpProjects := make(map[string]string)
+	for it.Next() {
+		env := it.Value()
+		if env.GcpProjectId != nil {
+			gcpProjects[env.EnvironmentName] = *env.GcpProjectId
+		}
 	}
 
 	if len(gcpProjects) == 0 {
@@ -152,15 +159,16 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return err
 	}
 
-	if updateGcpProjectState {
-		// TODO: Persist GCP project state
-		/*
-			err = r.database.SetReconcilerStateForTeam(ctx, google_gcp_reconciler.Name, input.Team.Slug, gcpProjectState)
-			if err != nil {
-				log.WithError(err).Error("persisted GCP project state")
-			}
-		*/
-	}
+	_ = updateGcpProjectState
+	// if updateGcpProjectState {
+	// TODO: Persist GCP project state
+	/*
+		err = r.database.SetReconcilerStateForTeam(ctx, google_gcp_reconciler.Name, input.Team.Slug, gcpProjectState)
+		if err != nil {
+			log.WithError(err).Error("persisted GCP project state")
+		}
+	*/
+	// }
 
 	return nil
 }

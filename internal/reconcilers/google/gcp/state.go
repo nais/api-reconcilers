@@ -83,11 +83,3 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 
 	return s, nil
 }
-
-func GetGcpProjects(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (gcpProjects, error) {
-	state, err := getState(ctx, client, teamSlug)
-	if err != nil {
-		return nil, err
-	}
-	return state.projects, nil
-}

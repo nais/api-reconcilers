@@ -372,7 +372,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 	}
 
 	policy.Bindings = newBindings
-	policy, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
+	_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
 	}).Context(ctx).Do()
 	if err != nil {
