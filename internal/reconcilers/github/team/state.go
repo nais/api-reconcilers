@@ -46,7 +46,6 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 		metadata, err := json.Marshal(repo)
 		if err != nil {
 			return err
-
 		}
 		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
 			Name:     stateKeyRepo,

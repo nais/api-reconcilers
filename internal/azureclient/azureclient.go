@@ -60,7 +60,6 @@ func (s *client) GetUser(ctx context.Context, email string) (*Member, error) {
 	dec := json.NewDecoder(resp.Body)
 	user := &Member{}
 	err = dec.Decode(user)
-
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +89,6 @@ func (s *client) GetGroupById(ctx context.Context, id uuid.UUID) (*Group, error)
 	dec := json.NewDecoder(resp.Body)
 	grp := &Group{}
 	err = dec.Decode(grp)
-
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +125,6 @@ func (s *client) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
 	dec := json.NewDecoder(resp.Body)
 	grp = &Group{}
 	err = dec.Decode(grp)
-
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +181,6 @@ func (s *client) ListGroupOwners(ctx context.Context, grp *Group) ([]*Member, er
 	dec := json.NewDecoder(resp.Body)
 	owners := &MemberResponse{}
 	err = dec.Decode(owners)
-
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +211,6 @@ func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, e
 	dec := json.NewDecoder(resp.Body)
 	members := &MemberResponse{}
 	err = dec.Decode(members)
-
 	if err != nil {
 		return nil, err
 	}

@@ -55,7 +55,6 @@ func (r *naisNamespaceReconciler) loadState(ctx context.Context, client *apiclie
 		case stateKeyNamespaces:
 			parts := strings.Split(resource.Value, envTeamSlugSeparator)
 			if len(parts) != 2 {
-				// TODO: Log?
 				continue
 			}
 

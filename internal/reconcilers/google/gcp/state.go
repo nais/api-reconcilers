@@ -73,7 +73,6 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 		case stateKeyProject:
 			parts := strings.Split(resource.Value, envProjectIDSeparator)
 			if len(parts) != 2 {
-				// TODO: Log?
 				continue
 			}
 
