@@ -124,11 +124,6 @@ func (r *azureGroupReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *azureGroupReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	// TODO: Handle configuration change
-	return nil
-}
-
 func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {

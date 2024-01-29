@@ -103,10 +103,6 @@ func (r *googleGcpReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *googleGcpReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	return nil
-}
-
 func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GoogleGroupEmail == "" {
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)

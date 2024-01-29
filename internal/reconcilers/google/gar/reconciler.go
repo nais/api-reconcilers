@@ -106,10 +106,6 @@ func (r *garReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *garReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	return nil
-}
-
 func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	serviceAccount, err := r.getOrCreateServiceAccount(ctx, naisTeam.Slug)
 	if err != nil {

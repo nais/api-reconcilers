@@ -80,11 +80,6 @@ func (r *naisNamespaceReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *naisNamespaceReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	// TODO: Handle configuration change
-	return nil
-}
-
 func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GoogleGroupEmail == "" {
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)

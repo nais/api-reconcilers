@@ -67,11 +67,6 @@ func (r *naisDeployReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *naisDeployReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	// TODO: Handle configuration change
-	return nil
-}
-
 func (r *naisDeployReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	payload, err := getProvisionPayload(naisTeam.Slug)
 	if err != nil {

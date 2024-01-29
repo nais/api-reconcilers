@@ -66,10 +66,6 @@ func (r *reconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *reconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	return nil
-}
-
 func (r *reconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {

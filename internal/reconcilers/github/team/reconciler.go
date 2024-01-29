@@ -86,10 +86,6 @@ func (r *githubTeamReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *githubTeamReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	return nil
-}
-
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {

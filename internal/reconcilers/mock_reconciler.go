@@ -217,54 +217,6 @@ func (_c *MockReconciler_Reconcile_Call) RunAndReturn(run func(context.Context, 
 	return _c
 }
 
-// Reconfigure provides a mock function with given fields: ctx, client, log
-func (_m *MockReconciler) Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error {
-	ret := _m.Called(ctx, client, log)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Reconfigure")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, *apiclient.APIClient, logrus.FieldLogger) error); ok {
-		r0 = rf(ctx, client, log)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// MockReconciler_Reconfigure_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Reconfigure'
-type MockReconciler_Reconfigure_Call struct {
-	*mock.Call
-}
-
-// Reconfigure is a helper method to define mock.On call
-//   - ctx context.Context
-//   - client *apiclient.APIClient
-//   - log logrus.FieldLogger
-func (_e *MockReconciler_Expecter) Reconfigure(ctx interface{}, client interface{}, log interface{}) *MockReconciler_Reconfigure_Call {
-	return &MockReconciler_Reconfigure_Call{Call: _e.mock.On("Reconfigure", ctx, client, log)}
-}
-
-func (_c *MockReconciler_Reconfigure_Call) Run(run func(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger)) *MockReconciler_Reconfigure_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*apiclient.APIClient), args[2].(logrus.FieldLogger))
-	})
-	return _c
-}
-
-func (_c *MockReconciler_Reconfigure_Call) Return(_a0 error) *MockReconciler_Reconfigure_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *MockReconciler_Reconfigure_Call) RunAndReturn(run func(context.Context, *apiclient.APIClient, logrus.FieldLogger) error) *MockReconciler_Reconfigure_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // NewMockReconciler creates a new instance of MockReconciler. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewMockReconciler(t interface {

@@ -11,7 +11,6 @@ import (
 type Reconciler interface {
 	Configuration() *protoapi.NewReconciler
 	Name() string
-	Reconfigure(ctx context.Context, client *apiclient.APIClient, log logrus.FieldLogger) error
 	Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error
 	Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error
 }
