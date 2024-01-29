@@ -87,11 +87,11 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	opts := []grpc.DialOption{
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	}
-	if cfg.InsecureGRPC {
+	if cfg.GRPC.Insecure {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	client, err := apiclient.New(cfg.GRPCTarget, opts...)
+	client, err := apiclient.New(cfg.GRPC.Target, opts...)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHubOrg, cfg.GitHubAuthEndpoint, cfg.GoogleManagementProjectID)
+	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GoogleManagementProjectID)
 	if err != nil {
 		return err
 	}
@@ -113,22 +113,22 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	naisDeployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeployEndpoint, cfg.NaisDeployProvisionKey)
+	naisDeployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeploy.Endpoint, cfg.NaisDeploy.ProvisionKey)
 	if err != nil {
 		return err
 	}
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.CNRMRole, cfg.BillingAccount, cfg.CNRMServiceAccountID)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount, cfg.GCP.CnrmServiceAccountID)
 	if err != nil {
 		return err
 	}
 
-	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.WorkloadIdentityPoolName)
+	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		return err
 	}
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.CNRMServiceAccountID, cfg.AzureEnabled, cfg.OnpremClusters)
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.GCP.CnrmServiceAccountID, cfg.NaisNamespace.AzureEnabled, cfg.OnpremClusters)
 	if err != nil {
 		return err
 	}
