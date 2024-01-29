@@ -79,11 +79,6 @@ func (r *googleWorkspaceAdminReconciler) Name() string {
 	return reconcilerName
 }
 
-func (r *googleWorkspaceAdminReconciler) Reconfigure(_ context.Context, _ *apiclient.APIClient, _ logrus.FieldLogger) error {
-	// TODO: Handle configuration change
-	return nil
-}
-
 func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
