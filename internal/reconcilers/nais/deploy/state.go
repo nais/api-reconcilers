@@ -34,27 +34,3 @@ func (r *naisDeployReconciler) saveState(ctx context.Context, client *apiclient.
 
 	return nil
 }
-
-func (r *naisDeployReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*naisDeployState, error) {
-	resp, err := client.ReconcilerResources().List(ctx, &protoapi.ListReconcilerResourcesRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       teamSlug,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	s := &naisDeployState{}
-	for _, resource := range resp.Nodes {
-		switch resource.Name {
-		case stateKeyProvisioned:
-			t, err := time.Parse(time.RFC3339, resource.Value)
-			if err != nil {
-				return nil, err
-			}
-			s.provisioned = t
-		}
-	}
-
-	return s, nil
-}
