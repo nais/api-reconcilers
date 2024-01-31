@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
@@ -39,15 +38,7 @@ func New(ctx context.Context, endpoint, username, password string, opts ...OptFu
 			return nil, fmt.Errorf("no dependencytrack instances configured")
 		}
 
-		client := dependencytrack.New(endpoint, username, password)
-		pingCtx, cancel := context.WithTimeout(ctx, time.Second*1)
-		defer cancel()
-
-		if _, err := client.Version(pingCtx); err != nil {
-			return nil, fmt.Errorf("dependencytrack instance %q is not available", endpoint)
-		}
-
-		r.client = client
+		r.client = dependencytrack.New(endpoint, username, password)
 	}
 
 	return r, nil

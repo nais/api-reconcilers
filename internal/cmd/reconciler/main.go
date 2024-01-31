@@ -11,14 +11,14 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
-	"github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
-	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
-	"github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
-	"github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
-	"github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
+	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
+	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
+	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
+	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
@@ -98,10 +98,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	reconcilerManager := reconcilers.NewManager(client, log)
 
-	azureGroupReconciler, err := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
-	if err != nil {
-		return err
-	}
+	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
 
 	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GoogleManagementProjectID)
 	if err != nil {
@@ -135,7 +132,9 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(ctx, cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
-		return err
+		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
+	} else {
+		reconcilerManager.Register(dependencyTrackReconciler)
 	}
 
 	reconcilerManager.Register(azureGroupReconciler)
@@ -145,7 +144,6 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	reconcilerManager.Register(googleGcpReconciler)
 	reconcilerManager.Register(garReconciler)
 	reconcilerManager.Register(namespaceReconciler)
-	reconcilerManager.Register(dependencyTrackReconciler)
 
 	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
 		return err

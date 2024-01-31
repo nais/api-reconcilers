@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/azureclient"
@@ -26,8 +28,12 @@ const (
 )
 
 type azureGroupReconciler struct {
-	azureClient azureclient.Client
-	domain      string
+	domain string
+
+	lock              sync.RWMutex
+	lastUpdated       time.Time
+	lockedAzureClient azureclient.Client
+	lastConfig        clientcredentials.Config
 }
 
 type reconcilerConfig struct {
@@ -40,11 +46,11 @@ type OptFunc func(*azureGroupReconciler)
 
 func WithAzureClient(client azureclient.Client) OptFunc {
 	return func(r *azureGroupReconciler) {
-		r.azureClient = client
+		r.lockedAzureClient = client
 	}
 }
 
-func New(ctx context.Context, domain string, apiClient *apiclient.APIClient, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, domain string, apiClient *apiclient.APIClient, opts ...OptFunc) reconcilers.Reconciler {
 	r := &azureGroupReconciler{
 		domain: domain,
 	}
@@ -53,42 +59,7 @@ func New(ctx context.Context, domain string, apiClient *apiclient.APIClient, opt
 		opt(r)
 	}
 
-	if r.azureClient == nil {
-		config, err := apiClient.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
-			ReconcilerName: r.Name(),
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		rc := &reconcilerConfig{}
-		for _, c := range config.Nodes {
-			switch c.Key {
-			case configClientSecret:
-				rc.clientSecret = c.Value
-			case configClientID:
-				rc.clientID = c.Value
-			case configTenantID:
-				rc.tenantID = c.Value
-			default:
-				return nil, fmt.Errorf("unknown config key %q", c.Key)
-			}
-		}
-
-		endpoint := microsoft.AzureADEndpoint(rc.tenantID)
-		conf := clientcredentials.Config{
-			ClientID:     rc.clientID,
-			ClientSecret: rc.clientSecret,
-			TokenURL:     endpoint.TokenURL,
-			AuthStyle:    endpoint.AuthStyle,
-			Scopes: []string{
-				"https://graph.microsoft.com/.default",
-			},
-		}
-		r.azureClient = azureclient.New(conf.Client(ctx))
-	}
-
-	return r, nil
+	return r
 }
 
 func (r *azureGroupReconciler) Configuration() *protoapi.NewReconciler {
@@ -125,13 +96,17 @@ func (r *azureGroupReconciler) Name() string {
 }
 
 func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	if err := r.updateClient(ctx, client); err != nil {
+		return err
+	}
+
 	state, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
 	}
 
 	prefixedName := azureGroupPrefix + naisTeam.Slug
-	azureGroup, created, err := r.azureClient.GetOrCreateGroup(ctx, state.groupID, prefixedName, naisTeam.Purpose)
+	azureGroup, created, err := r.azureClient().GetOrCreateGroup(ctx, state.groupID, prefixedName, naisTeam.Purpose)
 	if err != nil {
 		return err
 	}
@@ -160,7 +135,7 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 
 	if state.groupID == uuid.Nil {
 		log.Warnf("missing group ID in reconciler state, assume team has already been deleted")
-	} else if err := r.azureClient.DeleteGroup(ctx, state.groupID); err != nil {
+	} else if err := r.azureClient().DeleteGroup(ctx, state.groupID); err != nil {
 		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", state.groupID, naisTeam.Slug, err)
 	}
 
@@ -185,7 +160,7 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 
 	naisTeamMembers := listTeamMembersResponse.Nodes
 
-	members, err := r.azureClient.ListGroupMembers(ctx, azureGroup)
+	members, err := r.azureClient().ListGroupMembers(ctx, azureGroup)
 	if err != nil {
 		return fmt.Errorf("list existing members in Azure group %q: %s", azureGroup.MailNickname, err)
 	}
@@ -195,7 +170,7 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 	for _, member := range membersToRemove {
 		remoteEmail := strings.ToLower(member.Mail)
 		log := log.WithField("remote_user_email", remoteEmail)
-		if err := r.azureClient.RemoveMemberFromGroup(ctx, azureGroup, member); err != nil {
+		if err := r.azureClient().RemoveMemberFromGroup(ctx, azureGroup, member); err != nil {
 			log.WithError(err).Errorf("remove member from group in Azure")
 			continue
 		}
@@ -216,19 +191,84 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 	for _, user := range membersToAdd {
 		log := log.WithField("remote_user_email", user.Email)
 
-		member, err := r.azureClient.GetUser(ctx, user.Email)
+		member, err := r.azureClient().GetUser(ctx, user.Email)
 		if err != nil {
 			log.WithError(err).Warnf("lookup user in Azure")
 			continue
 		}
 
-		if err := r.azureClient.AddMemberToGroup(ctx, azureGroup, member); err != nil {
+		if err := r.azureClient().AddMemberToGroup(ctx, azureGroup, member); err != nil {
 			log.WithError(err).Warnf("add member to group in Azure")
 			continue
 		}
 	}
 
 	return nil
+}
+
+func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclient.APIClient) error {
+	r.lock.RLock()
+	if r.azureClient() != nil && time.Since(r.lastUpdated) < 1*time.Minute {
+		r.lock.RUnlock()
+		return nil
+	}
+	r.lock.RUnlock()
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return err
+	}
+
+	rc := &reconcilerConfig{}
+	for _, c := range config.Nodes {
+		switch c.Key {
+		case configClientSecret:
+			rc.clientSecret = c.Value
+		case configClientID:
+			rc.clientID = c.Value
+		case configTenantID:
+			rc.tenantID = c.Value
+		default:
+			return fmt.Errorf("unknown config key %q", c.Key)
+		}
+	}
+
+	endpoint := microsoft.AzureADEndpoint(rc.tenantID)
+	conf := clientcredentials.Config{
+		ClientID:     rc.clientID,
+		ClientSecret: rc.clientSecret,
+		TokenURL:     endpoint.TokenURL,
+		AuthStyle:    endpoint.AuthStyle,
+	}
+
+	// Check if the client needs to be updated.
+	// The tenantID is not part of the clientcredentials.Config struct, so we check TokenURL and AuthStyle instead.
+	switch {
+	case conf.ClientID != r.lastConfig.ClientID:
+	case conf.ClientSecret != r.lastConfig.ClientSecret:
+	case conf.TokenURL != r.lastConfig.TokenURL:
+	case conf.AuthStyle != r.lastConfig.AuthStyle:
+	default:
+		// All fields we care about are equal the old values, no need to update the client.
+		return nil
+	}
+
+	r.lockedAzureClient = azureclient.New(conf.Client(ctx))
+	r.lastConfig = conf
+	r.lastUpdated = time.Now()
+
+	return nil
+}
+
+func (r *azureGroupReconciler) azureClient() azureclient.Client {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	return r.lockedAzureClient
 }
 
 // localOnlyMembers Given a list of Azure group members and a list of NAIS team members, return NAIS team users not
