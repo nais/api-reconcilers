@@ -11,6 +11,7 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	admin_directory_v1 "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -55,7 +56,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain string, op
 			return nil, fmt.Errorf("get delegated token source: %w", err)
 		}
 
-		srv, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts))
+		srv, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts), option.WithHTTPClient(otelhttp.DefaultClient))
 		if err != nil {
 			return nil, fmt.Errorf("retrieve directory client: %w", err)
 		}
@@ -80,21 +81,12 @@ func (r *googleWorkspaceAdminReconciler) Name() string {
 }
 
 func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	googleGroup, err := r.getOrCreateGroup(ctx, state, naisTeam)
+	googleGroup, err := r.getOrCreateGroup(ctx, naisTeam)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a Google Workspace group for team %q: %w", naisTeam.Slug, err)
 	}
 
 	if err := r.syncGroupInfo(ctx, naisTeam, googleGroup); err != nil {
-		return err
-	}
-
-	if err := r.saveState(ctx, client, naisTeam.Slug, &googleWorkspaceState{groupEmail: googleGroup.Email}); err != nil {
 		return err
 	}
 
@@ -120,18 +112,13 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 }
 
 func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
+	if naisTeam.GoogleGroupEmail == "" {
+		log.Warnf("missing group email in team, assume team has already been deleted")
+	} else if err := r.adminDirectoryService.Groups.Delete(naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
+		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", naisTeam.GoogleGroupEmail, naisTeam.Slug, err)
 	}
 
-	if state.groupEmail == "" {
-		log.Warnf("missing group email in reconciler state, assume team has already been deleted")
-	} else if err = r.adminDirectoryService.Groups.Delete(state.groupEmail).Context(ctx).Do(); err != nil {
-		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", state.groupEmail, naisTeam.Slug, err)
-	}
-
-	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})
@@ -142,9 +129,9 @@ func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *api
 	return nil
 }
 
-func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, state *googleWorkspaceState, naisTeam *protoapi.Team) (*admin_directory_v1.Group, error) {
-	if state.groupEmail != "" {
-		googleGroup, err := r.adminDirectoryService.Groups.Get(state.groupEmail).Context(ctx).Do()
+func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team) (*admin_directory_v1.Group, error) {
+	if naisTeam.GoogleGroupEmail != "" {
+		googleGroup, err := r.adminDirectoryService.Groups.Get(naisTeam.GoogleGroupEmail).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}

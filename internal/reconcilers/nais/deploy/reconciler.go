@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -48,7 +48,7 @@ func New(endpoint, provisionKey string, opts ...OptFunc) (reconcilers.Reconciler
 	}
 
 	if r.httpClient == nil {
-		r.httpClient = http.DefaultClient
+		r.httpClient = otelhttp.DefaultClient
 	}
 
 	return r, nil
@@ -90,10 +90,6 @@ func (r *naisDeployReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 	switch response.StatusCode {
 	case http.StatusCreated:
-		if err := r.saveState(ctx, client, naisTeam.Slug, &naisDeployState{provisioned: time.Now()}); err != nil {
-			return err
-		}
-
 		return nil
 	case http.StatusNoContent:
 		return nil

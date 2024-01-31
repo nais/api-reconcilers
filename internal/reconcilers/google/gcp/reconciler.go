@@ -18,6 +18,7 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/cloudbilling/v1"
 	"google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/compute/v1"
@@ -458,33 +459,37 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 	if err != nil {
 		return nil, err
 	}
-
 	ts, err := builder.GCP(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get delegated token source: %w", err)
 	}
 
-	cloudResourceManagerService, err := cloudresourcemanager.NewService(ctx, option.WithTokenSource(ts))
+	opts := []option.ClientOption{
+		option.WithTokenSource(ts),
+		option.WithHTTPClient(otelhttp.DefaultClient),
+	}
+
+	cloudResourceManagerService, err := cloudresourcemanager.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve cloud resource manager service: %w", err)
 	}
 
-	iamService, err := iam.NewService(ctx, option.WithTokenSource(ts))
+	iamService, err := iam.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve IAM service service: %w", err)
 	}
 
-	cloudBillingService, err := cloudbilling.NewService(ctx, option.WithTokenSource(ts))
+	cloudBillingService, err := cloudbilling.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve cloud billing service: %w", err)
 	}
 
-	serviceUsageService, err := serviceusage.NewService(ctx, option.WithTokenSource(ts))
+	serviceUsageService, err := serviceusage.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve service usage service: %w", err)
 	}
 
-	computeService, err := compute.NewService(ctx, option.WithTokenSource(ts))
+	computeService, err := compute.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve compute service: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 	dependencytrack "github.com/nais/dependencytrack/pkg/client"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type reconciler struct {
@@ -38,7 +39,7 @@ func New(ctx context.Context, endpoint, username, password string, opts ...OptFu
 			return nil, fmt.Errorf("no dependencytrack instances configured")
 		}
 
-		r.client = dependencytrack.New(endpoint, username, password)
+		r.client = dependencytrack.New(endpoint, username, password, dependencytrack.WithHttpClient(otelhttp.DefaultClient))
 	}
 
 	return r, nil

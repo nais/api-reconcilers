@@ -13,6 +13,7 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2/clientcredentials"
 	"golang.org/x/oauth2/microsoft"
 )
@@ -258,7 +259,9 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 		return nil
 	}
 
-	r.lockedAzureClient = azureclient.New(conf.Client(ctx))
+	aclient := conf.Client(ctx)
+	aclient.Transport = otelhttp.NewTransport(aclient.Transport)
+	r.lockedAzureClient = azureclient.New(aclient)
 	r.lastConfig = conf
 	r.lastUpdated = time.Now()
 

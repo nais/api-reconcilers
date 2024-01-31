@@ -5,20 +5,23 @@ import (
 	"fmt"
 	"net/http"
 
-	"cloud.google.com/go/artifactregistry/apiv1"
+	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -74,7 +77,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadI
 		}
 
 		if r.iamService == nil {
-			iamService, err := iam.NewService(ctx, option.WithTokenSource(ts))
+			iamService, err := iam.NewService(ctx, option.WithTokenSource(ts), option.WithHTTPClient(otelhttp.DefaultClient))
 			if err != nil {
 				return nil, err
 			}
@@ -82,7 +85,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadI
 		}
 
 		if r.artifactRegistry == nil {
-			artifactRegistry, err := artifactregistry.NewClient(ctx, option.WithTokenSource(ts))
+			artifactRegistry, err := artifactregistry.NewClient(ctx, option.WithTokenSource(ts), option.WithGRPCDialOption(grpc.WithStatsHandler(otelgrpc.NewClientHandler())))
 			if err != nil {
 				return nil, err
 			}
