@@ -145,11 +145,23 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	reconcilerManager.Register(garReconciler)
 	reconcilerManager.Register(namespaceReconciler)
 
-	if err = reconcilerManager.Run(ctx, time.Minute*30); err != nil {
+	if err := reconcilerManager.SyncWithAPI(ctx); err != nil {
 		return err
 	}
 
-	return nil
+	for i := 0; i < 10; i++ {
+		wg.Go(func() error {
+			reconcilerManager.SyncTeams(ctx)
+			return nil
+		})
+	}
+
+	if err = reconcilerManager.ScheduleAllTeams(ctx, time.Minute*30); err != nil {
+		return err
+	}
+
+	reconcilerManager.Close()
+	return wg.Wait()
 }
 
 func loadEnvFile() (fileLoaded bool, err error) {

@@ -91,7 +91,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	}
 
 	it := iterator.New(ctx, 20, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
-		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Slug: naisTeam.Slug})
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
 	gcpProjects := make(map[string]string)
