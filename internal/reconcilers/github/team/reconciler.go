@@ -96,8 +96,6 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return fmt.Errorf("unable to get or create a GitHub team for team %q in system %q: %w", naisTeam.Slug, r.Name(), err)
 	}
 
-	state.Slug = *githubTeam.Slug
-
 	if err := r.removeTeamIDPSync(ctx, *githubTeam.Slug); err != nil {
 		return err
 	}
@@ -111,7 +109,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	if err := r.saveState(ctx, client, naisTeam, state); err != nil {
+	if err := r.saveState(ctx, client, naisTeam, *githubTeam.Slug, state); err != nil {
 		return err
 	}
 
@@ -123,17 +121,12 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	if state.Slug == "" {
-		log.Warnf("missing slug in reconciler state, assume team has already been deleted")
+	if naisTeam.GithubTeamSlug == "" {
+		log.Warnf("missing slug in reconciler state, unable to delete GitHub team")
 	} else {
-		resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, state.Slug)
+		resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, naisTeam.GithubTeamSlug)
 		if err != nil {
-			return fmt.Errorf("delete GitHub team %q for team %q: %w", state.Slug, naisTeam.Slug, err)
+			return fmt.Errorf("delete GitHub team %q for team %q: %w", naisTeam.GithubTeamSlug, naisTeam.Slug, err)
 		}
 		defer resp.Body.Close()
 
@@ -143,7 +136,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		}
 	}
 
-	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})
@@ -151,7 +144,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		return err
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:delete", naisTeam.Slug, "Deleted GitHub team with slug %q", state.Slug)
+	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:delete", naisTeam.Slug, "Deleted GitHub team with slug %q", naisTeam.GithubTeamSlug)
 	return nil
 }
 
@@ -207,13 +200,13 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 	return nil
 }
 
-func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, team *protoapi.Team, state *gitHubState) (*github.Team, error) {
-	desiredTeamSlug := team.Slug
-	if state.Slug != "" {
-		desiredTeamSlug = state.Slug
-		existingTeam, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, state.Slug)
+func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, state *gitHubState) (*github.Team, error) {
+	desiredTeamSlug := naisTeam.Slug
+	if naisTeam.GithubTeamSlug != "" {
+		desiredTeamSlug = naisTeam.GithubTeamSlug
+		existingTeam, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, naisTeam.GithubTeamSlug)
 		if resp == nil && err != nil {
-			return nil, fmt.Errorf("unable to fetch GitHub team %q: %w", state.Slug, err)
+			return nil, fmt.Errorf("unable to fetch GitHub team %q: %w", naisTeam.GithubTeamSlug, err)
 		}
 
 		switch resp.StatusCode {
@@ -229,7 +222,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 
 	githubTeam, resp, err := r.teamsService.CreateTeam(ctx, r.org, github.NewTeam{
 		Name:        desiredTeamSlug,
-		Description: &team.Purpose,
+		Description: &naisTeam.Purpose,
 		Privacy:     ptr.To("closed"),
 	})
 	err = httpError(http.StatusCreated, resp, err)
@@ -237,7 +230,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 		return nil, fmt.Errorf("unable to create GitHub team: %w", err)
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:create", team.Slug, "Created GitHub team with slug %q", *githubTeam.Slug)
+	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:create", naisTeam.Slug, "Created GitHub team with slug %q", *githubTeam.Slug)
 	return githubTeam, nil
 }
 

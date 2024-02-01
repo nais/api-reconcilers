@@ -12,7 +12,6 @@ import (
 const stateKeyRepo = "repo"
 
 type gitHubState struct {
-	Slug         string
 	Repositories []*gitHubRepository
 }
 
@@ -28,7 +27,7 @@ type gitHubRepositoryPermission struct {
 	Granted bool   `json:"granted"`
 }
 
-func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredState *gitHubState) error {
+func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredGitHubTeamSlug string, desiredState *gitHubState) error {
 	req := &protoapi.SaveReconcilerResourceRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
@@ -50,10 +49,10 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	if naisTeam.GithubTeamSlug != desiredState.Slug {
+	if naisTeam.GithubTeamSlug != desiredGitHubTeamSlug {
 		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 			Slug:           naisTeam.Slug,
-			GithubTeamSlug: &desiredState.Slug,
+			GithubTeamSlug: &desiredGitHubTeamSlug,
 		})
 		if err != nil {
 			return fmt.Errorf("set GitHub team slug for team %q: %w", naisTeam.Slug, err)
