@@ -9,32 +9,32 @@ import (
 
 const reconcilerQueueSize = 4096
 
-type input struct {
-	correlationID string
-	traceID       string
-	team          *protoapi.Team
+type Input struct {
+	CorrelationID string
+	TraceID       string
+	Team          *protoapi.Team
 }
 
 type Queue interface {
-	Add(input) error
+	Add(Input) error
 	Close()
 }
 
 type queue struct {
-	queue  chan input
+	queue  chan Input
 	closed bool
 	lock   sync.Mutex
 }
 
-func NewQueue() (Queue, <-chan input) {
-	ch := make(chan input, reconcilerQueueSize)
+func NewQueue() (Queue, <-chan Input) {
+	ch := make(chan Input, reconcilerQueueSize)
 	return &queue{
 		queue:  ch,
 		closed: false,
 	}, ch
 }
 
-func (q *queue) Add(input input) error {
+func (q *queue) Add(input Input) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 

@@ -13,7 +13,7 @@ func AuditLogForTeam(ctx context.Context, apiclient *apiclient.APIClient, reconc
 	targets := []*protoapi.AuditLogTarget{
 		{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: teamSlug}},
 	}
-	createAuditLog(ctx, apiclient, reconciler, action, targets, msg, a)
+	createAuditLog(ctx, apiclient, reconciler, action, targets, msg, a...)
 }
 
 func AuditLogForTeamAndUser(ctx context.Context, apiclient *apiclient.APIClient, reconciler Reconciler, action, teamSlug, user, msg string, a ...any) {
@@ -21,7 +21,7 @@ func AuditLogForTeamAndUser(ctx context.Context, apiclient *apiclient.APIClient,
 		{AuditLogTargetType: &protoapi.AuditLogTarget_TeamSlug{TeamSlug: teamSlug}},
 		{AuditLogTargetType: &protoapi.AuditLogTarget_User{User: user}},
 	}
-	createAuditLog(ctx, apiclient, reconciler, action, targets, msg, a)
+	createAuditLog(ctx, apiclient, reconciler, action, targets, msg, a...)
 }
 
 func createAuditLog(ctx context.Context, apiclient *apiclient.APIClient, reconciler Reconciler, action string, targets []*protoapi.AuditLogTarget, msg string, a ...any) {
@@ -35,6 +35,6 @@ func createAuditLog(ctx context.Context, apiclient *apiclient.APIClient, reconci
 		Action:         action,
 		CorrelationId:  correlationID,
 		ReconcilerName: reconciler.Name(),
-		Message:        fmt.Sprintf(msg, a),
+		Message:        fmt.Sprintf(msg, a...),
 	})
 }

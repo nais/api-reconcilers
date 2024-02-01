@@ -31,7 +31,7 @@ type Manager struct {
 
 	metricReconcilerTime metric.Int64Histogram
 	metricReconcileTeam  metric.Int64Histogram
-	syncQueueChan        <-chan input
+	syncQueueChan        <-chan Input
 	syncQueue            Queue
 
 	teamsInFlight     map[string]struct{}
@@ -70,9 +70,9 @@ func (m *Manager) SyncTeams(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case input := <-m.syncQueueChan:
-			log := m.log.WithField("team", input.team.Slug)
+			log := m.log.WithField("team", input.Team.Slug)
 
-			if !m.setTeamInFlight(input.team.Slug) {
+			if !m.setTeamInFlight(input.Team.Slug) {
 				log.Info("already in flight - adding to back of queue")
 				time.Sleep(100 * time.Millisecond)
 				if err := m.syncQueue.Add(input); err != nil {
@@ -87,7 +87,7 @@ func (m *Manager) SyncTeams(ctx context.Context) {
 			}
 
 			cancel()
-			m.unsetTeamInFlight(input.team.Slug)
+			m.unsetTeamInFlight(input.Team.Slug)
 		}
 	}
 }
@@ -159,28 +159,28 @@ func (m *Manager) enabledReconcilers(ctx context.Context) ([]Reconciler, error) 
 	return ret, nil
 }
 
-func (m *Manager) reconcileTeam(ctx context.Context, input input) error {
+func (m *Manager) reconcileTeam(ctx context.Context, input Input) error {
 	reconcilers, err := m.enabledReconcilers(ctx)
 	if err != nil {
 		return err
 	}
 
 	teamStart := time.Now()
-	log := m.log.WithField("team", input.team.Slug)
-	if input.correlationID != "" {
-		log = log.WithField("correlation_id", input.correlationID)
-		ctx = context.WithValue(ctx, ctxCorrelationID, input.correlationID)
+	log := m.log.WithField("team", input.Team.Slug)
+	if input.CorrelationID != "" {
+		log = log.WithField("correlation_id", input.CorrelationID)
+		ctx = context.WithValue(ctx, ctxCorrelationID, input.CorrelationID)
 	}
 
-	if input.traceID != "" {
-		log = log.WithField("trace_id", input.traceID)
+	if input.TraceID != "" {
+		log = log.WithField("trace_id", input.TraceID)
 	}
 
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
 		hasError := false
-		if err := r.Reconcile(ctx, m.apiclient, input.team, log); err != nil {
+		if err := r.Reconcile(ctx, m.apiclient, input.Team, log); err != nil {
 			hasError = true
 			log.WithError(err).Errorf("error during team reconciler")
 		}
@@ -220,9 +220,9 @@ func (m *Manager) scheduleAllTeams(ctx context.Context) error {
 
 	for it.Next() {
 		team := it.Value()
-		err := m.syncQueue.Add(input{
-			correlationID: correlationID.String(),
-			team:          team,
+		err := m.syncQueue.Add(Input{
+			CorrelationID: correlationID.String(),
+			Team:          team,
 		})
 		if err != nil {
 			m.log.WithField("team", team.Slug).WithError(err).Errorf("error while adding team to queue")
