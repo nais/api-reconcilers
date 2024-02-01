@@ -3,15 +3,13 @@ package github_team_reconciler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 )
 
-const (
-	stateKeySlug = "slug"
-	stateKeyRepo = "repo"
-)
+const stateKeyRepo = "repo"
 
 type gitHubState struct {
 	Slug         string
@@ -30,19 +28,13 @@ type gitHubRepositoryPermission struct {
 	Granted bool   `json:"granted"`
 }
 
-func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, state *gitHubState) error {
+func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredState *gitHubState) error {
 	req := &protoapi.SaveReconcilerResourceRequest{
 		ReconcilerName: r.Name(),
-		TeamSlug:       teamSlug,
-		Resources: []*protoapi.NewReconcilerResource{
-			{
-				Name:  stateKeySlug,
-				Value: state.Slug,
-			},
-		},
+		TeamSlug:       naisTeam.Slug,
 	}
 
-	for _, repo := range state.Repositories {
+	for _, repo := range desiredState.Repositories {
 		metadata, err := json.Marshal(repo)
 		if err != nil {
 			return err
@@ -56,6 +48,16 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 
 	if _, err := client.ReconcilerResources().Save(ctx, req); err != nil {
 		return err
+	}
+
+	if naisTeam.GithubTeamSlug != desiredState.Slug {
+		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+			Slug:           naisTeam.Slug,
+			GithubTeamSlug: &desiredState.Slug,
+		})
+		if err != nil {
+			return fmt.Errorf("set GitHub team slug for team %q: %w", naisTeam.Slug, err)
+		}
 	}
 
 	return nil
@@ -86,8 +88,6 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 	s := &gitHubState{}
 	for _, resource := range resp.Nodes {
 		switch resource.Name {
-		case stateKeySlug:
-			s.Slug = resource.Value
 		case stateKeyRepo:
 			repo := &gitHubRepository{
 				Name: resource.Value,

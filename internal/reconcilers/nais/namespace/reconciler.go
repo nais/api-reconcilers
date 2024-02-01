@@ -9,7 +9,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
@@ -106,7 +105,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return fmt.Errorf("no GCP project state exists for team %q yet", naisTeam.Slug)
 	}
 
-	azureGroupID, err := r.getAzureGroupID(ctx, client.ReconcilerResources(), naisTeam.Slug)
+	azureGroupID, err := r.getAzureGroupID(naisTeam)
 	if err != nil {
 		return err
 	}
@@ -240,11 +239,12 @@ func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam 
 	return err
 }
 
-func (r *naisNamespaceReconciler) getAzureGroupID(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (uuid.UUID, error) {
-	if !r.azureEnabled {
+func (r *naisNamespaceReconciler) getAzureGroupID(naisTeam *protoapi.Team) (uuid.UUID, error) {
+	if !r.azureEnabled || naisTeam.AzureGroupId == "" {
 		return uuid.Nil, nil
 	}
-	return azure_group_reconciler.GetAzureGroupID(ctx, client, teamSlug)
+
+	return uuid.Parse(naisTeam.AzureGroupId)
 }
 
 func (r *naisNamespaceReconciler) activeEnvironment(environment string) bool {

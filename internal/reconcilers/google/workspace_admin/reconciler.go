@@ -99,9 +99,9 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 	}
 
 	if googleGroup.Email != naisTeam.GoogleGroupEmail {
-		_, err := client.Teams().SetGoogleGroupEmailForTeam(ctx, &protoapi.SetGoogleGroupEmailForTeamRequest{
+		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 			Slug:             naisTeam.Slug,
-			GoogleGroupEmail: googleGroup.Email,
+			GoogleGroupEmail: &googleGroup.Email,
 		})
 		if err != nil {
 			return fmt.Errorf("set Google group email for team %q: %w", naisTeam.Slug, err)

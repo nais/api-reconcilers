@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	"github.com/nais/api-reconcilers/internal/test"
+	"github.com/nais/api/pkg/protoapi"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -193,12 +194,20 @@ func Test_CreateGroupWithIncompleteResponse(t *testing.T) {
 	assert.EqualError(t, err, `azure group "mail" created, but no ID returned`)
 }
 
-func Test_GetOrCreateGroupWithEmptyState(t *testing.T) {
+func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-			assert.Equal(t, http.MethodPost, req.Method)
-			assert.Equal(t, "application/json", req.Header.Get("content-type"))
+			if "https://graph.microsoft.com/v1.0/groups" != req.URL.String() {
+				t.Errorf("Expected URL %s, got %s", "https://graph.microsoft.com/v1.0/groups", req.URL.String())
+			}
+
+			if http.MethodPost != req.Method {
+				t.Errorf("Expected method %s, got %s", http.MethodPost, req.Method)
+			}
+
+			if "application/json" != req.Header.Get("content-type") {
+				t.Errorf("Expected content-type %s, got %s", "application/json", req.Header.Get("content-type"))
+			}
 
 			return test.Response("201 Created", `{
 				"id":"group-id",
@@ -209,26 +218,34 @@ func Test_GetOrCreateGroupWithEmptyState(t *testing.T) {
 		},
 	)
 
-	client := azureclient.New(httpClient)
-	group, created, err := client.GetOrCreateGroup(context.Background(), uuid.Nil, "slug", "description")
+	team := &protoapi.Team{
+		Slug:    "slug",
+		Purpose: "description",
+	}
 
-	assert.NoError(t, err)
-	assert.Equal(t, "group-id", group.ID)
-	assert.True(t, created)
+	client := azureclient.New(httpClient)
+	group, created, err := client.GetOrCreateGroup(context.Background(), team, "slug")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	if "group-id" != group.ID {
+		t.Errorf("Expected group id %s, got %s", "group-id", group.ID)
+	}
+
+	if !created {
+		t.Errorf("Expected group to be created")
+	}
 }
 
 func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
 	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/"+groupId.String(), req.URL.String())
-			assert.Equal(t, http.MethodGet, req.Method)
 			return test.Response("404 Not Found", "{}")
 		},
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-			assert.Equal(t, http.MethodPost, req.Method)
-			assert.Equal(t, "application/json", req.Header.Get("content-type"))
 			return test.Response("201 Created", `{
 				"id":"some-id",
 				"description":"description",
@@ -238,42 +255,76 @@ func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
 		},
 	)
 
-	client := azureclient.New(httpClient)
-	group, created, err := client.GetOrCreateGroup(context.Background(), groupId, "slug", "description")
+	team := &protoapi.Team{
+		Slug:         "slug",
+		Purpose:      "description",
+		AzureGroupId: groupId.String(),
+	}
 
-	assert.Nil(t, group)
-	assert.False(t, created)
-	assert.Error(t, err)
+	client := azureclient.New(httpClient)
+	group, created, err := client.GetOrCreateGroup(context.Background(), team, "slug")
+
+	if group != nil {
+		t.Errorf("Expected no group, got %v", group)
+	}
+
+	if created {
+		t.Errorf("Expected group to not be created")
+	}
+
+	if err == nil {
+		t.Errorf("Expected error, got nil")
+	}
 }
 
 func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/"+groupId.String(), req.URL.String())
-			assert.Equal(t, http.MethodGet, req.Method)
 			return test.Response("200 OK", `{
-				"id":"some-id",
-				"description":"description",
-				"displayName": "name",
-				"mailNickname": "mail"
-			}`)
+					"id":"some-id",
+					"description":"description",
+					"displayName": "name",
+					"mailNickname": "mail"
+				}`)
 		},
 		func(req *http.Request) *http.Response {
-			assert.Fail(t, "Request should not occur")
 			return nil
 		},
 	)
 
-	client := azureclient.New(httpClient)
-	group, created, err := client.GetOrCreateGroup(context.Background(), groupId, "slug", "description")
+	team := &protoapi.Team{
+		Slug:         "slug",
+		Purpose:      "description",
+		AzureGroupId: groupId.String(),
+	}
 
-	assert.NoError(t, err)
-	assert.Equal(t, "some-id", group.ID)
-	assert.Equal(t, "description", group.Description)
-	assert.Equal(t, "name", group.DisplayName)
-	assert.Equal(t, "mail", group.MailNickname)
-	assert.False(t, created)
+	client := azureclient.New(httpClient)
+	group, created, err := client.GetOrCreateGroup(context.Background(), team, "slug")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %s", err)
+	}
+
+	if "some-id" != group.ID {
+		t.Errorf("Expected group id %s, got %s", "some-id", group.ID)
+	}
+
+	if "description" != group.Description {
+		t.Errorf("Expected group description %s, got %s", "description", group.Description)
+	}
+
+	if "name" != group.DisplayName {
+		t.Errorf("Expected group display name %s, got %s", "name", group.DisplayName)
+	}
+
+	if "mail" != group.MailNickname {
+		t.Errorf("Expected group mail nickname %s, got %s", "mail", group.MailNickname)
+	}
+
+	if created {
+		t.Errorf("Expected group to not be created")
+	}
 }
 
 func Test_ListGroupMembers(t *testing.T) {

@@ -111,7 +111,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	if err := r.saveState(ctx, client, naisTeam.Slug, state); err != nil {
+	if err := r.saveState(ctx, client, naisTeam, state); err != nil {
 		return err
 	}
 

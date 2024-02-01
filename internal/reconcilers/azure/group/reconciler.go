@@ -101,13 +101,8 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
 	prefixedName := azureGroupPrefix + naisTeam.Slug
-	azureGroup, created, err := r.azureClient().GetOrCreateGroup(ctx, state.groupID, prefixedName, naisTeam.Purpose)
+	azureGroup, created, err := r.azureClient().GetOrCreateGroup(ctx, naisTeam, prefixedName)
 	if err != nil {
 		return err
 	}
@@ -115,9 +110,12 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 	log = log.WithField("azure_group_name", azureGroup.MailNickname)
 
 	if created {
-		id, _ := uuid.Parse(azureGroup.ID)
-		if err := r.saveState(ctx, client, naisTeam.Slug, &azureState{groupID: id}); err != nil {
-			return err
+		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+			Slug:         naisTeam.Slug,
+			AzureGroupId: &azureGroup.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("set Azure group ID for team %q: %w", naisTeam.Slug, err)
 		}
 	}
 
@@ -129,23 +127,17 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
+	if naisTeam.AzureGroupId == "" {
+		return fmt.Errorf("team has no Azure AD group ID set, cannot delete external group")
 	}
 
-	if state.groupID == uuid.Nil {
-		log.Warnf("missing group ID in reconciler state, assume team has already been deleted")
-	} else if err := r.azureClient().DeleteGroup(ctx, state.groupID); err != nil {
-		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", state.groupID, naisTeam.Slug, err)
+	id, err := uuid.Parse(naisTeam.AzureGroupId)
+	if err != nil {
+		return fmt.Errorf("invalid Azure AD group ID set on team, cannot delete external group")
 	}
 
-	_, err = client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       naisTeam.Slug,
-	})
-	if err != nil {
-		return err
+	if err := r.azureClient().DeleteGroup(ctx, id); err != nil {
+		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", id, naisTeam.Slug, err)
 	}
 
 	return nil
