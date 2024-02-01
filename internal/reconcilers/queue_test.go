@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/protoapi"
-	"github.com/stretchr/testify/assert"
 )
 
 func Test_Queue(t *testing.T) {
@@ -18,10 +17,21 @@ func Test_Queue(t *testing.T) {
 
 	t.Run("add to queue", func(t *testing.T) {
 		q, ch := reconcilers.NewQueue()
-		assert.Nil(t, q.Add(input))
-		assert.Len(t, ch, 1)
-		assert.Equal(t, input, <-ch)
-		assert.Len(t, ch, 0)
+		if q.Add(input) != nil {
+			t.Errorf("expected no error when adding to queue")
+		}
+
+		if len(ch) != 1 {
+			t.Errorf("expected queue to contain one item")
+		}
+
+		if input != <-ch {
+			t.Errorf("expected input to match")
+		}
+
+		if len(ch) != 0 {
+			t.Errorf("expected queue to be empty")
+		}
 	})
 
 	t.Run("race test", func(t *testing.T) {
@@ -38,6 +48,9 @@ func Test_Queue(t *testing.T) {
 	t.Run("close channel", func(t *testing.T) {
 		q, _ := reconcilers.NewQueue()
 		q.Close()
-		assert.EqualError(t, q.Add(input), "team reconciler channel is closed")
+
+		if q.Add(input).Error() != "team reconciler channel is closed" {
+			t.Errorf("expected error when adding to closed queue")
+		}
 	})
 }
