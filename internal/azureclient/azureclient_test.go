@@ -197,7 +197,7 @@ func Test_CreateGroupWithIncompleteResponse(t *testing.T) {
 func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			if "https://graph.microsoft.com/v1.0/groups" != req.URL.String() {
+			if req.URL.String() != "https://graph.microsoft.com/v1.0/groups" {
 				t.Errorf("Expected URL %s, got %s", "https://graph.microsoft.com/v1.0/groups", req.URL.String())
 			}
 
@@ -205,7 +205,7 @@ func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 				t.Errorf("Expected method %s, got %s", http.MethodPost, req.Method)
 			}
 
-			if "application/json" != req.Header.Get("content-type") {
+			if req.Header.Get("content-type") != "application/json" {
 				t.Errorf("Expected content-type %s, got %s", "application/json", req.Header.Get("content-type"))
 			}
 
@@ -230,7 +230,7 @@ func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 		t.Errorf("Expected no error, got %s", err)
 	}
 
-	if "group-id" != group.ID {
+	if group.ID != "group-id" {
 		t.Errorf("Expected group id %s, got %s", "group-id", group.ID)
 	}
 
@@ -306,19 +306,19 @@ func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 		t.Errorf("Expected no error, got %s", err)
 	}
 
-	if "some-id" != group.ID {
+	if group.ID != "some-id" {
 		t.Errorf("Expected group id %s, got %s", "some-id", group.ID)
 	}
 
-	if "description" != group.Description {
+	if group.Description != "description" {
 		t.Errorf("Expected group description %s, got %s", "description", group.Description)
 	}
 
-	if "name" != group.DisplayName {
+	if group.DisplayName != "name" {
 		t.Errorf("Expected group display name %s, got %s", "name", group.DisplayName)
 	}
 
-	if "mail" != group.MailNickname {
+	if group.MailNickname != "mail" {
 		t.Errorf("Expected group mail nickname %s, got %s", "mail", group.MailNickname)
 	}
 
