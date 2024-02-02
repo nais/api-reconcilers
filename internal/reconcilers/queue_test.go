@@ -6,12 +6,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	"github.com/nais/api/pkg/protoapi"
 )
 
 func Test_Queue(t *testing.T) {
 	input := reconcilers.Input{
-		Team:          &protoapi.Team{Slug: "test-team"},
+		TeamSlug:      "test-team",
 		CorrelationID: uuid.New().String(),
 	}
 

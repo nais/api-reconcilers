@@ -96,7 +96,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	reconcilerManager := reconcilers.NewManager(client, cfg.ReconcilersToEnable, log)
+	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, log)
 
 	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
 
@@ -110,7 +110,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	naisDeployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeploy.Endpoint, cfg.NaisDeploy.ProvisionKey)
+	deployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeploy.Endpoint, cfg.NaisDeploy.ProvisionKey)
 	if err != nil {
 		return err
 	}
@@ -133,30 +133,37 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(ctx, cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
-	} else {
-		reconcilerManager.Register(dependencyTrackReconciler)
 	}
 
-	reconcilerManager.Register(azureGroupReconciler)
-	reconcilerManager.Register(githubReconciler)
-	reconcilerManager.Register(googleWorkspaceAdminReconciler)
-	reconcilerManager.Register(naisDeployReconciler)
-	reconcilerManager.Register(googleGcpReconciler)
-	reconcilerManager.Register(garReconciler)
-	reconcilerManager.Register(namespaceReconciler)
+	// The reconcilers will be run in the order they are added to the manager
+	reconcilerManager.AddReconciler(githubReconciler)
+	reconcilerManager.AddReconciler(azureGroupReconciler)
+	reconcilerManager.AddReconciler(googleWorkspaceAdminReconciler)
+	reconcilerManager.AddReconciler(googleGcpReconciler)
+	reconcilerManager.AddReconciler(namespaceReconciler)
+	reconcilerManager.AddReconciler(deployReconciler)
+	reconcilerManager.AddReconciler(garReconciler)
 
-	if err := reconcilerManager.SyncWithAPI(ctx); err != nil {
+	if dependencyTrackReconciler != nil {
+		reconcilerManager.AddReconciler(dependencyTrackReconciler)
+	}
+
+	if err := reconcilerManager.RegisterReconcilersWithAPI(ctx); err != nil {
 		return err
 	}
 
 	for i := 0; i < 10; i++ {
 		wg.Go(func() error {
-			reconcilerManager.SyncTeams(ctx)
+			reconcilerManager.Run(ctx)
 			return nil
 		})
 	}
 
-	if err = reconcilerManager.ScheduleAllTeams(ctx, time.Minute*30); err != nil {
+	wg.Go(func() error {
+		return reconcilerManager.ListenForEvents(ctx)
+	})
+
+	if err = reconcilerManager.SyncAllTeams(ctx, time.Minute*30); err != nil {
 		return err
 	}
 

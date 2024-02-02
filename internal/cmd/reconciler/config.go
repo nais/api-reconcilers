@@ -101,6 +101,9 @@ type Config struct {
 
 	// Reconcilers to enable when first registering the reconciler
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
+
+	// PubsubSubscriptionID The ID of the Pub/Sub subscription used to listen for events from the NAIS API.
+	PubsubSubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=api-reconcilers-api-events"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

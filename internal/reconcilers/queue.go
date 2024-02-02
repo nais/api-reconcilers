@@ -3,8 +3,6 @@ package reconcilers
 import (
 	"fmt"
 	"sync"
-
-	"github.com/nais/api/pkg/protoapi"
 )
 
 const reconcilerQueueSize = 4096
@@ -12,7 +10,8 @@ const reconcilerQueueSize = 4096
 type Input struct {
 	CorrelationID string
 	TraceID       string
-	Team          *protoapi.Team
+	TeamSlug      string
+	Delete        bool
 }
 
 type Queue interface {
