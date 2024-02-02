@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub"
-	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
@@ -16,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"google.golang.org/protobuf/proto"
 )
 
 type ctxKey int
