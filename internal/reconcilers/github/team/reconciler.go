@@ -180,8 +180,7 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 	idpList, resp, err := r.teamsService.CreateOrUpdateIDPGroupConnectionsBySlug(ctx, r.org, teamSlug, grpList)
 	if err != nil && strings.Contains(err.Error(), "team is not externally managed") {
 		// Special case: org has not been configured for team IDP sync, which we don't want to treat as an error
-		// FIXME: https://github.com/nais/teams-backend/issues/77
-		// TODO: Check if this has been fixed in the GitHub API
+		// More info: https://github.com/nais/teams-backend/issues/77
 		return nil
 	}
 
