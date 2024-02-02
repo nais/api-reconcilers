@@ -2,6 +2,7 @@ package reconcilers
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,7 +28,9 @@ type Manager struct {
 	apiclient   *apiclient.APIClient
 	lock        sync.Mutex
 	reconcilers []Reconciler
-	log         logrus.FieldLogger
+	// Reconcilers to enable during registration
+	reconcilersToEnable []string
+	log                 logrus.FieldLogger
 
 	metricReconcilerTime metric.Int64Histogram
 	metricReconcileTeam  metric.Int64Histogram
@@ -38,7 +41,7 @@ type Manager struct {
 	teamsInFlightLock sync.Mutex
 }
 
-func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
+func NewManager(c *apiclient.APIClient, enableDuringRegistration []string, log logrus.FieldLogger) *Manager {
 	meter := otel.Meter("reconcilers")
 	recTime, err := meter.Int64Histogram("reconciler_duration", metric.WithDescription("Duration of a specific reconciler, regardless of team, in milliseconds"))
 	if err != nil {
@@ -57,6 +60,8 @@ func NewManager(c *apiclient.APIClient, log logrus.FieldLogger) *Manager {
 		metricReconcileTeam:  teamTime,
 		syncQueue:            queue,
 		syncQueueChan:        channel,
+		teamsInFlight:        make(map[string]struct{}),
+		reconcilersToEnable:  enableDuringRegistration,
 	}
 }
 
@@ -117,7 +122,9 @@ func (m *Manager) SyncWithAPI(ctx context.Context) error {
 
 	r := &protoapi.RegisterReconcilerRequest{}
 	for _, rec := range m.reconcilers {
-		r.Reconcilers = append(r.Reconcilers, rec.Configuration())
+		body := rec.Configuration()
+		body.EnableByDefault = slices.Contains(m.reconcilersToEnable, rec.Name())
+		r.Reconcilers = append(r.Reconcilers, body)
 	}
 
 	_, err := m.apiclient.Reconcilers().Register(ctx, r)

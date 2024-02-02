@@ -96,7 +96,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	reconcilerManager := reconcilers.NewManager(client, log)
+	reconcilerManager := reconcilers.NewManager(client, cfg.ReconcilersToEnable, log)
 
 	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
 
