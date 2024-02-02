@@ -4,15 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api/pkg/apiclient"
-	db "github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/status"
 )
@@ -41,13 +41,13 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		ID:   "some-removeMember-id",
 		Mail: "removemember@example.com",
 	}
-	addUser := &db.User{
+	addUser := &protoapi.User{
 		Email: "add@example.com",
 	}
-	keepUser := &db.User{
+	keepUser := &protoapi.User{
 		Email: "keeper@example.com",
 	}
-	team := &db.Team{
+	team := &protoapi.Team{
 		Slug:    teamSlug,
 		Purpose: teamPurpose,
 	}
@@ -78,30 +78,30 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		mockServer.Reconcilers.EXPECT().
-			Config(mock.Anything, &db.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
-			Return(&db.ConfigReconcilerResponse{}, nil).
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
+			Return(&protoapi.ConfigReconcilerResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
-			SetTeamExternalReferences(mock.Anything, &db.SetTeamExternalReferencesRequest{
+			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{
 				Slug:         teamSlug,
 				AzureGroupId: &group.ID,
 			}).
-			Return(&db.SetTeamExternalReferencesResponse{}, nil).
+			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &db.ListTeamMembersRequest{Slug: teamSlug}).
-			Return(&db.ListTeamMembersResponse{Nodes: []*db.TeamMember{
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: addUser}, {User: keepUser},
 			}}, nil).
 			Once()
 		mockServer.Users.EXPECT().
 			Get(mock.Anything, mock.AnythingOfType("*protoapi.GetUserRequest")).
-			RunAndReturn(func(ctx context.Context, gur *db.GetUserRequest) (*db.GetUserResponse, error) {
+			RunAndReturn(func(ctx context.Context, gur *protoapi.GetUserRequest) (*protoapi.GetUserResponse, error) {
 				switch gur.Email {
 				case addUser.Email:
-					return &db.GetUserResponse{User: addUser}, nil
+					return &protoapi.GetUserResponse{User: addUser}, nil
 				case keepUser.Email:
-					return &db.GetUserResponse{User: keepUser}, nil
+					return &protoapi.GetUserResponse{User: keepUser}, nil
 				}
 				return nil, status.Error(404, "not found")
 			}).
@@ -111,7 +111,9 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 
-		assert.NoError(t, err)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("GetOrCreateGroup fail", func(t *testing.T) {
@@ -126,7 +128,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-		assert.Error(t, err)
+
+		if err == nil {
+			t.Error("expected error")
+		}
 	})
 
 	t.Run("ListGroupMembers fail", func(t *testing.T) {
@@ -134,8 +139,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		mockClient := azureclient.NewMockClient(t)
 
 		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &db.ListTeamMembersRequest{Slug: teamSlug}).
-			Return(&db.ListTeamMembersResponse{Nodes: []*db.TeamMember{
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: addUser}, {User: keepUser},
 			}}, nil).
 			Once()
@@ -152,7 +157,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-		assert.Error(t, err)
+
+		if err == nil {
+			t.Error("expected error")
+		}
 	})
 
 	t.Run("RemoveMemberFromGroup fail", func(t *testing.T) {
@@ -161,8 +169,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		removeMemberFromGroupErr := errors.New("RemoveMemberFromGroup failed")
 
 		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &db.ListTeamMembersRequest{Slug: teamSlug}).
-			Return(&db.ListTeamMembersResponse{Nodes: []*db.TeamMember{
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: keepUser},
 			}}, nil).
 			Once()
@@ -183,7 +191,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-		assert.NoError(t, err)
+
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("GetUser fail", func(t *testing.T) {
@@ -192,19 +203,19 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		getUserError := errors.New("GetUser failed")
 
 		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &db.ListTeamMembersRequest{Slug: teamSlug}).
-			Return(&db.ListTeamMembersResponse{Nodes: []*db.TeamMember{
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: addUser}, {User: keepUser},
 			}}, nil).
 			Once()
 		mockServer.Users.EXPECT().
 			Get(mock.Anything, mock.AnythingOfType("*protoapi.GetUserRequest")).
-			RunAndReturn(func(ctx context.Context, gur *db.GetUserRequest) (*db.GetUserResponse, error) {
+			RunAndReturn(func(ctx context.Context, gur *protoapi.GetUserRequest) (*protoapi.GetUserResponse, error) {
 				switch gur.Email {
 				case addUser.Email:
-					return &db.GetUserResponse{User: addUser}, nil
+					return &protoapi.GetUserResponse{User: addUser}, nil
 				case keepUser.Email:
-					return &db.GetUserResponse{User: keepUser}, nil
+					return &protoapi.GetUserResponse{User: keepUser}, nil
 				}
 				return nil, status.Error(404, "not found")
 			}).
@@ -230,7 +241,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-		assert.NoError(t, err)
+
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("AddMemberToGroup fail", func(t *testing.T) {
@@ -239,8 +253,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		addMemberToGroupError := errors.New("AddMemberToGroup failed")
 
 		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &db.ListTeamMembersRequest{Slug: teamSlug}).
-			Return(&db.ListTeamMembersResponse{Nodes: []*db.TeamMember{
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: addUser}, {User: keepUser},
 			}}, nil).
 			Once()
@@ -265,7 +279,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-		assert.NoError(t, err)
+
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 }
 
@@ -273,7 +290,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	const domain = "example.com"
 
 	azGroupID := uuid.New()
-	team := &db.Team{
+	team := &protoapi.Team{
 		Slug:         "slug",
 		AzureGroupId: azGroupID.String(),
 	}
@@ -281,26 +298,16 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	log, _ := test.NewNullLogger()
 	azureClient := azureclient.NewMockClient(t)
 
-	// t.Run("Unable to load state", func(t *testing.T) {
-	// 	client, _ := apiclient.NewMockClient(t)
-	// 	// database.
-	// 	// 	On("LoadReconcilerStateForTeam", ctx, azure_group_reconciler.Name, teamSlug, mock.Anything).
-	// 	// 	Return(fmt.Errorf("some error")).
-	// 	// 	Once()
-
-	// 	err := azure_group_reconciler.
-	// 		New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
-	// 		Delete(ctx, client, team, log)
-	// 	assert.ErrorContains(t, err, "load reconciler state")
-	// })
-
 	t.Run("Empty group id", func(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
-			Delete(ctx, client, &db.Team{Slug: "some-slug"}, log)
-		assert.NoError(t, err)
+			Delete(ctx, client, &protoapi.Team{Slug: "some-slug"}, log)
+
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("Azure client error", func(t *testing.T) {
@@ -315,7 +322,10 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
-		assert.ErrorContains(t, err, "delete Azure AD group with ID")
+
+		if !strings.Contains(err.Error(), "delete Azure AD group with ID") {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("Successful delete", func(t *testing.T) {
@@ -330,6 +340,9 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
-		assert.Nil(t, err)
+
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 }
