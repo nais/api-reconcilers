@@ -2,7 +2,7 @@ module github.com/nais/api-reconcilers
 
 go 1.21
 
-toolchain go1.21.5
+toolchain go1.21.6
 
 require (
 	github.com/go-chi/chi/v5 v5.0.11
