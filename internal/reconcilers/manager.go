@@ -183,17 +183,28 @@ func (m *Manager) reconcileTeam(ctx context.Context, input Input) error {
 		log = log.WithField("trace_id", input.TraceID)
 	}
 
+	successfulSync := true
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
 		hasError := false
-		if err := r.Reconcile(ctx, m.apiclient, input.Team, log); err != nil {
-			hasError = true
-			log.WithError(err).Errorf("error during team reconciler")
-		}
 
-		// TODO: register reconciler errors for team via GRPC
-		// TODO: set last successful timestamp for team sync
+		if err := r.Reconcile(ctx, m.apiclient, input.Team, log); err != nil {
+			successfulSync = false
+			hasError = true
+
+			log.WithError(err).Errorf("error during team reconciler")
+
+			req := &protoapi.SetReconcilerErrorForTeamRequest{
+				CorrelationId:  input.CorrelationID,
+				ReconcilerName: r.Name(),
+				ErrorMessage:   err.Error(),
+				TeamSlug:       input.Team.Slug,
+			}
+			if _, err := m.apiclient.Reconcilers().SetReconcilerErrorForTeam(ctx, req); err != nil {
+				log.WithError(err).Errorf("error while adding reconciler errors")
+			}
+		}
 
 		m.metricReconcilerTime.Record(
 			ctx,
@@ -203,6 +214,15 @@ func (m *Manager) reconcileTeam(ctx context.Context, input Input) error {
 				attribute.Bool("error", hasError),
 			),
 		)
+	}
+
+	if successfulSync {
+		req := &protoapi.SuccessfulTeamSyncRequest{
+			TeamSlug: input.Team.Slug,
+		}
+		if _, err := m.apiclient.Reconcilers().SuccessfulTeamSync(ctx, req); err != nil {
+			log.WithError(err).Errorf("error while setting successful sync for team")
+		}
 	}
 
 	m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds())
