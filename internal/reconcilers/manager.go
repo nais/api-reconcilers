@@ -202,7 +202,15 @@ func (m *Manager) reconcileTeam(ctx context.Context, input Input) error {
 				TeamSlug:       input.Team.Slug,
 			}
 			if _, err := m.apiclient.Reconcilers().SetReconcilerErrorForTeam(ctx, req); err != nil {
-				log.WithError(err).Errorf("error while adding reconciler errors")
+				log.WithError(err).Errorf("error while adding reconciler error")
+			}
+		} else {
+			req := &protoapi.RemoveReconcilerErrorForTeamRequest{
+				ReconcilerName: r.Name(),
+				TeamSlug:       input.Team.Slug,
+			}
+			if _, err := m.apiclient.Reconcilers().RemoveReconcilerErrorForTeam(ctx, req); err != nil {
+				log.WithError(err).Errorf("error while removing reconciler error")
 			}
 		}
 
