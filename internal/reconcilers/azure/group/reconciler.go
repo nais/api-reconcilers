@@ -33,6 +33,7 @@ type azureGroupReconciler struct {
 
 	lock              sync.RWMutex
 	lastUpdated       time.Time
+	staticAzureClient bool
 	lockedAzureClient azureclient.Client
 	lastConfig        clientcredentials.Config
 }
@@ -58,6 +59,10 @@ func New(ctx context.Context, domain string, apiClient *apiclient.APIClient, opt
 
 	for _, opt := range opts {
 		opt(r)
+	}
+
+	if r.azureClient() != nil {
+		r.staticAzureClient = true
 	}
 
 	return r
@@ -108,7 +113,6 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 	}
 
 	log = log.WithField("azure_group_name", azureGroup.MailNickname)
-
 	if created {
 		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 			Slug:         naisTeam.Slug,
@@ -128,7 +132,8 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.AzureGroupId == "" {
-		return fmt.Errorf("team has no Azure AD group ID set, cannot delete external group")
+		log.Info("team has no Azure AD group ID set, cannot delete external group")
+		return nil
 	}
 
 	id, err := uuid.Parse(naisTeam.AzureGroupId)
@@ -197,7 +202,7 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 
 func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclient.APIClient) error {
 	r.lock.RLock()
-	if r.azureClient() != nil && time.Since(r.lastUpdated) < 1*time.Minute {
+	if (r.azureClient() != nil && time.Since(r.lastUpdated) < 1*time.Minute) || r.staticAzureClient {
 		r.lock.RUnlock()
 		return nil
 	}
