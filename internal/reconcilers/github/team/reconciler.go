@@ -234,9 +234,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 }
 
 func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, githubTeam *github.Team, log logrus.FieldLogger) error {
-	listTeamMembersResponse, err := client.Teams().Members(ctx, &protoapi.ListTeamMembersRequest{
-		Slug: teamSlug,
-	})
+	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), teamSlug)
 	if err != nil {
 		return err
 	}
@@ -246,7 +244,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 		return fmt.Errorf("list existing members in GitHub team %q: %w", *githubTeam.Slug, err)
 	}
 
-	gitHubUsersToApiUsers, err := r.mapSSOUsers(ctx, listTeamMembersResponse.Nodes, log)
+	gitHubUsersToApiUsers, err := r.mapSSOUsers(ctx, naisTeamMembers, log)
 	if err != nil {
 		return err
 	}

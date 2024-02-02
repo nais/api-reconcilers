@@ -175,14 +175,10 @@ func (r *googleWorkspaceAdminReconciler) connectUsers(ctx context.Context, clien
 		WithField("google_group_email", googleGroup.Email).
 		WithField("google_group_id", googleGroup.Id)
 
-	listTeamMembersResponse, err := client.Teams().Members(ctx, &protoapi.ListTeamMembersRequest{
-		Slug: teamSlug,
-	})
+	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), teamSlug)
 	if err != nil {
 		return err
 	}
-
-	naisTeamMembers := listTeamMembersResponse.Nodes
 
 	membersAccordingToGoogle, err := getGoogleGroupMembers(ctx, r.adminDirectoryService.Members, googleGroup.Id)
 	if err != nil {

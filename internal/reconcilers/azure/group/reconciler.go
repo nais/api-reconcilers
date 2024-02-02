@@ -144,14 +144,10 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 }
 
 func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, azureGroup *azureclient.Group, log logrus.FieldLogger) error {
-	listTeamMembersResponse, err := client.Teams().Members(ctx, &protoapi.ListTeamMembersRequest{
-		Slug: teamSlug,
-	})
+	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), teamSlug)
 	if err != nil {
 		return err
 	}
-
-	naisTeamMembers := listTeamMembersResponse.Nodes
 
 	members, err := r.azureClient().ListGroupMembers(ctx, azureGroup)
 	if err != nil {

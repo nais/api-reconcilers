@@ -475,25 +475,13 @@ func getReconcilers(ctx context.Context, client protoapi.ReconcilersClient) ([]*
 
 // GetTeamMembers retrieves all members of a team from the NAIS API
 func GetTeamMembers(ctx context.Context, client protoapi.TeamsClient, teamSlug string) ([]*protoapi.TeamMember, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamMembersResponse, error) {
+		return client.Members(ctx, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: limit, Offset: offset})
+	})
+
 	members := make([]*protoapi.TeamMember, 0)
-	limit, offset := int64(100), int64(0)
-	for {
-		resp, err := client.Members(ctx, &protoapi.ListTeamMembersRequest{
-			Limit:  limit,
-			Offset: offset,
-			Slug:   teamSlug,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		members = append(members, resp.Nodes...)
-
-		if !resp.PageInfo.HasNextPage {
-			break
-		}
-
-		offset += limit
+	for it.Next() {
+		members = append(members, it.Value())
 	}
-	return members, nil
+	return members, it.Err()
 }
