@@ -225,7 +225,6 @@ func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 
 	client := azureclient.New(httpClient)
 	group, created, err := client.GetOrCreateGroup(context.Background(), team, "slug")
-
 	if err != nil {
 		t.Errorf("Expected no error, got %s", err)
 	}
@@ -301,7 +300,6 @@ func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 
 	client := azureclient.New(httpClient)
 	group, created, err := client.GetOrCreateGroup(context.Background(), team, "slug")
-
 	if err != nil {
 		t.Errorf("Expected no error, got %s", err)
 	}
