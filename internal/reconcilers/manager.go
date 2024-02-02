@@ -143,7 +143,6 @@ func (m *Manager) ListenForEvents(ctx context.Context) error {
 
 				input.TeamSlug = obj.GetSlug()
 				err := m.syncQueue.Add(input)
-
 				if err != nil {
 					msg.Nack()
 					m.log.WithError(err).Error("error while adding team to queue")
