@@ -23,7 +23,14 @@ import (
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
-const reconcilerName = "github:team"
+const (
+	reconcilerName = "github:team"
+
+	auditActionCreateGitHubTeam       = "github:team:create"
+	auditActionDeleteGitHubTeam       = "github:team:delete"
+	auditActionAddGitHubTeamMember    = "github:team:add-member"
+	auditActionDeleteGitHubTeamMember = "github:team:delete-member"
+)
 
 type OptFunc func(*githubTeamReconciler)
 
@@ -144,7 +151,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		return err
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:delete", naisTeam.Slug, "Deleted GitHub team with slug %q", naisTeam.GithubTeamSlug)
+	reconcilers.AuditLogForTeam(ctx, client, r, auditActionDeleteGitHubTeam, naisTeam.Slug, "Deleted GitHub team with slug %q", naisTeam.GithubTeamSlug)
 	return nil
 }
 
@@ -229,7 +236,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 		return nil, fmt.Errorf("unable to create GitHub team: %w", err)
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, "github:team:create", naisTeam.Slug, "Created GitHub team with slug %q", *githubTeam.Slug)
+	reconcilers.AuditLogForTeam(ctx, client, r, auditActionCreateGitHubTeam, naisTeam.Slug, "Created GitHub team with slug %q", *githubTeam.Slug)
 	return githubTeam, nil
 }
 
@@ -274,7 +281,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 			}
 		}
 
-		reconcilers.AuditLogForTeam(ctx, client, r, "github:team:delete-member", teamSlug, "Deleted member %q from GitHub team %q", username, *githubTeam.Slug)
+		reconcilers.AuditLogForTeam(ctx, client, r, auditActionDeleteGitHubTeamMember, teamSlug, "Deleted member %q from GitHub team %q", username, *githubTeam.Slug)
 	}
 
 	membersToAdd := localOnlyMembers(gitHubUsersToApiUsers, membersAccordingToGitHub)
@@ -285,7 +292,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 			continue
 		}
 
-		reconcilers.AuditLogForTeamAndUser(ctx, client, r, "github:team:add-member", teamSlug, apiUser.Email, "Added member %q to GitHub team %q", username, *githubTeam.Slug)
+		reconcilers.AuditLogForTeamAndUser(ctx, client, r, auditActionAddGitHubTeamMember, teamSlug, apiUser.Email, "Added member %q to GitHub team %q", username, *githubTeam.Slug)
 	}
 
 	return nil

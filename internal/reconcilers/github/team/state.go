@@ -92,10 +92,12 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 				Name: resource.Value,
 			}
 
-			if err := json.Unmarshal(resource.Metadata, repo); err != nil {
-				return nil, err
+			if resource.Metadata != nil {
+				if err := json.Unmarshal(resource.Metadata, repo); err != nil {
+					return nil, err
+				}
+				s.Repositories = append(s.Repositories, repo)
 			}
-			s.Repositories = append(s.Repositories, repo)
 		}
 	}
 
