@@ -1,236 +1,365 @@
 package dependencytrack_reconciler_test
 
-/*
-func TestNewFromConfig(t *testing.T) {
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
-	database := db.NewMockDatabase(t)
+import (
+	"context"
+	"testing"
 
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		fmt.Printf("Request: %s %s\n", req.Method, req.URL.String())
-		rw.WriteHeader(http.StatusOK)
-		_, err = rw.Write([]byte("4.8.0"))
-		assert.NoError(t, err)
-	}))
+	"github.com/google/uuid"
+	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/dependencytrack/pkg/client"
+	"github.com/sirupsen/logrus/hooks/test"
+	"github.com/stretchr/testify/mock"
+)
 
-	cfg := &config.Config{
-		DependencyTrack: config.DependencyTrack{
-			Endpoint: server.URL,
-			Username: "na",
-			Password: "na",
-		},
+func TestMissingConfig(t *testing.T) {
+	reconciler, err := dependencytrack_reconciler.New(context.Background(), "some-endpoint", "username", "")
+	if reconciler != nil {
+		t.Errorf("expected reconciler to be nil")
 	}
-	_, err = dependencytrackReconciler.NewFromConfig(context.Background(), database, cfg, log)
-	assert.NoError(t, err)
+
+	if err == nil {
+		t.Errorf("expected error")
+	}
 }
 
 func TestDependencytrackReconciler_Reconcile(t *testing.T) {
-	correlationID := uuid.New()
-	input := setupInput(correlationID, "someTeam", "user1@nais.io")
-
-	teamName := input.Team.Slug.String()
-	teamUuid := uuid.New().String()
-	username := input.TeamMembers[0].Email
-
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
-
-	audit := auditlogger.NewMockAuditLogger(t)
-	database := db.NewMockDatabase(t)
-	mockClient := dependencytrackReconciler.NewMockClient(t)
-
-	dp := dependencytrackReconciler.NewDpTrackWithClient("mock", mockClient, log)
-
 	ctx := context.Background()
+	teamSlug := "someTeam"
+	teamPurpose := "someDescription"
+	user := "user@example.com"
+	teamID := uuid.New().String()
+	log, _ := test.NewNullLogger()
+	naisTeam := &protoapi.Team{
+		Slug:    teamSlug,
+		Purpose: teamPurpose,
+	}
 
 	t.Run("team does not exist, new team created and new members added", func(t *testing.T) {
-		database.On("LoadReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
-		mockClient.On("CreateTeam", mock.Anything, teamName, []client.Permission{
-			client.ViewPortfolioPermission,
-			client.ViewVulnerabilityPermission,
-			client.ViewPolicyViolationPermission,
-		}).Return(&client.Team{
-			Uuid:      teamUuid,
-			Name:      teamName,
-			OidcUsers: nil,
-		}, nil).Once()
-
-		audit.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(t []auditlogger.Target) bool {
-				return len(t) == 1 && t[0].Identifier == string(input.Team.Slug)
-			}), mock.MatchedBy(func(f auditlogger.Fields) bool {
-				return f.Action == types.AuditActionDependencytrackTeamCreate && f.CorrelationID == correlationID
-			}), mock.Anything, teamName, teamUuid).
-			Return().
+		dpClient := dependencytrack_reconciler.NewMockClient(t)
+		dpClient.EXPECT().
+			CreateTeam(mock.Anything, teamSlug, []client.Permission{
+				client.ViewPortfolioPermission,
+				client.ViewVulnerabilityPermission,
+				client.ViewPolicyViolationPermission,
+			}).
+			Return(&client.Team{
+				Uuid:      teamID,
+				Name:      teamSlug,
+				OidcUsers: nil,
+			}, nil).
+			Once()
+		dpClient.EXPECT().
+			CreateOidcUser(ctx, user).
+			Return(nil).
+			Once()
+		dpClient.EXPECT().
+			AddToTeam(ctx, user, teamID).
+			Return(nil).
 			Once()
 
-		audit.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(t []auditlogger.Target) bool {
-				return len(t) == 2 && t[0].Identifier == string(input.Team.Slug) && t[1].Identifier == "user1@nais.io"
-			}), mock.MatchedBy(func(f auditlogger.Fields) bool {
-				return f.Action == types.AuditActionDependencytrackTeamAddMember && f.CorrelationID == correlationID
-			}), mock.Anything, "user1@nais.io", input.Team.Slug).
-			Return().
+		apiClient, grpcServers := apiclient.NewMockClient(t)
+		grpcServers.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+		grpcServers.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: user,
+					},
+				},
+			}}, nil).
+			Once()
+		grpcServers.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+				{
+					Name:  "team_id",
+					Value: teamID,
+				},
+				{
+					Name:  "members",
+					Value: user,
+				},
+			}}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Once()
+		grpcServers.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "dependencytrack:team:create"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		grpcServers.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "dependencytrack:team:add-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		mockClient.On("CreateOidcUser", mock.Anything, username).Return(&client.User{
-			Username: username,
-			Email:    username,
-		}).Return(nil).Once()
+		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 
-		mockClient.On("AddToTeam", mock.Anything, username, teamUuid).Return(nil).Once()
-		database.On("SetReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
-
-		reconciler, err := dependencytrackReconciler.New(database, audit, dp, log)
-		assert.NoError(t, err)
-
-		err = reconciler.Reconcile(context.Background(), input)
-		assert.NoError(t, err)
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("team exists, new members added", func(t *testing.T) {
-		audit.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(t []auditlogger.Target) bool {
-				return len(t) == 2 && t[0].Identifier == string(input.Team.Slug) && t[1].Identifier == "user1@nais.io"
-			}), mock.MatchedBy(func(f auditlogger.Fields) bool {
-				return f.Action == types.AuditActionDependencytrackTeamAddMember && f.CorrelationID == correlationID
-			}), mock.Anything, "user1@nais.io", input.Team.Slug).
-			Return().
+		dpClient := dependencytrack_reconciler.NewMockClient(t)
+		dpClient.EXPECT().
+			CreateOidcUser(ctx, user).
+			Return(nil).
+			Once()
+		dpClient.EXPECT().
+			AddToTeam(ctx, user, teamID).
+			Return(nil).
 			Once()
 
-		database.On("LoadReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Run(func(args mock.Arguments) {
-			state := args.Get(3).(*reconcilers.DependencyTrackState)
-			state.TeamID = teamUuid
-			state.Members = []string{}
-		}).Return(nil).Once()
-		mockClient.On("CreateOidcUser", mock.Anything, username).Return(&client.User{
-			Username: username,
-			Email:    username,
-		}).Return(nil).Once()
+		apiClient, grpcServers := apiclient.NewMockClient(t)
+		grpcServers.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "team_id",
+						Value: teamID,
+					},
+				},
+			}, nil).
+			Once()
+		grpcServers.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: user,
+					},
+				},
+			}}, nil).
+			Once()
+		grpcServers.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+				{
+					Name:  "team_id",
+					Value: teamID,
+				},
+				{
+					Name:  "members",
+					Value: user,
+				},
+			}}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Once()
+		grpcServers.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "dependencytrack:team:add-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
 
-		mockClient.On("AddToTeam", mock.Anything, username, teamUuid).Return(nil).Once()
-		database.On("SetReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
+		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 
-		reconciler, err := dependencytrackReconciler.New(database, audit, dp, log)
-		assert.NoError(t, err)
-
-		err = reconciler.Reconcile(context.Background(), input)
-		assert.NoError(t, err)
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("team exists all input members exists, no new members added", func(t *testing.T) {
-		database.On("LoadReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Run(func(args mock.Arguments) {
-			state := args.Get(3).(*reconcilers.DependencyTrackState)
-			state.TeamID = teamUuid
-			state.Members = []string{username}
-		}).Return(nil).Once()
-		database.On("SetReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
+		dpClient := dependencytrack_reconciler.NewMockClient(t)
 
-		reconciler, err := dependencytrackReconciler.New(database, audit, dp, log)
-		assert.NoError(t, err)
+		apiClient, grpcServers := apiclient.NewMockClient(t)
+		grpcServers.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "team_id",
+						Value: teamID,
+					},
+					{
+						Name:  "members",
+						Value: user,
+					},
+				},
+			}, nil).
+			Once()
+		grpcServers.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: user,
+					},
+				},
+			}}, nil).
+			Once()
+		grpcServers.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+				{
+					Name:  "team_id",
+					Value: teamID,
+				},
+				{
+					Name:  "members",
+					Value: user,
+				},
+			}}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Once()
 
-		err = reconciler.Reconcile(context.Background(), input)
-		assert.NoError(t, err)
+		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
+
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 
 	t.Run("usermembership removed from existing team", func(t *testing.T) {
-		usernameNotInInput := "userNotInTeamsBackend@nais.io"
+		unknownMember := "unknown@example.com"
 
-		audit.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(t []auditlogger.Target) bool {
-				return len(t) == 2 && t[0].Identifier == string(input.Team.Slug) && t[1].Identifier == "user1@nais.io"
-			}), mock.MatchedBy(func(f auditlogger.Fields) bool {
-				return f.Action == types.AuditActionDependencytrackTeamAddMember && f.CorrelationID == correlationID
-			}), mock.Anything, "user1@nais.io", input.Team.Slug).
-			Return().
+		dpClient := dependencytrack_reconciler.NewMockClient(t)
+		dpClient.EXPECT().
+			CreateOidcUser(ctx, user).
+			Return(nil).
+			Once()
+		dpClient.EXPECT().
+			AddToTeam(ctx, user, teamID).
+			Return(nil).
+			Once()
+		dpClient.EXPECT().
+			DeleteUserMembership(ctx, teamID, unknownMember).
+			Return(nil).
 			Once()
 
-		audit.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(t []auditlogger.Target) bool {
-				return len(t) == 2 && t[0].Identifier == string(input.Team.Slug) && t[1].Identifier == usernameNotInInput
-			}), mock.MatchedBy(func(f auditlogger.Fields) bool {
-				return f.Action == types.AuditActionDependencytrackTeamDeleteMember && f.CorrelationID == correlationID
-			}), mock.Anything, usernameNotInInput, input.Team.Slug).
-			Return().
+		apiClient, grpcServers := apiclient.NewMockClient(t)
+		grpcServers.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "team_id",
+						Value: teamID,
+					},
+					{
+						Name:  "members",
+						Value: unknownMember,
+					},
+				},
+			}, nil).
+			Once()
+		grpcServers.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: user,
+					},
+				},
+			}}, nil).
+			Once()
+		grpcServers.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+				{
+					Name:  "team_id",
+					Value: teamID,
+				},
+				{
+					Name:  "members",
+					Value: user,
+				},
+			}}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Once()
+		grpcServers.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "dependencytrack:team:add-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		grpcServers.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "dependencytrack:team:delete-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		database.On("LoadReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Run(func(args mock.Arguments) {
-			state := args.Get(3).(*reconcilers.DependencyTrackState)
-			state.TeamID = teamUuid
-			state.Members = []string{usernameNotInInput}
-		}).Return(nil).Once()
+		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 
-		mockClient.On("CreateOidcUser", mock.Anything, username).Return(&client.User{
-			Username: username,
-			Email:    username,
-		}).Return(nil).Once()
-		mockClient.On("AddToTeam", mock.Anything, username, teamUuid).Return(nil).Once()
-		mockClient.On("DeleteUserMembership", mock.Anything, teamUuid, usernameNotInInput).Return(nil).Once()
-
-		database.On("SetReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
-
-		reconciler, err := dependencytrackReconciler.New(database, audit, dp, log)
-		assert.NoError(t, err)
-
-		err = reconciler.Reconcile(context.Background(), input)
-		assert.NoError(t, err)
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 }
 
 func TestDependencytrackReconciler_Delete(t *testing.T) {
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
 	ctx := context.Background()
-	correlationID := uuid.New()
-	input := setupInput(correlationID, "someTeam", "user1@nais.io")
-
-	mockClient := dependencytrackReconciler.NewMockClient(t)
-	database := db.NewMockDatabase(t)
-	auditLogger := auditlogger.NewMockAuditLogger(t)
-
-	dp := dependencytrackReconciler.NewDpTrackWithClient("mock", mockClient, log)
+	teamID := uuid.New().String()
+	teamSlug := "some-team"
+	user := "user@example.com"
+	naisTeam := &protoapi.Team{
+		Slug:    teamSlug,
+		Purpose: "some purpose",
+	}
+	log, _ := test.NewNullLogger()
 
 	t.Run("team exists, delete team from teams-backend should remove team from dependencytrack", func(t *testing.T) {
-		teamUuid := uuid.New().String()
+		dpClient := dependencytrack_reconciler.NewMockClient(t)
+		dpClient.EXPECT().DeleteTeam(mock.Anything, teamID).Return(nil).Once()
 
-		database.On("LoadReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Run(func(args mock.Arguments) {
-			state := args.Get(3).(*reconcilers.DependencyTrackState)
-			state.TeamID = teamUuid
-			state.Members = []string{}
-		}).Return(nil).Once()
+		apiClient, grpcServers := apiclient.NewMockClient(t)
+		grpcServers.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "team_id",
+						Value: teamID,
+					},
+				},
+			}, nil).
+			Once()
+		grpcServers.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: user,
+					},
+				},
+			}}, nil).
+			Once()
+		grpcServers.ReconcilerResources.EXPECT().
+			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			Once()
 
-		mockClient.On("DeleteTeam", mock.Anything, teamUuid).Return(nil).Once()
-		database.On("RemoveReconcilerStateForTeam", ctx, dependencytrackReconciler.Name, input.Team.Slug, mock.Anything).Return(nil).Once()
+		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 
-		reconciler, err := dependencytrackReconciler.New(database, auditLogger, dp, log)
-		assert.NoError(t, err)
-
-		err = reconciler.Delete(context.Background(), input.Team.Slug, uuid.New())
-		assert.NoError(t, err)
+		err = reconciler.Delete(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Errorf("unexpected error: %s", err)
+		}
 	})
 }
-
-func setupInput(correlationId uuid.UUID, teamSlug string, members ...string) reconcilers.Input {
-	inputTeam := db.Team{
-		Team: &sqlc.Team{
-			Slug:    slug.Slug(teamSlug),
-			Purpose: "teamPurpose",
-		},
-	}
-
-	inputMembers := make([]*db.User, 0)
-	for _, member := range members {
-		inputMembers = append(inputMembers, &db.User{
-			User: &sqlc.User{
-				Email: member,
-			},
-		})
-	}
-
-	return reconcilers.Input{
-		CorrelationID: correlationId,
-		Team:          inputTeam,
-		TeamMembers:   inputMembers,
-	}
-}
-*/

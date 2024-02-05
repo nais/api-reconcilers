@@ -17,7 +17,13 @@ type reconciler struct {
 	client dependencytrack.Client
 }
 
-const reconcilerName = "nais:dependencytrack"
+const (
+	reconcilerName = "nais:dependencytrack"
+
+	auditActionAddTeamMember    = "dependencytrack:team:add-member"
+	auditActionDeleteTeamMember = "dependencytrack:team:delete-member"
+	auditActionCreateTeam       = "dependencytrack:team:create"
+)
 
 type OptFunc func(*reconciler)
 
@@ -27,7 +33,7 @@ func WithDependencyTrackClient(client dependencytrack.Client) OptFunc {
 	}
 }
 
-func New(ctx context.Context, endpoint, username, password string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(_ context.Context, endpoint, username, password string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &reconciler{}
 
 	for _, opt := range opts {
@@ -69,7 +75,7 @@ func (r *reconciler) Reconcile(ctx context.Context, client *apiclient.APIClient,
 		return err
 	}
 
-	teamId, err := r.syncTeamAndUsers(ctx, naisTeam.Slug, teamMembers, state)
+	teamId, err := r.syncTeamAndUsers(ctx, client, naisTeam.Slug, teamMembers, state)
 	if err != nil {
 		return err
 	}
@@ -109,7 +115,7 @@ func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, na
 	return nil
 }
 
-func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, naisTeamMembers []*protoapi.TeamMember, state *dependencyTrackState) (string, error) {
+func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, naisTeamMembers []*protoapi.TeamMember, state *dependencyTrackState) (string, error) {
 	if state != nil && state.teamID != "" {
 		for _, member := range naisTeamMembers {
 			if !slices.Contains(state.members, member.User.Email) {
@@ -120,6 +126,16 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, nais
 				if err := r.client.AddToTeam(ctx, member.User.Email, state.teamID); err != nil {
 					return "", err
 				}
+
+				reconcilers.AuditLogForTeamAndUser(
+					ctx,
+					client,
+					r,
+					auditActionAddTeamMember,
+					teamSlug,
+					member.User.Email,
+					"Added member %q to Dependencytrack team %q", member.User.Email, teamSlug,
+				)
 			}
 		}
 
@@ -128,6 +144,16 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, nais
 				if err := r.client.DeleteUserMembership(ctx, state.teamID, email); err != nil {
 					return "", err
 				}
+
+				reconcilers.AuditLogForTeamAndUser(
+					ctx,
+					client,
+					r,
+					auditActionDeleteTeamMember,
+					teamSlug,
+					email,
+					"Deleted member %q from Dependencytrack team %q", email, teamSlug,
+				)
 			}
 		}
 
@@ -139,6 +165,15 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, nais
 		return "", err
 	}
 
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionCreateTeam,
+		teamSlug,
+		"Created dependencytrack team %q with ID %q", team.Name, team.Uuid,
+	)
+
 	for _, member := range naisTeamMembers {
 		if err := r.client.CreateOidcUser(ctx, member.User.Email); err != nil {
 			return "", err
@@ -146,6 +181,16 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, nais
 		if err := r.client.AddToTeam(ctx, member.User.Email, team.Uuid); err != nil {
 			return "", err
 		}
+
+		reconcilers.AuditLogForTeamAndUser(
+			ctx,
+			client,
+			r,
+			auditActionAddTeamMember,
+			teamSlug,
+			member.User.Email,
+			"Added member %q to Dependencytrack team %q", member.User.Email, teamSlug,
+		)
 	}
 
 	return team.Uuid, nil
