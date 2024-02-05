@@ -110,7 +110,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -191,7 +190,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -241,7 +239,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -279,7 +276,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -304,7 +300,6 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, &protoapi.Team{Slug: "some-slug"}, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -340,7 +335,6 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		err := azure_group_reconciler.
 			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
-
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
