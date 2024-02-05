@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	reconcilerName = "nais:deploy"
+	reconcilerName                          = "nais:deploy"
+	auditActionNaisDeployProvisionDeployKey = "nais:deploy:provision-deploy-key"
 )
 
 type naisDeployReconciler struct {
@@ -24,34 +25,17 @@ type naisDeployReconciler struct {
 	provisionKey []byte
 }
 
-type OptFunc func(*naisDeployReconciler)
-
-func WithHttpClient(client *http.Client) OptFunc {
-	return func(r *naisDeployReconciler) {
-		r.httpClient = client
-	}
-}
-
-func New(endpoint, provisionKey string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(endpoint, provisionKey string) (reconcilers.Reconciler, error) {
 	key, err := hex.DecodeString(provisionKey)
 	if err != nil {
 		return nil, err
 	}
 
-	r := &naisDeployReconciler{
+	return &naisDeployReconciler{
 		endpoint:     endpoint,
 		provisionKey: key,
-	}
-
-	for _, opt := range opts {
-		opt(r)
-	}
-
-	if r.httpClient == nil {
-		r.httpClient = otelhttp.DefaultClient
-	}
-
-	return r, nil
+		httpClient:   otelhttp.DefaultClient,
+	}, nil
 }
 
 func (r *naisDeployReconciler) Configuration() *protoapi.NewReconciler {
@@ -90,10 +74,16 @@ func (r *naisDeployReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 	switch response.StatusCode {
 	case http.StatusCreated:
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionNaisDeployProvisionDeployKey,
+			naisTeam.Slug,
+			"Provisioned NAIS deploy API key for team %q", naisTeam.Slug,
+		)
 		return nil
-	case http.StatusNoContent:
-		return nil
-	case http.StatusOK:
+	case http.StatusNoContent, http.StatusOK:
 		return nil
 	default:
 		return fmt.Errorf("provision NAIS deploy API key for team %q: %s", naisTeam.Slug, response.Status)
