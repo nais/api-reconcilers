@@ -199,7 +199,7 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 	return nil
 }
 
-func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, state *gitHubState) (*github.Team, error) {
+func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, state *GitHubState) (*github.Team, error) {
 	desiredTeamSlug := naisTeam.Slug
 	if naisTeam.GithubTeamSlug != "" {
 		desiredTeamSlug = naisTeam.GithubTeamSlug
@@ -415,12 +415,12 @@ func (r *githubTeamReconciler) getEmailFromGitHubUsername(ctx context.Context, u
 	return &email, nil
 }
 
-func (r *githubTeamReconciler) getTeamRepositories(ctx context.Context, teamSlug string) ([]*gitHubRepository, error) {
+func (r *githubTeamReconciler) getTeamRepositories(ctx context.Context, teamSlug string) ([]*GitHubRepository, error) {
 	opts := &github.ListOptions{
 		PerPage: 100,
 	}
 
-	allRepos := make([]*gitHubRepository, 0)
+	allRepos := make([]*GitHubRepository, 0)
 	for {
 		repos, resp, err := r.teamsService.ListTeamReposBySlug(ctx, r.org, teamSlug, opts)
 		err = httpError(http.StatusOK, resp, err)
@@ -428,9 +428,9 @@ func (r *githubTeamReconciler) getTeamRepositories(ctx context.Context, teamSlug
 			return nil, err
 		}
 		for _, repo := range repos {
-			permissions := make([]*gitHubRepositoryPermission, 0)
+			permissions := make([]*GitHubRepositoryPermission, 0)
 			for name, granted := range repo.GetPermissions() {
-				permissions = append(permissions, &gitHubRepositoryPermission{
+				permissions = append(permissions, &GitHubRepositoryPermission{
 					Name:    name,
 					Granted: granted,
 				})
@@ -440,7 +440,7 @@ func (r *githubTeamReconciler) getTeamRepositories(ctx context.Context, teamSlug
 				return permissions[a].Name < permissions[b].Name
 			})
 
-			allRepos = append(allRepos, &gitHubRepository{
+			allRepos = append(allRepos, &GitHubRepository{
 				Name:        repo.GetFullName(),
 				Permissions: permissions,
 				Archived:    repo.GetArchived(),

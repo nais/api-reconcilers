@@ -11,23 +11,23 @@ import (
 
 const stateKeyRepo = "repo"
 
-type gitHubState struct {
-	Repositories []*gitHubRepository
+type GitHubState struct {
+	Repositories []*GitHubRepository
 }
 
-type gitHubRepository struct {
+type GitHubRepository struct {
 	Name        string                        `json:"-"`
-	Permissions []*gitHubRepositoryPermission `json:"permissions"`
+	Permissions []*GitHubRepositoryPermission `json:"permissions"`
 	Archived    bool                          `json:"archived"`
 	RoleName    string                        `json:"roleName"`
 }
 
-type gitHubRepositoryPermission struct {
+type GitHubRepositoryPermission struct {
 	Name    string `json:"name"`
 	Granted bool   `json:"granted"`
 }
 
-func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredGitHubTeamSlug string, desiredState *gitHubState) error {
+func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredGitHubTeamSlug string, desiredState *GitHubState) error {
 	req := &protoapi.SaveReconcilerResourceRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
@@ -62,11 +62,11 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 	return nil
 }
 
-func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*gitHubState, error) {
+func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*GitHubState, error) {
 	return getState(ctx, client.ReconcilerResources(), teamSlug)
 }
 
-func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) ([]*gitHubRepository, error) {
+func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) ([]*GitHubRepository, error) {
 	state, err := getState(ctx, client, teamSlug)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilerResource
 	return state.Repositories, nil
 }
 
-func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (*gitHubState, error) {
+func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (*GitHubState, error) {
 	resp, err := client.List(ctx, &protoapi.ListReconcilerResourcesRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
@@ -84,11 +84,11 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 		return nil, err
 	}
 
-	s := &gitHubState{}
+	s := &GitHubState{}
 	for _, resource := range resp.Nodes {
 		switch resource.Name {
 		case stateKeyRepo:
-			repo := &gitHubRepository{
+			repo := &GitHubRepository{
 				Name: resource.Value,
 			}
 

@@ -1,6 +1,39 @@
 package google_gar_reconciler_test
 
-/*
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
+	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
+	"cloud.google.com/go/iam/apiv1/iampb"
+	"cloud.google.com/go/longrunning/autogen/longrunningpb"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
+	"github.com/nais/api-reconcilers/internal/test"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/protoapi"
+	"github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/option"
+	statusproto "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+)
+
 type fakeArtifactRegistry struct {
 	createCounter int
 	create        func(ctx context.Context, r *artifactregistrypb.CreateRepositoryRequest) (*longrunningpb.Operation, error)
@@ -74,7 +107,9 @@ func (m *mocks) start(t *testing.T, ctx context.Context) (*artifactregistry.Clie
 	var artifactRegistryClient *artifactregistry.Client
 	if m.artifactRegistry != nil {
 		l, err := net.Listen("tcp", "localhost:0")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		srv := grpc.NewServer()
 		artifactregistrypb.RegisterArtifactRegistryServer(srv, m.artifactRegistry)
@@ -93,59 +128,60 @@ func (m *mocks) start(t *testing.T, ctx context.Context) (*artifactregistry.Clie
 			option.WithoutAuthentication(),
 			option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
 		)
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 
 	var iamService *iam.Service
 	if m.iam != nil {
 		var err error
 		iamService, err = iam.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(m.iam.URL))
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	}
 
 	return artifactRegistryClient, iamService
 }
 
 func TestReconcile(t *testing.T) {
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
-
 	const (
+		tenantDomain             = "example.com"
 		managementProjectID      = "management-project-123"
 		workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
 		abortReconcilerCode      = 418
+		groupEmail               = "team@example.com"
+		teamSlug                 = "team"
 	)
 
 	abortTestErr := fmt.Errorf("abort test")
-	groupEmail := "team@example.com"
 
-	correlationID := uuid.New()
-	team := db.Team{Team: &sqlc.Team{Slug: slug.Slug("team")}}
-	input := reconcilers.Input{
-		CorrelationID: correlationID,
-		Team:          team,
+	naisTeam := &protoapi.Team{
+		Slug: teamSlug,
 	}
 
-	email := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", team.Slug, managementProjectID)
+	email := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", teamSlug, managementProjectID)
 	expectedServiceAccount := &iam.ServiceAccount{
 		Email:       email,
 		Name:        fmt.Sprintf("projects/%s/serviceAccounts/%s", managementProjectID, email),
-		Description: fmt.Sprintf("Service Account used to push images to Google Artifact Registry for %s", team.Slug),
-		DisplayName: fmt.Sprintf("Artifact Pusher for %s", team.Slug),
+		Description: fmt.Sprintf("Service Account used to push images to Google Artifact Registry for %s", teamSlug),
+		DisplayName: fmt.Sprintf("Artifact Pusher for %s", teamSlug),
 	}
 
 	garRepositoryParent := fmt.Sprintf("projects/%s/locations/europe-north1", managementProjectID)
 	expectedRepository := artifactregistrypb.Repository{
-		Name:        fmt.Sprintf("%s/repositories/%s", garRepositoryParent, string(team.Slug)),
+		Name:        fmt.Sprintf("%s/repositories/%s", garRepositoryParent, teamSlug),
 		Format:      artifactregistrypb.Repository_DOCKER,
-		Description: fmt.Sprintf("Docker repository for team %q. Managed by teams-backend.", team.Slug),
+		Description: fmt.Sprintf("Docker repository for team %q. Managed by github.com/nais/api-reconcilers.", teamSlug),
 		Labels: map[string]string{
-			"team":                         string(team.Slug),
-			reconcilers.ManagedByLabelName: reconcilers.ManagedByLabelValue,
+			"team":       teamSlug,
+			"managed-by": "api-reconcilers",
 		},
 	}
 
 	ctx := context.Background()
+	log, _ := logrustest.NewNullLogger()
 
 	t.Run("when service account does not exist, create it", func(t *testing.T) {
 		mocks := mocks{
@@ -163,13 +199,17 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 		_, iamService := mocks.start(t, ctx)
-		database := db.NewMockDatabase(t)
-		auditLogger := auditlogger.NewMockAuditLogger(t)
 
-		err = google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, nil, iamService, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, fmt.Sprintf("googleapi: got HTTP response code %d", abortReconcilerCode))
+		apiClient, _ := apiclient.NewMockClient(t)
+
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), fmt.Sprintf("googleapi: got HTTP response code %d", abortReconcilerCode)) {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("after getOrCreateServiceAccount, set policy", func(t *testing.T) {
@@ -193,52 +233,68 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 		_, iamService := mocks.start(t, ctx)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, sqlc.ReconcilerNameGithubTeam, team.Slug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GitHubState)
-				state.Repositories = []*reconcilers.GitHubRepository{
-					{
-						Name: "test/repository",
-						Permissions: []*reconcilers.GitHubRepositoryPermission{
-							{Name: "push", Granted: true},
-						},
-					},
-					{
-						Name: "test/ro-repository",
-						Permissions: []*reconcilers.GitHubRepositoryPermission{
-							{Name: "push", Granted: false},
-						},
-					},
-					{
-						Name: "test/admin-repository",
-						Permissions: []*reconcilers.GitHubRepositoryPermission{
-							{Name: "push", Granted: true},
-							{Name: "admin", Granted: true},
-						},
-					},
-					{
-						Name: "test/archived-repository",
-						Permissions: []*reconcilers.GitHubRepositoryPermission{
-							{Name: "push", Granted: true},
-							{Name: "admin", Granted: true},
-						},
-						Archived: true,
-					},
-					{
-						Name: "test/no-permissions-repository",
-					},
-				}
-			}).
-			Return(nil).
-			Once()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
 
-		err = google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, nil, iamService, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, fmt.Sprintf("googleapi: got HTTP response code %d", abortReconcilerCode))
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "repo",
+						Value: "test/repository",
+						Metadata: toJson(&github_team_reconciler.GitHubRepository{
+							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+								{Name: "push", Granted: true},
+							},
+						}),
+					},
+					{
+						Name:  "repo",
+						Value: "test/ro-repository",
+						Metadata: toJson(&github_team_reconciler.GitHubRepository{
+							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+								{Name: "push", Granted: false},
+							},
+						}),
+					},
+					{
+						Name:  "repo",
+						Value: "test/admin-repository",
+						Metadata: toJson(&github_team_reconciler.GitHubRepository{
+							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+								{Name: "push", Granted: true},
+								{Name: "admin", Granted: true},
+							},
+						}),
+					},
+					{
+						Name:  "repo",
+						Value: "test/archived-repository",
+						Metadata: toJson(&github_team_reconciler.GitHubRepository{
+							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+								{Name: "push", Granted: true},
+								{Name: "admin", Granted: true},
+							},
+							Archived: true,
+						}),
+					},
+					{
+						Name:     "repo",
+						Value:    "test/no-permissions-repository",
+						Metadata: toJson(&github_team_reconciler.GitHubRepository{}),
+					},
+				},
+			}, nil).
+			Once()
+
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), fmt.Sprintf("googleapi: got HTTP response code %d", abortReconcilerCode)) {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("if no gar repository exists, create it", func(t *testing.T) {
@@ -277,17 +333,21 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 		artifactregistryClient, iamService := mocks.start(t, ctx)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, sqlc.ReconcilerNameGithubTeam, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
 
-		err = google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, artifactregistryClient, iamService, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, "abort test")
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "abort test") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("if gar repository exists, set iam policy", func(t *testing.T) {
@@ -323,33 +383,31 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 
+		naisTeam := naisTeam
+		naisTeam.GoogleGroupEmail = groupEmail
+
 		artifactregistryClient, iamService := mocks.start(t, ctx)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_workspace_admin_reconciler.Name, team.Slug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GoogleWorkspaceState)
-				state.GroupEmail = &groupEmail
-			}).
-			Return(nil).
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
-		database.
-			On("LoadReconcilerStateForTeam", ctx, sqlc.ReconcilerNameGithubTeam, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("SetReconcilerStateForTeam", ctx, google_gar.Name, team.Slug, mock.MatchedBy(func(state reconcilers.GoogleGarState) bool {
-				return *state.RepositoryName == garRepositoryParent+"/repositories/"+string(team.Slug)
+		mockServer.ReconcilerResources.EXPECT().
+			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+				return req.Resources[0].Value == garRepositoryParent+"/repositories/"+teamSlug
 			})).
-			Return(nil).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
-		auditLogger := auditlogger.NewMockAuditLogger(t)
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, artifactregistryClient, iamService, log).
-			Reconcile(ctx, input)
-		assert.NoError(t, err)
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("gar repository exists, but has outdated info", func(t *testing.T) {
@@ -368,7 +426,7 @@ func TestReconcile(t *testing.T) {
 				update: func(ctx context.Context, r *artifactregistrypb.UpdateRepositoryRequest) (*artifactregistrypb.Repository, error) {
 					assert.Equal(t, expectedRepository.Description, r.Repository.Description)
 					assert.Equal(t, expectedRepository.Name, r.Repository.Name)
-					assert.Equal(t, string(team.Slug), r.Repository.Labels["team"])
+					assert.Equal(t, teamSlug, r.Repository.Labels["team"])
 
 					return nil, abortTestErr
 				},
@@ -386,101 +444,105 @@ func TestReconcile(t *testing.T) {
 		}
 
 		artifactregistryClient, iamService := mocks.start(t, ctx)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, sqlc.ReconcilerNameGithubTeam, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
 
-		err = google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, artifactregistryClient, iamService, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, "abort test")
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "abort test") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 }
 
 func TestDelete(t *testing.T) {
+	ctx := context.Background()
+
 	const (
+		tenantDomain             = "example.com"
 		managementProjectID      = "management-project-123"
 		workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
+		repositoryName           = "some-repo-name-123"
+		teamSlug                 = "my-team"
 	)
 
-	ctx := context.Background()
-	repositoryName := "some-repo-name-123"
-	teamSlug := slug.Slug("my-team")
-	correlationID := uuid.New()
-	auditLogger := auditlogger.NewMockAuditLogger(t)
-	log := logger.NewMockLogger(t)
-	mockedClients := mocks{
-		artifactRegistry: &fakeArtifactRegistry{},
-		iam:              test.HttpServerWithHandlers(t, []http.HandlerFunc{}),
+	log, hook := logrustest.NewNullLogger()
+
+	naisTeam := &protoapi.Team{
+		Slug: teamSlug,
 	}
-	garClient, iamService := mockedClients.start(t, ctx)
 
 	t.Run("unable to load state", func(t *testing.T) {
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Return(fmt.Errorf("some error")).
-			Once()
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.ErrorContains(t, err, "load reconciler state for team")
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "some error") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("state is missing repository name", func(t *testing.T) {
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
+		defer hook.Reset()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+		mockServer.ReconcilerResources.EXPECT().
+			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
-		log.
-			On("Warnf",
-				"missing repository name in reconciler state for team %q in reconciler %q, assume already deleted",
-				teamSlug,
-				google_gar.Name).
-			Once()
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Return(nil).
-			Once()
-		database.On("RemoveReconcilerStateForTeam",
-			ctx,
-			google_gar.Name,
-			teamSlug).
-			Return(nil).
-			Once()
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.NoError(t, err)
+		if len(hook.Entries) != 1 {
+			t.Fatalf("unexpected a single log entry")
+		}
+
+		if hook.Entries[0].Level != logrus.WarnLevel {
+			t.Errorf("unexpected log level: %v", hook.Entries[0].Level)
+		}
+
+		if !strings.Contains(hook.Entries[0].Message, "missing repository name in reconciler state") {
+			t.Errorf("unexpected log message: %v", hook.Entries[0].Message)
+		}
 	})
 
 	t.Run("delete service account fails with unexpected error", func(t *testing.T) {
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
-			Once()
-
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GoogleGarState)
-				state.RepositoryName = &repositoryName
-			}).
-			Return(nil).
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "repository_name",
+						Value: repositoryName,
+					},
+				},
+			}, nil).
 			Once()
 
 		mockedClients := mocks{
@@ -493,21 +555,30 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.ErrorContains(t, err, "delete service account")
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "delete service account") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("service account does not exist, and delete repo request fails", func(t *testing.T) {
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GoogleGarState)
-				state.RepositoryName = &repositoryName
-			}).
-			Return(nil).
+		defer hook.Reset()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "repository_name",
+						Value: repositoryName,
+					},
+				},
+			}, nil).
 			Once()
 
 		mockedClients := mocks{
@@ -524,43 +595,36 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		testLogger, logs := logrustest.NewNullLogger()
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		log := logger.NewMockLogger(t)
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
-			Once()
-		log.
-			On("WithTeamSlug", string(teamSlug)).
-			Return(log).
-			Once()
-		log.
-			On("WithError", mock.Anything).
-			Return(&logrus.Entry{Logger: testLogger}).
-			Once()
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "delete GAR repository for team") {
+			t.Errorf("unexpected error: %v", err)
+		}
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.ErrorContains(t, err, "delete GAR repository for team")
-		assert.Contains(t, logs.Entries[0].Message, "does not exist")
+		if len(hook.Entries) != 1 {
+			t.Fatalf("unexpected a single log entry")
+		}
+
+		if !strings.Contains(hook.Entries[0].Message, "does not exist") {
+			t.Errorf("unexpected log message: %v", hook.Entries[0].Message)
+		}
 	})
 
 	t.Run("delete repo operation fails", func(t *testing.T) {
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
-			Once()
-
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GoogleGarState)
-				state.RepositoryName = &repositoryName
-			}).
-			Return(nil).
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "repository_name",
+						Value: repositoryName,
+					},
+				},
+			}, nil).
 			Once()
 
 		mockedClients := mocks{
@@ -585,47 +649,40 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.ErrorContains(t, err, "wait for GAR repository deletion")
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "wait for GAR repository deletion") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("successful delete", func(t *testing.T) {
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gar.Name, teamSlug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				state := args.Get(3).(*reconcilers.GoogleGarState)
-				state.RepositoryName = &repositoryName
-			}).
-			Return(nil).
-			Once()
-		database.
-			On("RemoveReconcilerStateForTeam", ctx, google_gar.Name, teamSlug).
-			Return(nil).
-			Once()
+		defer hook.Reset()
 
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		auditLogger.EXPECT().
-			Logf(
-				ctx,
-				mock.MatchedBy(func(targets []auditlogger.Target) bool {
-					return targets[0].Identifier == string(teamSlug)
-				}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-					return fields.Action == types.AuditActionGoogleGarDelete && fields.CorrelationID == correlationID
-				}),
-				mock.MatchedBy(func(msg string) bool {
-					return strings.HasPrefix(msg, "Delete GAR repository")
-				}),
-				repositoryName,
-			).
-			Return().
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{
+				Nodes: []*protoapi.ReconcilerResource{
+					{
+						Name:  "repository_name",
+						Value: repositoryName,
+					},
+				},
+			}, nil).
 			Once()
-
-		log.
-			On("WithComponent", types.ComponentNameGoogleGcpGar).
-			Return(log).
+		mockServer.ReconcilerResources.EXPECT().
+			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "google:gar:delete"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		mockedClients := mocks{
@@ -646,10 +703,18 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		err := google_gar.
-			New(auditLogger, database, managementProjectID, workloadIdentityPoolName, garClient, iamService, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.NoError(t, err)
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 }
-*/
+
+func toJson(r *github_team_reconciler.GitHubRepository) []byte {
+	j, _ := json.Marshal(r)
+	return j
+}

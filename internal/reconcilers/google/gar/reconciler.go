@@ -32,6 +32,8 @@ const (
 
 	managedByLabelName  = "managed-by"
 	managedByLabelValue = "api-reconcilers"
+
+	auditActionDeleteGarRepository = "google:gar:delete"
 )
 
 type garReconciler struct {
@@ -168,6 +170,15 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		return fmt.Errorf("wait for GAR repository deletion for team %q: %w", naisTeam.Slug, err)
 	}
 
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionDeleteGarRepository,
+		naisTeam.Slug,
+		"Delete GAR repository %q", state.repositoryName,
+	)
+
 	return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
 }
 
@@ -189,7 +200,7 @@ func (r *garReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 }
 
 func (r *garReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.ReconcilerResources())
 	if err != nil {
 		return err
 	}
@@ -254,8 +265,8 @@ func (r *garReconciler) getOrCreateOrUpdateGarRepository(ctx context.Context, te
 	return r.updateGarRepository(ctx, existing, teamSlug, description, log)
 }
 
-func (r *garReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
-	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.ReconcilerResources(), teamSlug)
+func (r *garReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilerResourcesClient) ([]string, error) {
+	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client, teamSlug)
 	if err != nil {
 		return nil, err
 	}
