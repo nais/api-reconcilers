@@ -33,7 +33,7 @@ func WithDependencyTrackClient(client dependencytrack.Client) OptFunc {
 	}
 }
 
-func New(_ context.Context, endpoint, username, password string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(endpoint, username, password string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &reconciler{}
 
 	for _, opt := range opts {

@@ -98,7 +98,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, log)
 
-	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, client)
+	azureGroupReconciler := azure_group_reconciler.New(cfg.TenantDomain)
 
 	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GoogleManagementProjectID)
 	if err != nil {
@@ -130,7 +130,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	dependencyTrackReconciler, err := dependencytrack_reconciler.New(ctx, cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
+	dependencyTrackReconciler, err := dependencytrack_reconciler.New(cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
 	}

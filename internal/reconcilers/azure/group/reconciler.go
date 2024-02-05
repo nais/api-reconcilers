@@ -26,6 +26,11 @@ const (
 	configTenantID     = "azure:tenant_id"
 
 	azureGroupPrefix = "nais-team-"
+
+	auditActionCreateAzureGroup      = "azure:group:create"
+	auditActionDeleteAzureGroup      = "azure:group:delete"
+	auditActionAddMemberToGroup      = "azure:group:add-member"
+	auditActionRemoveMemberFromGroup = "azure:group:delete-member"
 )
 
 type azureGroupReconciler struct {
@@ -52,7 +57,7 @@ func WithAzureClient(client azureclient.Client) OptFunc {
 	}
 }
 
-func New(ctx context.Context, domain string, apiClient *apiclient.APIClient, opts ...OptFunc) reconcilers.Reconciler {
+func New(domain string, opts ...OptFunc) reconcilers.Reconciler {
 	r := &azureGroupReconciler{
 		domain: domain,
 	}
@@ -114,6 +119,15 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 	log = log.WithField("azure_group_name", azureGroup.MailNickname)
 	if created {
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionCreateAzureGroup,
+			naisTeam.Slug,
+			"Created Azure AD group %q with ID %q", azureGroup.MailNickname, azureGroup.ID,
+		)
+
 		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 			Slug:         naisTeam.Slug,
 			AzureGroupId: &azureGroup.ID,
@@ -144,6 +158,15 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 	if err := r.azureClient().DeleteGroup(ctx, id); err != nil {
 		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", id, naisTeam.Slug, err)
 	}
+
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionDeleteAzureGroup,
+		naisTeam.Slug,
+		"Delete Azure AD group with ID %q", naisTeam.AzureGroupId,
+	)
 
 	return nil
 }
@@ -179,6 +202,16 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 			}
 			naisTeamUserMap[remoteEmail] = resp.User
 		}
+
+		reconcilers.AuditLogForTeamAndUser(
+			ctx,
+			client,
+			r,
+			auditActionRemoveMemberFromGroup,
+			teamSlug,
+			remoteEmail,
+			"Removed member %q from Azure group %q", remoteEmail, azureGroup.MailNickname,
+		)
 	}
 
 	membersToAdd := localOnlyMembers(members, naisTeamMembers)
@@ -195,6 +228,16 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 			log.WithError(err).Warnf("add member to group in Azure")
 			continue
 		}
+
+		reconcilers.AuditLogForTeamAndUser(
+			ctx,
+			client,
+			r,
+			auditActionAddMemberToGroup,
+			teamSlug,
+			user.Email,
+			"Added member %q to Azure group %q", user.Email, azureGroup.MailNickname,
+		)
 	}
 
 	return nil

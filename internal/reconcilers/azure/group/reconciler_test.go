@@ -53,9 +53,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	}
 
 	t.Run("happy case", func(t *testing.T) {
-		client, mockServer := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
-
 		mockClient.EXPECT().
 			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
 			Return(group, true, nil).
@@ -77,6 +75,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Return(nil).
 			Once()
 
+		client, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
 			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
 			Return(&protoapi.ConfigReconcilerResponse{}, nil).
@@ -106,9 +105,21 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 				return nil, status.Error(404, "not found")
 			}).
 			Times(3)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "azure:group:create"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "azure:group:add-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -125,7 +136,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 
 		if err == nil {
@@ -154,7 +165,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 
 		if err == nil {
@@ -188,7 +199,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -237,7 +248,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -256,25 +267,25 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			}}, nil).
 			Once()
 
-		mockClient.
-			On("GetOrCreateGroup", mock.Anything, mock.Anything, "nais-team-slug", mock.Anything).
+		mockClient.EXPECT().
+			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
 			Return(group, false, nil).
 			Once()
-		mockClient.
-			On("ListGroupMembers", mock.Anything, group).
+		mockClient.EXPECT().
+			ListGroupMembers(mock.Anything, group).
 			Return([]*azureclient.Member{keepMember}, nil).
 			Once()
-		mockClient.
-			On("GetUser", mock.Anything, addUser.Email).
+		mockClient.EXPECT().
+			GetUser(mock.Anything, addUser.Email).
 			Return(addMember, nil).
 			Once()
-		mockClient.
-			On("AddMemberToGroup", mock.Anything, group, addMember).
+		mockClient.EXPECT().
+			AddMemberToGroup(mock.Anything, group, addMember).
 			Return(addMemberToGroupError).
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -298,7 +309,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, &protoapi.Team{Slug: "some-slug"}, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -309,13 +320,13 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 
 		azureClient := azureclient.NewMockClient(t)
-		azureClient.
-			On("DeleteGroup", ctx, azGroupID).
+		azureClient.EXPECT().
+			DeleteGroup(ctx, azGroupID).
 			Return(fmt.Errorf("some error")).
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
 
 		if !strings.Contains(err.Error(), "delete Azure AD group with ID") {
@@ -324,16 +335,22 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("Successful delete", func(t *testing.T) {
-		client, _ := apiclient.NewMockClient(t)
+		client, mockServer := apiclient.NewMockClient(t)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "azure:group:delete"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
 
 		azureClient := azureclient.NewMockClient(t)
-		azureClient.
-			On("DeleteGroup", ctx, azGroupID).
+		azureClient.EXPECT().
+			DeleteGroup(ctx, azGroupID).
 			Return(nil).
 			Once()
 
 		err := azure_group_reconciler.
-			New(ctx, domain, client, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)

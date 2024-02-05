@@ -14,7 +14,7 @@ import (
 )
 
 func TestMissingConfig(t *testing.T) {
-	reconciler, err := dependencytrack_reconciler.New(context.Background(), "some-endpoint", "username", "")
+	reconciler, err := dependencytrack_reconciler.New("some-endpoint", "username", "")
 	if reconciler != nil {
 		t.Errorf("expected reconciler to be nil")
 	}
@@ -100,7 +100,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -164,7 +164,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -218,7 +218,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
-		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -298,7 +298,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -352,7 +352,7 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
-		reconciler, err := dependencytrack_reconciler.New(ctx, "", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
+		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
