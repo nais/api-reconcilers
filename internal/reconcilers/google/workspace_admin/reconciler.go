@@ -21,6 +21,12 @@ const (
 	reconcilerName = "google:workspace-admin"
 
 	googleGroupPrefix = "nais-team-"
+
+	auditActionGoogleWorkspaceAdminAddMember             = "google:workspace-admin:add-member"
+	auditActionGoogleWorkspaceAdminAddToGkeSecurityGroup = "google:workspace-admin:add-to-gke-security-group"
+	auditActionGoogleWorkspaceAdminCreate                = "google:workspace-admin:create"
+	auditActionGoogleWorkspaceAdminDelete                = "google:workspace-admin:delete"
+	auditActionGoogleWorkspaceAdminDeleteMember          = "google:workspace-admin:delete-member"
 )
 
 type googleWorkspaceAdminReconciler struct {
@@ -81,7 +87,7 @@ func (r *googleWorkspaceAdminReconciler) Name() string {
 }
 
 func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	googleGroup, err := r.getOrCreateGroup(ctx, naisTeam)
+	googleGroup, err := r.getOrCreateGroup(ctx, client, naisTeam)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a Google Workspace group for team %q: %w", naisTeam.Slug, err)
 	}
@@ -94,7 +100,7 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 		return fmt.Errorf("add members to group: %w", err)
 	}
 
-	if err := r.addToGKESecurityGroup(ctx, googleGroup); err != nil {
+	if err := r.addToGKESecurityGroup(ctx, client, naisTeam, googleGroup); err != nil {
 		return err
 	}
 
@@ -126,10 +132,12 @@ func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *api
 		return err
 	}
 
+	reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleWorkspaceAdminDelete, naisTeam.Slug, "Delete Google directory group with email %q", naisTeam.GoogleGroupEmail)
+
 	return nil
 }
 
-func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team) (*admin_directory_v1.Group, error) {
+func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team) (*admin_directory_v1.Group, error) {
 	if naisTeam.GoogleGroupEmail != "" {
 		googleGroup, err := r.adminDirectoryService.Groups.Get(naisTeam.GoogleGroupEmail).Context(ctx).Do()
 		if err != nil {
@@ -148,6 +156,8 @@ func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, n
 	if err != nil {
 		return nil, fmt.Errorf("unable to create Google Directory group: %w", err)
 	}
+
+	reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleWorkspaceAdminCreate, naisTeam.Slug, "Created Google Directory group %q", createdGroup.Email)
 
 	return createdGroup, nil
 }
@@ -202,10 +212,12 @@ func (r *googleWorkspaceAdminReconciler) connectUsers(ctx context.Context, clien
 			})
 			if err != nil {
 				log.WithError(err).Warnf("user does not exist in NAIS teams")
-				continue
+			} else {
+				naisTeamUserMap[remoteEmail] = resp.User
 			}
-			naisTeamUserMap[remoteEmail] = resp.User
 		}
+
+		reconcilers.AuditLogForTeamAndUser(ctx, client, r, auditActionGoogleWorkspaceAdminDeleteMember, teamSlug, remoteEmail, "Deleted member %q from Google Directory group %q", remoteEmail, googleGroup.Email)
 	}
 
 	membersToAdd := localOnlyMembers(membersAccordingToGoogle, naisTeamMembers)
@@ -218,14 +230,15 @@ func (r *googleWorkspaceAdminReconciler) connectUsers(ctx context.Context, clien
 
 		if _, err := r.adminDirectoryService.Members.Insert(googleGroup.Id, member).Context(ctx).Do(); err != nil {
 			log.WithError(err).Errorf("add member to Google Directory group")
-			continue
 		}
+
+		reconcilers.AuditLogForTeamAndUser(ctx, client, r, auditActionGoogleWorkspaceAdminAddMember, teamSlug, user.Email, "Added member %q to Google Directory group %q", member.Email, googleGroup.Email)
 	}
 
 	return nil
 }
 
-func (r *googleWorkspaceAdminReconciler) addToGKESecurityGroup(ctx context.Context, googleGroup *admin_directory_v1.Group) error {
+func (r *googleWorkspaceAdminReconciler) addToGKESecurityGroup(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, googleGroup *admin_directory_v1.Group) error {
 	groupKey := "gke-security-groups@" + r.tenantDomain
 
 	member := &admin_directory_v1.Member{
@@ -238,6 +251,8 @@ func (r *googleWorkspaceAdminReconciler) addToGKESecurityGroup(ctx context.Conte
 		}
 		return fmt.Errorf("add group %q to GKE security group %q: %s", member.Email, groupKey, err)
 	}
+
+	reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleWorkspaceAdminAddToGkeSecurityGroup, naisTeam.Slug, "Added group %q to GKE security group %q", member.Email, groupKey)
 
 	return nil
 }
