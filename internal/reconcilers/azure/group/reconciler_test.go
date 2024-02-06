@@ -79,10 +79,11 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		client, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
-			Return(&protoapi.ConfigReconcilerResponse{}, nil).
-			Once()
+		// Is not done when using the mock client
+		// mockServer.Reconcilers.EXPECT().
+		// 	Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
+		// 	Return(&protoapi.ConfigReconcilerResponse{}, nil).
+		// 	Once()
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{
 				Slug:         teamSlug,
@@ -107,7 +108,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 				}
 				return nil, status.Error(404, "not found")
 			}).
-			Times(3)
+			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "azure:group:create"
@@ -231,7 +232,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 				}
 				return nil, status.Error(404, "not found")
 			}).
-			Times(2)
+			Once()
 
 		mockClient.EXPECT().
 			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
