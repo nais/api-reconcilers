@@ -61,8 +61,8 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
@@ -113,21 +113,25 @@ func TestReconcile(t *testing.T) {
 				ProjectID:     clusterProjectID,
 			},
 		}
-		const expectedTeamProjectID = "slug-prod-ea99"
+		expectedTeamProjectID := "slug-prod-ea99"
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
-				{
-					Name:  "project",
-					Value: env + "::" + expectedTeamProjectID,
+
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{Gcp: true, EnvironmentName: env},
 				},
-			}}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: env,
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
@@ -457,11 +461,10 @@ func TestDelete(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
-
 		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -476,13 +479,14 @@ func TestDelete(t *testing.T) {
 		log, hook := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{Gcp: true, EnvironmentName: env},
+				},
+			}, nil).
 			Once()
 
 		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
@@ -502,7 +506,7 @@ func TestDelete(t *testing.T) {
 			t.Fatalf("expected log level %v, got %v", logrus.WarnLevel, actual)
 		}
 
-		if !strings.Contains(hook.LastEntry().Message, "no GCP projects in reconciler state") {
+		if !strings.Contains(hook.LastEntry().Message, "skipping environment, no GCP project or project is already deleted") {
 			t.Fatalf("unexpected log message: %v", hook.LastEntry().Message)
 		}
 	})

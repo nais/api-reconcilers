@@ -16,6 +16,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -120,28 +121,40 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
+	})
 
-	teamProjects := make(map[string]*cloudresourcemanager.Project, len(r.clusters))
-	for environment, cluster := range r.clusters {
-		projectID := GenerateProjectID(r.tenantDomain, environment, naisTeam.Slug)
-		teamProject, err := r.getOrCreateProject(ctx, client, projectID, state, environment, cluster.TeamsFolderID, naisTeam)
-		if err != nil {
-			return fmt.Errorf("get or create a GCP project %q for team %q in environment %q: %w", projectID, naisTeam.Slug, environment, err)
+	for it.Next() {
+		env := it.Value()
+		if !env.Gcp {
+			continue
 		}
-		teamProjects[environment] = teamProject
-		state.projects[environment] = teamProject.ProjectId
 
-		if err := r.saveState(ctx, client, naisTeam.Slug, state); err != nil {
-			log.WithError(err).Errorf("persist reconciler state")
+		cluster, exists := r.clusters[env.EnvironmentName]
+		if !exists {
+			log.Warnf("environment %q is not active, skipping", env.EnvironmentName)
+			continue
+		}
+
+		projectID := GenerateProjectID(r.tenantDomain, env.EnvironmentName, naisTeam.Slug)
+		teamProject, err := r.getOrCreateProject(ctx, client, projectID, env, cluster.TeamsFolderID, naisTeam)
+		if err != nil {
+			return fmt.Errorf("get or create a GCP project %q for team %q in environment %q: %w", projectID, naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+			Slug:            naisTeam.Slug,
+			EnvironmentName: env.EnvironmentName,
+			GcpProjectId:    &teamProject.ProjectId,
+		})
+		if err != nil {
+			return fmt.Errorf("set GCP project ID for team %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		labels := map[string]string{
 			"team":             naisTeam.Slug,
-			"environment":      environment,
+			"environment":      env.EnvironmentName,
 			"tenant":           r.tenantName,
 			ManagedByLabelName: ManagedByLabelValue,
 		}
@@ -150,54 +163,63 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		}
 
 		if err := r.setTeamProjectBillingInfo(ctx, client, naisTeam, teamProject); err != nil {
-			return fmt.Errorf("set project billing info for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+			return fmt.Errorf("set project billing info for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		cnrmServiceAccount, err := r.getOrCreateProjectCnrmServiceAccount(ctx, client, naisTeam, teamProject.ProjectId)
 		if err != nil {
-			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.setProjectPermissions(ctx, client, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount); err != nil {
-			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.ensureProjectHasAccessToGoogleApis(ctx, client, teamProject); err != nil {
-			return fmt.Errorf("enable Google APIs access in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+			return fmt.Errorf("enable Google APIs access in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.deleteDefaultVPCNetworkRules(ctx, teamProject, log); err != nil {
-			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 	}
 
-	return nil
+	return it.Err()
 }
 
 func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	if len(state.projects) == 0 {
-		log.Warnf("no GCP projects in reconciler state, assume team has already been deleted")
-		return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	}
-
 	var errors []error
 
-	for environment, projectID := range state.projects {
-		log := log.WithField("gcp_project_id", projectID).WithField("environment", environment)
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
+	})
 
-		if _, exists := r.clusters[environment]; !exists {
+	for it.Next() {
+		env := it.Value()
+		if !env.Gcp || env.GcpProjectId == nil {
+			log.Warning("skipping environment, no GCP project or project is already deleted")
+			continue
+		}
+
+		projectID := *env.GcpProjectId
+
+		log := log.WithField("gcp_project_id", projectID).WithField("environment", env.EnvironmentName)
+
+		if _, exists := r.clusters[env.EnvironmentName]; !exists {
 			log.Errorf("environment is no longer active, removing from state")
-			delete(state.projects, environment)
+			_, err := client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            naisTeam.Slug,
+				EnvironmentName: env.EnvironmentName,
+				GcpProjectId:    nil,
+			})
+			if err != nil {
+				errors = append(errors, err)
+			}
 			continue
 		}
 
 		auditLogMessage := fmt.Sprintf("Delete GCP project: %q", projectID)
-		_, err = r.gcpServices.CloudResourceManagerProjectsService.Delete("projects/" + projectID).Context(ctx).Do()
+		_, err := r.gcpServices.CloudResourceManagerProjectsService.Delete("projects/" + projectID).Context(ctx).Do()
 		if err != nil {
 			googleError, ok := err.(*googleapi.Error)
 			if ok && (googleError.Code == 400 || googleError.Code == 404 || googleError.Code == 403) {
@@ -209,19 +231,26 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 		}
 
 		reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleGcpDeleteProject, naisTeam.Slug, auditLogMessage)
-		delete(state.projects, environment)
-	}
-
-	if len(errors) == 0 {
-		return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
+		_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+			Slug:            naisTeam.Slug,
+			EnvironmentName: env.EnvironmentName,
+			GcpProjectId:    nil,
+		})
+		if err != nil {
+			errors = append(errors, err)
+		}
 	}
 
 	for _, err := range errors {
 		log.WithError(err).Errorf("error during team deletion")
 	}
 
-	if err := r.saveState(ctx, client, naisTeam.Slug, state); err != nil {
-		log.WithError(err).Error("persist reconciler state during delete")
+	if it.Err() != nil {
+		return fmt.Errorf("error during team deletion: %w", it.Err())
+	}
+
+	if len(errors) == 0 {
+		return nil
 	}
 
 	return fmt.Errorf("%d error(s) occurred during GCP project deletion", len(errors))
@@ -300,9 +329,9 @@ func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Con
 	return nil
 }
 
-func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *apiclient.APIClient, projectID string, state *googleGcpProjectState, environment string, parentFolderID int64, naisTeam *protoapi.Team) (*cloudresourcemanager.Project, error) {
-	if projectIDFromState, exists := state.projects[environment]; exists {
-		response, err := r.gcpServices.CloudResourceManagerProjectsService.Search().Query("id:" + projectIDFromState).Context(ctx).Do()
+func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *apiclient.APIClient, projectID string, environment *protoapi.TeamEnvironment, parentFolderID int64, naisTeam *protoapi.Team) (*cloudresourcemanager.Project, error) {
+	if environment.GcpProjectId != nil {
+		response, err := r.gcpServices.CloudResourceManagerProjectsService.Search().Query("id:" + *environment.GcpProjectId).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}
@@ -312,12 +341,12 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *ap
 		}
 
 		if len(response.Projects) > 1 {
-			return nil, fmt.Errorf("multiple projects with id: %q found, unable to continue", projectIDFromState)
+			return nil, fmt.Errorf("multiple projects with id: %q found, unable to continue", *environment.GcpProjectId)
 		}
 	}
 
 	project := &cloudresourcemanager.Project{
-		DisplayName: GetProjectDisplayName(naisTeam.Slug, environment),
+		DisplayName: GetProjectDisplayName(naisTeam.Slug, environment.EnvironmentName),
 		Parent:      "folders/" + strconv.FormatInt(parentFolderID, 10),
 		ProjectId:   projectID,
 	}
