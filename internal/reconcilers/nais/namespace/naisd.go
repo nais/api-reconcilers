@@ -14,7 +14,7 @@ const (
 	deleteNamespace  = "delete-namespace"
 )
 
-type naisdCreateNamespace struct {
+type NaisdCreateNamespace struct {
 	Name               string `json:"name"`
 	GcpProject         string `json:"gcpProject"` // the user-specified "project id"; not the "projects/ID" format
 	GroupEmail         string `json:"groupEmail"`
@@ -23,23 +23,24 @@ type naisdCreateNamespace struct {
 	SlackAlertsChannel string `json:"slackAlertsChannel"`
 }
 
-type naisdDeleteNamespace struct {
+type NaisdDeleteNamespace struct {
 	Name string `json:"name"`
 }
 
-type naisdRequest struct {
+type NaisdRequest struct {
 	Type string          `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
 
-func createNamespacePayload(naisTeam *protoapi.Team, gcpProjectID, slackAlertsChannel, cnrmServiceAccountID string, azureGroupID uuid.UUID) ([]byte, error) {
-	cnrmEmail := ""
-	if gcpProjectID != "" {
+func createNamespacePayload(naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, cnrmServiceAccountID string, azureGroupID uuid.UUID) ([]byte, error) {
+	cnrmEmail, gcpProjectID := "", ""
+	if env.GcpProjectId != nil {
+		gcpProjectID = *env.GcpProjectId
 		cnrmEmail = cnrmServiceAccountID + "@" + gcpProjectID + ".iam.gserviceaccount.com"
 	}
 
 	createReq, err := json.Marshal(
-		naisdCreateNamespace{
+		NaisdCreateNamespace{
 			Name:       naisTeam.Slug,
 			GcpProject: gcpProjectID,
 			GroupEmail: naisTeam.GoogleGroupEmail,
@@ -50,14 +51,14 @@ func createNamespacePayload(naisTeam *protoapi.Team, gcpProjectID, slackAlertsCh
 				return id.String()
 			}(azureGroupID),
 			CNRMEmail:          cnrmEmail,
-			SlackAlertsChannel: slackAlertsChannel,
+			SlackAlertsChannel: env.SlackAlertsChannel,
 		},
 	)
 	if err != nil {
 		return []byte{}, fmt.Errorf("marshal create namespace request: %w", err)
 	}
 
-	payload, err := json.Marshal(naisdRequest{
+	payload, err := json.Marshal(NaisdRequest{
 		Type: createNamespace,
 		Data: createReq,
 	})
@@ -69,14 +70,14 @@ func createNamespacePayload(naisTeam *protoapi.Team, gcpProjectID, slackAlertsCh
 }
 
 func deleteNamespacePayload(teamSlug string) ([]byte, error) {
-	deleteReq, err := json.Marshal(naisdDeleteNamespace{
+	deleteReq, err := json.Marshal(NaisdDeleteNamespace{
 		Name: teamSlug,
 	})
 	if err != nil {
 		return []byte{}, fmt.Errorf("marshal delete namespace request: %w", err)
 	}
 
-	payload, err := json.Marshal(naisdRequest{
+	payload, err := json.Marshal(NaisdRequest{
 		Type: deleteNamespace,
 		Data: deleteReq,
 	})

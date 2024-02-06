@@ -2,7 +2,6 @@ package reconciler
 
 import (
 	"context"
-	"slices"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/sethvargo/go-envconfig"
@@ -82,9 +81,6 @@ type Config struct {
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 
-	// IgnoredEnvironments list of environments that won't be reconciled
-	IgnoredEnvironments []string `envconfig:"IGNORED_ENVIRONMENTS"`
-
 	// ListenAddress The host:port combination used by the http server.
 	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3005"`
 
@@ -93,10 +89,6 @@ type Config struct {
 
 	// LogLevel The log level used in teams-backend.
 	LogLevel string `env:"LOG_LEVEL,default=info"`
-
-	// OnpremClusters a list of onprem clusters (NAV only)
-	// Example: "dev-fss,prod-fss,ci-fss"
-	OnpremClusters []string `env:"ONPREM_CLUSTERS"`
 
 	// TenantDomain The domain for the tenant.
 	TenantDomain string `env:"TENANT_DOMAIN,default=example.com"`
@@ -122,43 +114,5 @@ func NewConfig(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error
 		return nil, err
 	}
 
-	cfg.ParseEnvironments()
-
 	return cfg, nil
-}
-
-func (cfg *Config) ParseEnvironments() {
-	gcpClusters := make(map[string]gcp.Cluster)
-	for environment, cluster := range cfg.GCP.Clusters {
-		if !slices.Contains(cfg.IgnoredEnvironments, environment) {
-			gcpClusters[environment] = cluster
-		}
-	}
-
-	var onpremEnvironments []string
-	for _, environment := range cfg.OnpremClusters {
-		if !slices.Contains(cfg.IgnoredEnvironments, environment) {
-			onpremEnvironments = append(onpremEnvironments, environment)
-		}
-	}
-
-	cfg.GCP.Clusters = gcpClusters
-	cfg.OnpremClusters = onpremEnvironments
-}
-
-func (cfg *Config) Environments() []string {
-	var envs []string
-	for env := range cfg.GCP.Clusters {
-		if !slices.Contains(cfg.IgnoredEnvironments, env) {
-			envs = append(envs, env)
-		}
-	}
-
-	for _, env := range cfg.OnpremClusters {
-		if !slices.Contains(cfg.IgnoredEnvironments, env) {
-			envs = append(envs, env)
-		}
-	}
-
-	return envs
 }

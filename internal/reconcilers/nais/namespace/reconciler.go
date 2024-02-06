@@ -20,23 +20,27 @@ const reconcilerName = "nais:namespace"
 
 type OptFunc func(*naisNamespaceReconciler)
 
+func WithPubSubClient(client *pubsub.Client) OptFunc {
+	return func(r *naisNamespaceReconciler) {
+		r.pubsubClient = client
+	}
+}
+
 type naisNamespaceReconciler struct {
 	azureEnabled              bool
 	clusters                  gcp.Clusters
 	cnrmServiceAccountID      string
 	googleManagementProjectID string
-	onpremClusters            []string
 	pubsubClient              *pubsub.Client
 	tenantDomain              string
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID string, azureEnabled bool, onpremClusters []string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID string, azureEnabled bool, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &naisNamespaceReconciler{
 		azureEnabled:              azureEnabled,
 		clusters:                  clusters,
 		cnrmServiceAccountID:      cnrmServiceAccountID,
 		googleManagementProjectID: googleManagementProjectID,
-		onpremClusters:            onpremClusters,
 		tenantDomain:              tenantDomain,
 	}
 
@@ -84,120 +88,55 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
+	azureGroupID := uuid.Nil
+	if r.azureEnabled && naisTeam.AzureGroupId != "" {
+		id, err := uuid.Parse(naisTeam.AzureGroupId)
+		if err != nil {
+			return fmt.Errorf("unable to parse Azure group ID: %w", err)
+		}
+		azureGroupID = id
 	}
 
-	it := iterator.New(ctx, 20, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
-
-	gcpProjects := make(map[string]string)
 	for it.Next() {
 		env := it.Value()
-		if env.GcpProjectId != nil {
-			gcpProjects[env.EnvironmentName] = *env.GcpProjectId
-		}
-	}
-
-	if len(gcpProjects) == 0 {
-		return fmt.Errorf("no GCP project state exists for team %q yet", naisTeam.Slug)
-	}
-
-	azureGroupID, err := r.getAzureGroupID(naisTeam)
-	if err != nil {
-		return err
-	}
-
-	updateGcpProjectState := false
-
-	resp, err := client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Slug: naisTeam.Slug, Limit: 100})
-	if err != nil {
-		return err
-	}
-	slackAlertsChannels := resp.Nodes
-
-	for _, cluster := range r.onpremClusters {
-		gcpProjects[cluster] = ""
-	}
-
-	for environment, projectID := range gcpProjects {
-		if !r.activeEnvironment(environment) {
-			updateGcpProjectState = true
-			log.WithField("environment", environment).Infof("environment from GCP project state is no longer active, will update state for the team")
-			delete(gcpProjects, environment)
-			continue
+		if err := r.createNamespace(ctx, naisTeam, env, azureGroupID); err != nil {
+			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", *env.GcpProjectId, env.EnvironmentName, err)
 		}
 
-		slackAlertsChannel := naisTeam.SlackChannel
-		for _, c := range slackAlertsChannels {
-			if c.EnvironmentName == environment {
-				slackAlertsChannel = c.SlackAlertsChannel
-				break
-			}
-		}
-
-		if err := r.createNamespace(ctx, naisTeam, environment, slackAlertsChannel, projectID, azureGroupID); err != nil {
-			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", projectID, environment, err)
-		}
-
-		if _, requested := state.namespaces[environment]; !requested {
-			state.namespaces[environment] = naisTeam.Slug
-		}
+		// store timestamp for namespace creation in reconciler_resources, and create audit log entry once
+		/* TODO
+		targets := []auditlogger.Target{
+					auditlogger.TeamTarget(input.Team.Slug),
+				}
+				fields := auditlogger.Fields{
+					Action:        types.AuditActionNaisNamespaceCreateNamespace,
+					CorrelationID: input.CorrelationID,
+				}
+				r.auditLogger.Logf(ctx, targets, fields, "Request namespace creation for team %q in environment %q", input.Team.Slug, environment)
+		*/
 	}
 
-	if err := r.saveState(ctx, client, naisTeam.Slug, state); err != nil {
-		return err
-	}
-
-	_ = updateGcpProjectState
-	// if updateGcpProjectState {
-	// TODO: Persist GCP project state
-	/*
-		err = r.database.SetReconcilerStateForTeam(ctx, google_gcp_reconciler.Name, input.Team.Slug, gcpProjectState)
-		if err != nil {
-			log.WithError(err).Error("persisted GCP project state")
-		}
-	*/
-	// }
-
-	return nil
+	return it.Err()
 }
 
 func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	if len(state.namespaces) == 0 {
-		log.Warnf("no namespaces for team, assume team has already been deleted")
-		return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	}
-
 	var errors []error
-	for environment := range state.namespaces {
-		if !r.activeEnvironment(environment) {
-			log.Infof("environment %q from namespace state is no longer active, will update state for the team", environment)
-			delete(state.namespaces, environment)
-			continue
-		}
-
-		if err := r.deleteNamespace(ctx, naisTeam.Slug, environment); err != nil {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
+	})
+	for it.Next() {
+		env := it.Value()
+		if err := r.deleteNamespace(ctx, naisTeam.Slug, env.EnvironmentName); err != nil {
 			log.WithError(err).Errorf("delete namespace")
 			errors = append(errors, err)
-		} else {
-			delete(state.namespaces, environment)
 		}
 	}
 
 	if len(errors) == 0 {
-		return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
-	}
-
-	if err := r.saveState(ctx, client, naisTeam.Slug, state); err != nil {
-		log.WithError(err).Error("set reconciler state")
+		return nil
 	}
 
 	return fmt.Errorf("%d errors occured during namespace deletion", len(errors))
@@ -220,13 +159,13 @@ func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, teamSlug,
 	return err
 }
 
-func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, environment, slackAlertsChannel, gcpProjectID string, azureGroupID uuid.UUID) error {
-	payload, err := createNamespacePayload(naisTeam, gcpProjectID, slackAlertsChannel, r.cnrmServiceAccountID, azureGroupID)
+func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, azureGroupID uuid.UUID) error {
+	payload, err := createNamespacePayload(naisTeam, env, r.cnrmServiceAccountID, azureGroupID)
 	if err != nil {
 		return err
 	}
 
-	topicName := naisdTopicPrefix + environment
+	topicName := naisdTopicPrefix + env.EnvironmentName
 	msg := &pubsub.Message{Data: payload}
 	topic := r.pubsubClient.Topic(topicName)
 	future := topic.Publish(ctx, msg)
@@ -235,25 +174,4 @@ func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam 
 	topic.Stop()
 
 	return err
-}
-
-func (r *naisNamespaceReconciler) getAzureGroupID(naisTeam *protoapi.Team) (uuid.UUID, error) {
-	if !r.azureEnabled || naisTeam.AzureGroupId == "" {
-		return uuid.Nil, nil
-	}
-
-	return uuid.Parse(naisTeam.AzureGroupId)
-}
-
-func (r *naisNamespaceReconciler) activeEnvironment(environment string) bool {
-	_, exists := r.clusters[environment]
-	if exists {
-		return true
-	}
-	for _, cluster := range r.onpremClusters {
-		if cluster == environment {
-			return true
-		}
-	}
-	return false
 }

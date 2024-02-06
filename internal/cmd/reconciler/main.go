@@ -125,7 +125,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.GCP.CnrmServiceAccountID, cfg.NaisNamespace.AzureEnabled, cfg.OnpremClusters)
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.GCP.CnrmServiceAccountID, cfg.NaisNamespace.AzureEnabled)
 	if err != nil {
 		return err
 	}
