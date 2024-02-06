@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	cloudcompute "cloud.google.com/go/compute/apiv1"
+	"cloud.google.com/go/compute/apiv1/computepb"
+	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -26,6 +29,7 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/serviceusage/v1"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -44,14 +48,18 @@ const (
 )
 
 type GcpServices struct {
+	BackendBucketsClient                  *cloudcompute.BackendBucketsClient
 	CloudBillingProjectsService           *cloudbilling.ProjectsService
 	CloudResourceManagerOperationsService *cloudresourcemanager.OperationsService
 	CloudResourceManagerProjectsService   *cloudresourcemanager.ProjectsService
 	ComputeGlobalOperationsService        *compute.GlobalOperationsService
 	FirewallService                       *compute.FirewallsService
+	IamService                            *iam.Service
 	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
+	StorageClient                         *storage.Client
+	UrlMapsService                        *compute.UrlMapsService
 }
 
 type googleGcpReconciler struct {
@@ -181,6 +189,10 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		if err := r.deleteDefaultVPCNetworkRules(ctx, teamProject, log); err != nil {
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
+
+		if err := r.setupCDN(ctx, naisTeam, environment, teamProject); err != nil {
+			return fmt.Errorf("setup CDN for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
+		}
 	}
 
 	return it.Err()
@@ -270,6 +282,7 @@ func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Con
 		"bigquery.googleapis.com":             {},
 		"cloudtrace.googleapis.com":           {},
 	}
+	// TODO - make sure apis needed for cdn is enabled for the team's project
 
 	response, err := r.gcpServices.ServiceUsageService.List(project.Name).Filter("state:ENABLED").Context(ctx).Do()
 	if err != nil {
@@ -541,6 +554,130 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 	return err
 }
 
+func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project) error {
+	domain := "TODO-SETUP-DOMAIN"
+	// Todo:
+	// - Add checks for existing cdn
+	// - google_compute_url_map
+	//  - Create these too -> these are probably handled in nais-terraform-modules
+	//      -- resource "google_compute_global_forwarding_rule" "redirect"
+	//      -- resource "google_compute_target_http_proxy" "redirect"
+	//      -- resource "google_compute_url_map" "redirect"
+	//      -- resource "google_compute_global_forwarding_rule" "cdn"
+	//      -- resource "google_compute_target_https_proxy" "cdn"
+	//      -- resource "google_compute_managed_ssl_certificate" "cdn"
+
+	// set up a storage bucket
+	bucketName := fmt.Sprintf("nais-cdn-%s-%s-%s", r.tenantName, environment, naisTeam.Slug)
+	err := r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, nil)
+	if err != nil {
+		return fmt.Errorf("create bucket: %w", err)
+	}
+
+	policy, err := r.gcpServices.StorageClient.Bucket(bucketName).IAM().Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("get bucket policy: %w", err)
+	}
+
+	policy.Add("allUsers", "roles/storage.objectViewer")
+	policy.Add(fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail), "roles/storage.objectAdmin")
+
+	err = r.gcpServices.StorageClient.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
+	if err != nil {
+		return fmt.Errorf("add object viewer role to allUsers: %w", err)
+	}
+
+	// TODO: for feature parity, these should be configurable for each team
+	const defaultTTL = int32(3600)
+	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400)
+
+	// set up a backend bucket
+	req := &computepb.InsertBackendBucketRequest{
+		BackendBucketResource: &computepb.BackendBucket{
+			BucketName: &bucketName,
+			CdnPolicy: &computepb.BackendBucketCdnPolicy{
+				// Enables Cloud CDN to cache all static content served from the backend
+				// bucket. This includes content with a file extension that is typically
+				// associated with static content, such as .html, .css, and .js.
+				CacheMode:  ptr.To("CACHE_ALL_STATIC"),
+				ClientTtl:  ptr.To(defaultTTL),
+				DefaultTtl: ptr.To(defaultTTL),
+				MaxTtl:     ptr.To(defaultMaxTTL),
+				// If true then Cloud CDN will combine multiple concurrent cache fill
+				// requests into a small number of requests to the origin.
+				RequestCoalescing: ptr.To(true),
+			},
+			// When enabled, Cloud CDN automatically compresses content served from the
+			// backend bucket using gzip compression. This can reduce the amount of data
+			// sent over the network, resulting in faster load times for end users.
+			// Enum of "AUTOMATIC", "DISABLED".
+			CompressionMode: ptr.To("AUTOMATIC"),
+			Description:     ptr.To(fmt.Sprintf("Backend bucket for %s/%s", domain, naisTeam.Slug)),
+			EnableCdn:       ptr.To(true),
+			Name:            &bucketName,
+		},
+		Project: teamProject.ProjectId,
+	}
+
+	operation, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
+	if err != nil {
+		return fmt.Errorf("insert backend bucket: %w", err)
+	}
+
+	// TODO: do something with the operation, poll i guess?
+	err = operation.Wait(ctx)
+	if err != nil {
+		return fmt.Errorf("wait for insert backend bucket operation: %w", err)
+	}
+
+	// set up iam for the team members
+	iamRoleReq := &iam.CreateRoleRequest{
+		Role: &iam.Role{
+			Title:               "Frontend Platform Cache Invalidator",
+			Description:         "Allows invalidating the cache of the CDN for the frontend platform",
+			IncludedPermissions: []string{"compute.urlMaps.get", "compute.urlMaps.invalidateCache"},
+			Stage:               "GA",
+		},
+		RoleId: "frontendPlatformCacheInvalidator",
+	}
+	customRole, err := r.gcpServices.IamService.Projects.Roles.Create("projects/"+teamProject.ProjectId, iamRoleReq).Do()
+	if err != nil {
+		return fmt.Errorf("create custom cdn role: %w", err)
+	}
+
+	customRolePolicy, err := r.gcpServices.CloudResourceManagerProjectsService.GetIamPolicy(teamProject.Name, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
+	}
+
+	// TODO - handle the ignored return i guess
+	newBindings, _ := calculateRoleBindings(customRolePolicy.Bindings, map[string]string{
+		"roles/viewer":  "group:" + naisTeam.GoogleGroupEmail,
+		customRole.Name: "group:" + naisTeam.GoogleGroupEmail,
+	})
+
+	customRolePolicy.Bindings = newBindings
+	_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: customRolePolicy,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("assign GCP project IAM policy: %w", err)
+	}
+
+	// TODO - where do the cdn resources live? management? one per environment? nais-dev and nais-prod?
+	//  clarify the above, which then tells us where to get the urlMap from
+
+	// resource "google_compute_url_map" "cdn"
+	// get existing urlMap
+
+	// merge in the new path matcher
+	// update the urlMap
+	// ????
+	// profit
+
+	return nil
+}
+
 // createGcpServices Creates the GCP services used by the reconciler
 func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDomain string) (*GcpServices, error) {
 	builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
@@ -581,15 +718,29 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 		return nil, fmt.Errorf("retrieve compute service: %w", err)
 	}
 
+	storageClient, err := storage.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve storage client: %w", err)
+	}
+
+	backendBucketsClient, err := cloudcompute.NewBackendBucketsRESTClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve backend buckets client: %w", err)
+	}
+
 	return &GcpServices{
+		BackendBucketsClient:                  backendBucketsClient,
 		CloudBillingProjectsService:           cloudBillingService.Projects,
-		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
-		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
-		ServiceUsageService:                   serviceUsageService.Services,
-		ServiceUsageOperationsService:         serviceUsageService.Operations,
-		FirewallService:                       computeService.Firewalls,
+		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		ComputeGlobalOperationsService:        computeService.GlobalOperations,
+		FirewallService:                       computeService.Firewalls,
+		IamService:                            iamService,
+		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
+		ServiceUsageOperationsService:         serviceUsageService.Operations,
+		ServiceUsageService:                   serviceUsageService.Services,
+		StorageClient:                         storageClient,
+		UrlMapsService:                        computeService.UrlMaps,
 	}, nil
 }
 
