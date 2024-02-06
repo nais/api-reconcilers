@@ -314,14 +314,13 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 	ctx := context.Background()
 	teamID := uuid.New().String()
 	teamSlug := "some-team"
-	user := "user@example.com"
 	naisTeam := &protoapi.Team{
 		Slug:    teamSlug,
 		Purpose: "some purpose",
 	}
 	log, _ := test.NewNullLogger()
 
-	t.Run("team exists, delete team from teams-backend should remove team from dependencytrack", func(t *testing.T) {
+	t.Run("team exists, delete team from api should remove team from dependencytrack", func(t *testing.T) {
 		dpClient := dependencytrack_reconciler.NewMockClient(t)
 		dpClient.EXPECT().DeleteTeam(mock.Anything, teamID).Return(nil).Once()
 
@@ -336,16 +335,6 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 					},
 				},
 			}, nil).
-			Once()
-		grpcServers.Teams.EXPECT().
-			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
-				{
-					User: &protoapi.User{
-						Email: user,
-					},
-				},
-			}}, nil).
 			Once()
 		grpcServers.ReconcilerResources.EXPECT().
 			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
