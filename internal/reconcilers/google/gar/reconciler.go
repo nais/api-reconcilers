@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -130,26 +131,22 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return err
 	}
 
-	if err := r.saveState(ctx, client, naisTeam.Slug, &garState{repositoryName: garRepository.Name}); err != nil {
-		log.WithError(err).Errorf("persist reconciler state")
-	}
+	client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+		Slug:          naisTeam.Slug,
+		GarRepository: &garRepository.Name,
+	})
 
 	return nil
 }
 
 func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	if state.repositoryName == "" {
-		log.Warnf("missing repository name in reconciler state, assume team has already been deleted")
-		return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
+	if naisTeam.GarRepository == "" {
+		log.Warnf("missing repository name in team, assume team has already been deleted")
+		return nil
 	}
 
 	serviceAccountName, _ := serviceAccountNameAndAccountID(naisTeam.Slug, r.googleManagementProjectID)
-	if _, err = r.iamService.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do(); err != nil {
+	if _, err := r.iamService.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do(); err != nil {
 		googleError, ok := err.(*googleapi.Error)
 		if !ok || googleError.Code != http.StatusNotFound {
 			return fmt.Errorf("delete service account %q: %w", serviceAccountName, err)
@@ -159,7 +156,7 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	}
 
 	req := &artifactregistrypb.DeleteRepositoryRequest{
-		Name: state.repositoryName,
+		Name: naisTeam.GarRepository,
 	}
 	operation, err := r.artifactRegistry.DeleteRepository(ctx, req)
 	if err != nil {
@@ -176,10 +173,13 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		r,
 		auditActionDeleteGarRepository,
 		naisTeam.Slug,
-		"Delete GAR repository %q", state.repositoryName,
+		"Delete GAR repository %q", naisTeam.GarRepository,
 	)
-
-	return r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug)
+	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+		Slug:          naisTeam.Slug,
+		GarRepository: ptr.To(""),
+	})
+	return err
 }
 
 func (r *garReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug string) (*iam.ServiceAccount, error) {

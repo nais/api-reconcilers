@@ -385,19 +385,20 @@ func TestReconcile(t *testing.T) {
 
 		naisTeam := naisTeam
 		naisTeam.GoogleGroupEmail = groupEmail
+		naisTeam.GarRepository = garRepositoryParent + "/repositories/" + teamSlug
 
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.Teams.EXPECT().
+			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
+				return req.Slug == teamSlug && *req.GarRepository == garRepositoryParent+"/repositories/"+teamSlug
+			})).
+			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
+			Once()
 		mockServer.ReconcilerResources.EXPECT().
 			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
-				return req.Resources[0].Value == garRepositoryParent+"/repositories/"+teamSlug
-			})).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
 		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
@@ -479,35 +480,10 @@ func TestDelete(t *testing.T) {
 		Slug: teamSlug,
 	}
 
-	t.Run("unable to load state", func(t *testing.T) {
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(nil, fmt.Errorf("some error")).
-			Once()
-
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "some error") {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("state is missing repository name", func(t *testing.T) {
+	t.Run("team is missing repository name", func(t *testing.T) {
 		defer hook.Reset()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName)
 		if err != nil {
@@ -526,24 +502,15 @@ func TestDelete(t *testing.T) {
 			t.Errorf("unexpected log level: %v", hook.Entries[0].Level)
 		}
 
-		if !strings.Contains(hook.Entries[0].Message, "missing repository name in reconciler state") {
+		if !strings.Contains(hook.Entries[0].Message, "missing repository name in team") {
 			t.Errorf("unexpected log message: %v", hook.Entries[0].Message)
 		}
 	})
 
 	t.Run("delete service account fails with unexpected error", func(t *testing.T) {
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "repository_name",
-						Value: repositoryName,
-					},
-				},
-			}, nil).
-			Once()
+		naisTeam := naisTeam
+		naisTeam.GarRepository = repositoryName
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
@@ -568,18 +535,18 @@ func TestDelete(t *testing.T) {
 	t.Run("service account does not exist, and delete repo request fails", func(t *testing.T) {
 		defer hook.Reset()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "repository_name",
-						Value: repositoryName,
-					},
-				},
-			}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
+		// mockServer.ReconcilerResources.EXPECT().
+		// 	List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
+		// 	Return(&protoapi.ListReconcilerResourcesResponse{
+		// 		Nodes: []*protoapi.ReconcilerResource{
+		// 			{
+		// 				Name:  "repository_name",
+		// 				Value: repositoryName,
+		// 			},
+		// 		},
+		// 	}, nil).
+		// 	Once()
 
 		mockedClients := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
@@ -614,18 +581,7 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("delete repo operation fails", func(t *testing.T) {
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "repository_name",
-						Value: repositoryName,
-					},
-				},
-			}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
@@ -663,21 +619,13 @@ func TestDelete(t *testing.T) {
 		defer hook.Reset()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "repository_name",
-						Value: repositoryName,
-					},
-				},
-			}, nil).
+		mockServer.Teams.EXPECT().
+			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
+				return req.Slug == teamSlug && *req.GarRepository == ""
+			})).
+			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
-			Once()
+
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "google:gar:delete"
