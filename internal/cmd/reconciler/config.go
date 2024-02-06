@@ -9,6 +9,11 @@ import (
 )
 
 type Config struct {
+	Azure struct {
+		// GroupNamePrefix will be prepended all groups created in Azure.
+		GroupNamePrefix string `env:"AZURE_GROUP_NAME_PREFIX,default=nais-team-"`
+	}
+
 	DependencyTrack struct {
 		// Endpoint URL to the DependencyTrack API.
 		Endpoint string `env:"DEPENDENCYTRACK_ENDPOINT"`

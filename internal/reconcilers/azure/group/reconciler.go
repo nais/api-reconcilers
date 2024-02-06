@@ -25,8 +25,6 @@ const (
 	configClientID     = "azure:client_id"
 	configTenantID     = "azure:tenant_id"
 
-	azureGroupPrefix = "nais-team-"
-
 	auditActionCreateAzureGroup      = "azure:group:create"
 	auditActionDeleteAzureGroup      = "azure:group:delete"
 	auditActionAddMemberToGroup      = "azure:group:add-member"
@@ -41,6 +39,7 @@ type azureGroupReconciler struct {
 	staticAzureClient bool
 	lockedAzureClient azureclient.Client
 	lastConfig        clientcredentials.Config
+	azureGroupPrefix  string
 }
 
 type reconcilerConfig struct {
@@ -57,9 +56,10 @@ func WithAzureClient(client azureclient.Client) OptFunc {
 	}
 }
 
-func New(domain string, opts ...OptFunc) reconcilers.Reconciler {
+func New(domain, azureGroupPrefix string, opts ...OptFunc) reconcilers.Reconciler {
 	r := &azureGroupReconciler{
-		domain: domain,
+		domain:           domain,
+		azureGroupPrefix: azureGroupPrefix,
 	}
 
 	for _, opt := range opts {
@@ -111,7 +111,7 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	prefixedName := azureGroupPrefix + naisTeam.Slug
+	prefixedName := r.azureGroupPrefix + naisTeam.Slug
 	azureGroup, created, err := r.azureClient().GetOrCreateGroup(ctx, naisTeam, prefixedName)
 	if err != nil {
 		return err

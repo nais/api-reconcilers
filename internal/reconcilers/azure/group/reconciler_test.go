@@ -18,9 +18,12 @@ import (
 )
 
 func TestAzureReconciler_Reconcile(t *testing.T) {
-	domain := "example.com"
-	teamSlug := "slug"
-	teamPurpose := "My purpose"
+	const (
+		groupNamePrefix = "nais-team-"
+		domain          = "example.com"
+		teamSlug        = "slug"
+		teamPurpose     = "My purpose"
+	)
 	log, _ := test.NewNullLogger()
 
 	ctx := context.Background()
@@ -119,7 +122,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -136,7 +139,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 
 		if err == nil {
@@ -165,7 +168,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 
 		if err == nil {
@@ -199,7 +202,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -248,7 +251,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -285,7 +288,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(mockClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
 			Reconcile(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -294,7 +297,10 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 }
 
 func TestAzureReconciler_Delete(t *testing.T) {
-	const domain = "example.com"
+	const (
+		domain          = "example.com"
+		groupNamePrefix = "nais-team-"
+	)
 
 	azGroupID := uuid.New()
 	team := &protoapi.Team{
@@ -309,7 +315,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, &protoapi.Team{Slug: "some-slug"}, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -326,7 +332,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
 
 		if !strings.Contains(err.Error(), "delete Azure AD group with ID") {
@@ -350,7 +356,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 			Once()
 
 		err := azure_group_reconciler.
-			New(domain, azure_group_reconciler.WithAzureClient(azureClient)).
+			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(azureClient)).
 			Delete(ctx, client, team, log)
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
