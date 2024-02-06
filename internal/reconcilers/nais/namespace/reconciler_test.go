@@ -68,11 +68,7 @@ func TestReconcile(t *testing.T) {
 			AzureGroupId:     "invalid",
 		}
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:namespace", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled)
 		if err != nil {
@@ -92,10 +88,6 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:namespace", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{}, nil).
@@ -134,10 +126,6 @@ func TestReconcile(t *testing.T) {
 		defer closer()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:namespace", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -220,10 +208,6 @@ func TestReconcile(t *testing.T) {
 		defer closer()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:namespace", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
