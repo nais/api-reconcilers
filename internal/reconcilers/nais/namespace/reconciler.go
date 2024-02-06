@@ -112,13 +112,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 	updateGcpProjectState := false
 
-	resp, err := client.Teams().SlackAlertsChannels(ctx, &protoapi.SlackAlertsChannelsRequest{
-		Slug: naisTeam.Slug,
-	})
+	resp, err := client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Slug: naisTeam.Slug, Limit: 100})
 	if err != nil {
 		return err
 	}
-	slackAlertsChannels := resp.Channels
+	slackAlertsChannels := resp.Nodes
 
 	for _, cluster := range r.onpremClusters {
 		gcpProjects[cluster] = ""
@@ -134,8 +132,8 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 		slackAlertsChannel := naisTeam.SlackChannel
 		for _, c := range slackAlertsChannels {
-			if c.Environment == environment {
-				slackAlertsChannel = c.Channel
+			if c.EnvironmentName == environment {
+				slackAlertsChannel = c.SlackAlertsChannel
 				break
 			}
 		}
