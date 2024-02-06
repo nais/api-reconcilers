@@ -1,15 +1,42 @@
 package google_gcp_reconciler_test
 
-/*
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/nais/api-reconcilers/internal/gcp"
+	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	"github.com/nais/api-reconcilers/internal/test"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/protoapi"
+	"github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
+	"github.com/stretchr/testify/mock"
+	"google.golang.org/api/cloudbilling/v1"
+	"google.golang.org/api/cloudresourcemanager/v3"
+	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/option"
+	"google.golang.org/api/serviceusage/v1"
+)
+
 const (
-	env              = "prod"
-	teamFolderID     = 123
-	clusterProjectID = "some-project-123"
-	tenantName       = "example"
-	tenantDomain     = "example.com"
-	cnrmRoleName     = "organizations/123/roles/name"
-	billingAccount   = "billingAccounts/123"
-	numberOfAPIs     = 12
+	env                  = "prod"
+	teamFolderID         = 123
+	clusterProjectID     = "some-project-123"
+	tenantName           = "example"
+	tenantDomain         = "example.com"
+	cnrmRoleName         = "organizations/123/roles/name"
+	cnrmServiceAccountID = "some-id"
+	billingAccount       = "billingAccounts/123"
+	numberOfAPIs         = 12
+
+	teamSlug         = "slug"
+	googleGroupEmail = "slug@example.com"
 )
 
 var (
@@ -19,102 +46,67 @@ var (
 			ProjectID:     clusterProjectID,
 		},
 	}
-	teamSlug      = slug.Slug("slug")
-	correlationID = uuid.New()
-	team          = db.Team{Team: &sqlc.Team{Slug: teamSlug}}
-	input         = reconcilers.Input{
-		CorrelationID: correlationID,
-		Team:          team,
+	naisTeam = &protoapi.Team{
+		Slug:             teamSlug,
+		GoogleGroupEmail: googleGroupEmail,
 	}
+	naisTeamWithoutGoogleGroupEmail = &protoapi.Team{
+		Slug: teamSlug,
+	}
+	ctx = context.Background()
 )
 
 func TestReconcile(t *testing.T) {
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
-
 	t.Run("fail early when unable to load reconciler state", func(t *testing.T) {
-		ctx := context.Background()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
+		log, _ := logrustest.NewNullLogger()
 
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.Anything).
-			Return(fmt.Errorf("some error")).
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+			Return(nil, fmt.Errorf("some error")).
 			Once()
-		gcpServices := &google_gcp_reconciler.GcpServices{}
 
-		err := google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, "load system state")
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "some error") {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 
-	t.Run("fail early when unable to load google workspace state", func(t *testing.T) {
-		ctx := context.Background()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_workspace_admin_reconciler.Name, team.Slug, mock.Anything).
-			Return(fmt.Errorf("some error")).
-			Once()
-		gcpServices := &google_gcp_reconciler.GcpServices{}
+	t.Run("fail early when team has no google group email set", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
 
-		err := google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, "load system state")
-	})
+		apiClient, _ := apiclient.NewMockClient(t)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-	t.Run("fail early when google workspace state is missing group email", func(t *testing.T) {
-		ctx := context.Background()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_workspace_admin_reconciler.Name, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		gcpServices := &google_gcp_reconciler.GcpServices{}
-
-		err := google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Reconcile(ctx, input)
-		assert.ErrorContains(t, err, "no Google Workspace group exists")
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeamWithoutGoogleGroupEmail, log); !strings.Contains(err.Error(), "no Google Workspace group exists") {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("no error when we have no clusters", func(t *testing.T) {
-		ctx := context.Background()
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_workspace_admin_reconciler.Name, team.Slug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				email := "mail@example.com"
-				state := args.Get(3).(*reconcilers.GoogleWorkspaceState)
-				state.GroupEmail = &email
-			}).
-			Return(nil).
-			Once()
-		gcpServices := &google_gcp_reconciler.GcpServices{}
+		log, _ := logrustest.NewNullLogger()
 
-		err := google_gcp_reconciler.
-			New(database, auditLogger, gcp.Clusters{}, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Reconcile(ctx, input)
-		assert.NoError(t, err)
+		apiClient, _ := apiclient.NewMockClient(t)
+		reconcilers, err := google_gcp_reconciler.New(ctx, gcp.Clusters{}, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("full reconcile, no existing project state", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+
 		clusters := gcp.Clusters{
 			env: gcp.Cluster{
 				TeamsFolderID: teamFolderID,
@@ -122,89 +114,71 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		const expectedTeamProjectID = "slug-prod-ea99"
-		ctx := context.Background()
-		database := db.NewMockDatabase(t)
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_workspace_admin_reconciler.Name, team.Slug, mock.Anything).
-			Run(func(args mock.Arguments) {
-				email := "mail@example.com"
-				state := args.Get(3).(*reconcilers.GoogleWorkspaceState)
-				state.GroupEmail = &email
-			}).
-			Return(nil).
-			Once()
-		database.
-			On("SetReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, team.Slug, mock.MatchedBy(func(state *reconcilers.GoogleGcpProjectState) bool {
-				return state.Projects[env].ProjectID == expectedTeamProjectID
-			})).
-			Return(nil).
-			Once()
 
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		auditLogger.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(targets []auditlogger.Target) bool {
-				return targets[0].Identifier == string(teamSlug)
-			}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-				return fields.CorrelationID == correlationID && fields.Action == types.AuditActionGoogleGcpProjectCreateProject
-			}), mock.MatchedBy(func(msg string) bool {
-				return strings.HasPrefix(msg, "Created GCP project")
-			}), expectedTeamProjectID, teamSlug, env).
-			Return().
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
-		auditLogger.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(targets []auditlogger.Target) bool {
-				return targets[0].Identifier == string(teamSlug)
-			}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-				return fields.CorrelationID == correlationID && fields.Action == types.AuditActionGoogleGcpProjectSetBillingInfo
-			}), mock.MatchedBy(func(msg string) bool {
-				return strings.HasPrefix(msg, "Set billing info")
-			}), expectedTeamProjectID).
-			Return().
+		mockServer.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+				{
+					Name:  "project",
+					Value: env + "::" + expectedTeamProjectID,
+				},
+			}}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
-		auditLogger.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(targets []auditlogger.Target) bool {
-				return targets[0].Identifier == string(teamSlug)
-			}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-				return fields.CorrelationID == correlationID && fields.Action == types.AuditActionGoogleGcpProjectCreateCnrmServiceAccount
-			}), mock.MatchedBy(func(msg string) bool {
-				return strings.HasPrefix(msg, "Created CNRM service account")
-			}), teamSlug, expectedTeamProjectID).
-			Return().
-			Once()
-		auditLogger.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(targets []auditlogger.Target) bool {
-				return targets[0].Identifier == string(teamSlug)
-			}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-				return fields.CorrelationID == correlationID && fields.Action == types.AuditActionGoogleGcpProjectAssignPermissions
-			}), mock.MatchedBy(func(msg string) bool {
-				return strings.HasPrefix(msg, "Assigned GCP project IAM permissions")
-			}), expectedTeamProjectID).
-			Return().
-			Once()
-		auditLogger.EXPECT().
-			Logf(ctx, mock.MatchedBy(func(targets []auditlogger.Target) bool {
-				return targets[0].Identifier == string(teamSlug)
-			}), mock.MatchedBy(func(fields auditlogger.Fields) bool {
-				return fields.CorrelationID == correlationID && fields.Action == types.AuditActionGoogleGcpProjectEnableGoogleApis
-			}), mock.MatchedBy(func(msg string) bool {
-				return strings.HasPrefix(msg, "Enable Google API")
-			}), mock.AnythingOfType("string"), expectedTeamProjectID).
-			Return().
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:enable-google-apis" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Times(numberOfAPIs)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:create-project" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:assign-permissions" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:create-cnrm-service-account" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:set-billing-info" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
 
 		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{
 			// create project request
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				payload := cloudresourcemanager.Project{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Equal(t, "slug-prod", payload.DisplayName)
-				assert.Equal(t, "folders/123", payload.Parent)
-				assert.Equal(t, expectedTeamProjectID, payload.ProjectId)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				if payload.DisplayName != "slug-prod" {
+					t.Errorf("expected display name %q, got %q", "slug-prod", payload.DisplayName)
+				}
+
+				if payload.Parent != "folders/123" {
+					t.Errorf("expected parent %q, got %q", "folders/123", payload.Parent)
+				}
+
+				if payload.ProjectId != expectedTeamProjectID {
+					t.Errorf("expected project id %q, got %q", expectedTeamProjectID, payload.ProjectId)
+				}
 
 				project := cloudresourcemanager.Project{
 					Name:      payload.DisplayName,
@@ -217,18 +191,32 @@ func TestReconcile(t *testing.T) {
 					Response: projectJson,
 				}
 				resp, _ := op.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// set project labels
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPatch, r.Method)
+				if r.Method != http.MethodPatch {
+					t.Errorf("expected HTTP PATCH, got: %q", r.Method)
+				}
 				payload := cloudresourcemanager.Project{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Equal(t, env, payload.Labels["environment"])
-				assert.Equal(t, string(teamSlug), payload.Labels["team"])
-				assert.Equal(t, tenantName, payload.Labels["tenant"])
-				assert.Equal(t, reconcilers.ManagedByLabelValue, payload.Labels[reconcilers.ManagedByLabelName])
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if payload.Labels["environment"] != env {
+					t.Errorf("expected environment %q, got %q", env, payload.Labels["environment"])
+				}
+
+				if payload.Labels["team"] != teamSlug {
+					t.Errorf("expected team %q, got %q", teamSlug, payload.Labels["team"])
+				}
+
+				if payload.Labels["tenant"] != tenantName {
+					t.Errorf("expected tenant %q, got %q", tenantName, payload.Labels["tenant"])
+				}
+
+				if payload.Labels[google_gcp_reconciler.ManagedByLabelName] != google_gcp_reconciler.ManagedByLabelValue {
+					t.Errorf("expected managed by label %q, got %q", google_gcp_reconciler.ManagedByLabelValue, payload.Labels[google_gcp_reconciler.ManagedByLabelName])
+				}
 
 				project, _ := payload.MarshalJSON()
 				op := cloudresourcemanager.Operation{
@@ -236,113 +224,160 @@ func TestReconcile(t *testing.T) {
 					Response: project,
 				}
 				resp, _ := op.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// get existing billing info
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
 				info := cloudbilling.ProjectBillingInfo{}
 				resp, _ := info.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// update billing info
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPut, r.Method)
+				if r.Method != http.MethodPut {
+					t.Errorf("expected HTTP PUT, got: %q", r.Method)
+				}
 				payload := cloudbilling.ProjectBillingInfo{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Equal(t, billingAccount, payload.BillingAccountName)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if payload.BillingAccountName != billingAccount {
+					t.Errorf("expected billing account %q, got %q", billingAccount, payload.BillingAccountName)
+				}
 
 				info := cloudbilling.ProjectBillingInfo{}
 				resp, _ := info.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// get existing CNRM service account
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
 				w.WriteHeader(404)
 			},
 
 			// create CNRM service account
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				payload := iam.CreateServiceAccountRequest{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Equal(t, reconcilers.CnrmServiceAccountID, payload.AccountId)
-				assert.Equal(t, "CNRM service account", payload.ServiceAccount.DisplayName)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if payload.AccountId != cnrmServiceAccountID {
+					t.Errorf("expected account id %q, got %q", cnrmServiceAccountID, payload.AccountId)
+				}
+
+				if payload.ServiceAccount.DisplayName != "CNRM service account" {
+					t.Errorf("expected display name %q, got %q", "CNRM service account", payload.ServiceAccount.DisplayName)
+				}
 
 				sa := iam.ServiceAccount{
 					Name:  "projects/some-project-123/serviceAccounts/cnrm@some-project-123.iam.gserviceaccount.com",
 					Email: "cnrm@some-project-123.iam.gserviceaccount.com",
 				}
 				resp, _ := sa.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// set workload identity for service account
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				payload := iam.SetIamPolicyRequest{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Equal(t, "serviceAccount:some-project-123.svc.id.goog[cnrm-system/cnrm-controller-manager-slug]", payload.Policy.Bindings[0].Members[0])
-				assert.Equal(t, "roles/iam.workloadIdentityUser", payload.Policy.Bindings[0].Role)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if expected := "serviceAccount:some-project-123.svc.id.goog[cnrm-system/cnrm-controller-manager-slug]"; payload.Policy.Bindings[0].Members[0] != expected {
+					t.Errorf("expected member %q, got %q", expected, payload.Policy.Bindings[0].Members[0])
+				}
+
+				if payload.Policy.Bindings[0].Role != "roles/iam.workloadIdentityUser" {
+					t.Errorf("expected role %q, got %q", "roles/iam.workloadIdentityUser", payload.Policy.Bindings[0].Role)
+				}
 
 				policy := iam.Policy{}
 				resp, _ := policy.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// get existing IAM policy for the team project
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				policy := iam.Policy{}
 				resp, _ := policy.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// set updated IAM policy for the team project
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				payload := iam.SetIamPolicyRequest{}
-				json.NewDecoder(r.Body).Decode(&payload)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
 				expectedBindings := map[string]string{
 					payload.Policy.Bindings[0].Role: payload.Policy.Bindings[0].Members[0],
 					payload.Policy.Bindings[1].Role: payload.Policy.Bindings[1].Members[0],
 				}
-				assert.Equal(t, "group:mail@example.com", expectedBindings["roles/owner"])
-				assert.Equal(t, "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com", expectedBindings[cnrmRoleName])
+
+				if expectedBindings["roles/owner"] != "group:slug@example.com" {
+					t.Errorf("incorrect owner, expected: %q, got: %q", "group:slug@example.com", expectedBindings["roles/owner"])
+				}
+
+				if expectedBindings[cnrmRoleName] != "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com" {
+					t.Errorf("incorrect owner, expected: %q, got: %q", "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com", expectedBindings[cnrmRoleName])
+				}
 
 				policy := iam.Policy{}
 				resp, _ := policy.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// list existing Google APIs for the team project
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
 				services := serviceusage.ListServicesResponse{}
 				resp, _ := services.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// enable Google APIs for the team project
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
 				payload := serviceusage.BatchEnableServicesRequest{}
-				json.NewDecoder(r.Body).Decode(&payload)
-				assert.Len(t, payload.ServiceIds, numberOfAPIs)
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if len(payload.ServiceIds) != numberOfAPIs {
+					t.Errorf("expected %d services, got %d", numberOfAPIs, len(payload.ServiceIds))
+				}
 
 				op := serviceusage.Operation{Done: true}
 				resp, _ := op.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// list firewall rules for project
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodGet, r.Method)
-				assert.Equal(t, "/projects/"+expectedTeamProjectID+"/global/firewalls", r.URL.Path)
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + expectedTeamProjectID + "/global/firewalls"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
 
 				list := compute.FirewallList{
 					Items: []*compute.Firewall{
@@ -354,27 +389,37 @@ func TestReconcile(t *testing.T) {
 				}
 
 				resp, _ := list.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// delete default firewall rule
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodDelete, r.Method)
-				assert.Equal(t, "/projects/"+expectedTeamProjectID+"/global/firewalls/default-allow-ssh", r.URL.Path)
+				if r.Method != http.MethodDelete {
+					t.Errorf("expected HTTP DELETE, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + expectedTeamProjectID + "/global/firewalls/default-allow-ssh"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
 
 				op := compute.Operation{Name: "operation-name", Status: "RUNNING"}
 				resp, _ := op.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 
 			// wait for operation to complete
 			func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, http.MethodPost, r.Method)
-				assert.Equal(t, "/projects/"+expectedTeamProjectID+"/global/operations/operation-name/wait", r.URL.Path)
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + expectedTeamProjectID + "/global/operations/operation-name/wait"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
 
 				op := compute.Operation{Name: "operation-name", Status: "DONE"}
 				resp, _ := op.MarshalJSON()
-				w.Write(resp)
+				_, _ = w.Write(resp)
 			},
 		})
 		defer srv.Close()
@@ -396,38 +441,115 @@ func TestReconcile(t *testing.T) {
 			ComputeGlobalOperationsService:        computeService.GlobalOperations,
 		}
 
-		err = google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Reconcile(ctx, input)
-		assert.NoError(t, err)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(gcpServices))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestDelete(t *testing.T) {
+	t.Run("fail early when unable to load reconciler state", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+			Return(nil, fmt.Errorf("some error")).
+			Once()
+
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "some error") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("remove state when it does not refer to any projects", func(t *testing.T) {
+		log, hook := logrustest.NewNullLogger()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+		mockServer.ReconcilerResources.EXPECT().
+			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "google:gcp:project", TeamSlug: teamSlug}).
+			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			Once()
+
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Delete(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(hook.Entries) != 1 {
+			t.Fatalf("expected one log entry, got %d", len(hook.Entries))
+		}
+
+		if actual := hook.LastEntry().Level; actual != logrus.WarnLevel {
+			t.Fatalf("expected log level %v, got %v", logrus.WarnLevel, actual)
+		}
+
+		if !strings.Contains(hook.LastEntry().Message, "no GCP projects in reconciler state") {
+			t.Fatalf("unexpected log message: %v", hook.LastEntry().Message)
+		}
+	})
+
+	t.Run("full delete", func(t *testing.T) {
+		// TODO: implement
 	})
 }
 
 func TestGenerateProjectID(t *testing.T) {
-	// different organization names don't show up in name, but are reflected in the hash
-	assert.Equal(t, "happyteam-prod-488a", google_gcp_reconciler.GenerateProjectID("nais.io", "production", "happyteam"))
-	assert.Equal(t, "happyteam-prod-5534", google_gcp_reconciler.GenerateProjectID("bais.io", "production", "happyteam"))
+	tests := []struct {
+		expected string
+		domain   string
+		env      string
+		slug     string
+	}{
+		// different organization names don't show up in name, but are reflected in the hash
+		{"happyteam-prod-488a", "nais.io", "production", "happyteam"},
+		{"happyteam-prod-5534", "bais.io", "production", "happyteam"},
 
-	// environments that get truncated produce different hashes
-	assert.Equal(t, "sadteam-prod-04d4", google_gcp_reconciler.GenerateProjectID("nais.io", "production", "sadteam"))
-	assert.Equal(t, "sadteam-prod-6ce6", google_gcp_reconciler.GenerateProjectID("nais.io", "producers", "sadteam"))
+		// environments that get truncated produce different hashes
+		{"sadteam-prod-04d4", "nais.io", "production", "sadteam"},
+		{"sadteam-prod-6ce6", "nais.io", "producers", "sadteam"},
 
-	// team names that get truncated produce different hashes
-	assert.Equal(t, "happyteam-is-very-ha-prod-4b2d", google_gcp_reconciler.GenerateProjectID("bais.io", "production", "happyteam-is-very-happy"))
-	assert.Equal(t, "happyteam-is-very-ha-prod-4801", google_gcp_reconciler.GenerateProjectID("bais.io", "production", "happyteam-is-very-happy-and-altogether-too-long"))
+		// team names that get truncated produce different hashes
+		{"happyteam-is-very-ha-prod-4b2d", "bais.io", "production", "happyteam-is-very-happy"},
+		{"happyteam-is-very-ha-prod-4801", "bais.io", "production", "happyteam-is-very-happy-and-altogether-too-long"},
 
-	// project id with double hyphens
-	assert.Equal(t, "hapyteam-is-very-ha-prod-fd5d", google_gcp_reconciler.GenerateProjectID("bais.io", "production", "hapyteam-is-very-ha-a"))
+		// project id with double hyphens
+		{"hapyteam-is-very-ha-prod-fd5d", "bais.io", "production", "hapyteam-is-very-ha-a"},
 
-	// environment with hyphen as 4th character in environment
-	assert.Equal(t, "hapyteam-is-happy-pro-2a15", google_gcp_reconciler.GenerateProjectID("bais.io", "pro-duction", "hapyteam-is-happy"))
+		// environment with hyphen as 4th character in environment
+		{"hapyteam-is-happy-pro-2a15", "bais.io", "pro-duction", "hapyteam-is-happy"},
+	}
+
+	for _, tt := range tests {
+		if actual := google_gcp_reconciler.GenerateProjectID(tt.domain, tt.env, tt.slug); tt.expected != actual {
+			t.Errorf("expected %q, got %q", tt.expected, actual)
+		}
+	}
 }
 
 func TestGetProjectDisplayName(t *testing.T) {
 	tests := []struct {
-		slug        string
-		environment string
-		displayName string
+		slug     string
+		env      string
+		expected string
 	}{
 		{"some-slug", "prod", "some-slug-prod"},
 		{"some-slug", "production", "some-slug-production"},
@@ -435,51 +557,8 @@ func TestGetProjectDisplayName(t *testing.T) {
 		{"some-verry-unnecessarily-long-slug", "prod", "some-verry-unnecessarily-prod"},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.displayName, google_gcp_reconciler.GetProjectDisplayName(slug.Slug(tt.slug), tt.environment))
+		if actual := google_gcp_reconciler.GetProjectDisplayName(tt.slug, tt.env); tt.expected != actual {
+			t.Errorf("expected %q, got %q", tt.expected, actual)
+		}
 	}
 }
-
-func TestDelete(t *testing.T) {
-	ctx := context.Background()
-
-	log, err := logger.GetLogger("text", "info")
-	assert.NoError(t, err)
-	gcpServices := &google_gcp_reconciler.GcpServices{}
-
-	t.Run("fail early when unable to load reconciler state", func(t *testing.T) {
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		database := db.NewMockDatabase(t)
-
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, teamSlug, mock.Anything).
-			Return(fmt.Errorf("some error")).
-			Once()
-
-		err = google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.ErrorContains(t, err, "load reconciler state")
-	})
-
-	t.Run("remove state when it does not refer to any projects", func(t *testing.T) {
-		auditLogger := auditlogger.NewMockAuditLogger(t)
-		database := db.NewMockDatabase(t)
-
-		database.
-			On("LoadReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, teamSlug, mock.Anything).
-			Return(nil).
-			Once()
-		database.
-			On("RemoveReconcilerStateForTeam", ctx, google_gcp_reconciler.Name, teamSlug).
-			Return(nil).
-			Once()
-
-		err = google_gcp_reconciler.
-			New(database, auditLogger, clusters, gcpServices, tenantName, tenantDomain, cnrmRoleName, billingAccount, log).
-			Delete(ctx, teamSlug, correlationID)
-		assert.NoError(t, err)
-	})
-}
-
-
-*/
