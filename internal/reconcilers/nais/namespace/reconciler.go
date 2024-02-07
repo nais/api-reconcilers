@@ -3,6 +3,7 @@ package nais_namespace_reconciler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/google/uuid"
@@ -16,7 +17,12 @@ import (
 	"google.golang.org/api/option"
 )
 
-const reconcilerName = "nais:namespace"
+const (
+	reconcilerName = "nais:namespace"
+
+	auditActionNaisNamespaceCreateNamespace = "nais:namespace:create-namespace"
+	auditActionNaisNamespaceDeleteNamespace = "nais:namespace:delete-namespace"
+)
 
 type OptFunc func(*naisNamespaceReconciler)
 
@@ -97,6 +103,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		azureGroupID = id
 	}
 
+	updated, err := r.loadState(ctx, client, naisTeam.Slug)
+	if err != nil {
+		return fmt.Errorf("unable to load state: %w", err)
+	}
+
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
@@ -106,17 +117,22 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", *env.GcpProjectId, env.EnvironmentName, err)
 		}
 
-		// store timestamp for namespace creation in reconciler_resources, and create audit log entry once
-		/* TODO
-		targets := []auditlogger.Target{
-					auditlogger.TeamTarget(input.Team.Slug),
-				}
-				fields := auditlogger.Fields{
-					Action:        types.AuditActionNaisNamespaceCreateNamespace,
-					CorrelationID: input.CorrelationID,
-				}
-				r.auditLogger.Logf(ctx, targets, fields, "Request namespace creation for team %q in environment %q", input.Team.Slug, environment)
-		*/
+		if _, exists := updated[env.EnvironmentName]; !exists {
+			reconcilers.AuditLogForTeam(
+				ctx,
+				client,
+				r,
+				auditActionNaisNamespaceCreateNamespace,
+				naisTeam.Slug,
+				"Request namespace creation for team %q in environment %q", naisTeam.Slug, env.EnvironmentName,
+			)
+		}
+
+		updated[env.EnvironmentName] = time.Now()
+	}
+
+	if err := r.saveState(ctx, client, naisTeam.Slug, updated); err != nil {
+		return fmt.Errorf("unable to save state: %w", err)
 	}
 
 	return it.Err()
@@ -132,6 +148,15 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 		if err := r.deleteNamespace(ctx, naisTeam.Slug, env.EnvironmentName); err != nil {
 			log.WithError(err).Errorf("delete namespace")
 			errors = append(errors, err)
+		} else {
+			reconcilers.AuditLogForTeam(
+				ctx,
+				client,
+				r,
+				auditActionNaisNamespaceDeleteNamespace,
+				naisTeam.Slug,
+				"Request namespace deletion for team %q in environment %q", naisTeam.Slug, env.EnvironmentName,
+			)
 		}
 	}
 
@@ -148,15 +173,7 @@ func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, teamSlug,
 		return err
 	}
 
-	topicName := naisdTopicPrefix + environment
-	msg := &pubsub.Message{Data: payload}
-	topic := r.pubsubClient.Topic(topicName)
-	future := topic.Publish(ctx, msg)
-	<-future.Ready()
-	_, err = future.Get(ctx)
-	topic.Stop()
-
-	return err
+	return r.publishMessage(ctx, environment, payload)
 }
 
 func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, azureGroupID uuid.UUID) error {
@@ -165,12 +182,16 @@ func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam 
 		return err
 	}
 
-	topicName := naisdTopicPrefix + env.EnvironmentName
+	return r.publishMessage(ctx, env.EnvironmentName, payload)
+}
+
+func (r *naisNamespaceReconciler) publishMessage(ctx context.Context, env string, payload []byte) error {
+	topicName := naisdTopicPrefix + env
 	msg := &pubsub.Message{Data: payload}
 	topic := r.pubsubClient.Topic(topicName)
 	future := topic.Publish(ctx, msg)
 	<-future.Ready()
-	_, err = future.Get(ctx)
+	_, err := future.Get(ctx)
 	topic.Stop()
 
 	return err

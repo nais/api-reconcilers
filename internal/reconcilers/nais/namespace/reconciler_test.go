@@ -80,7 +80,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("no GCP projects for team", func(t *testing.T) {
+	t.Run("no environments", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
@@ -88,6 +88,14 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
+		mockServer.ReconcilerResources.EXPECT().
+			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{}, nil).
@@ -126,6 +134,10 @@ func TestReconcile(t *testing.T) {
 		defer closer()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.ReconcilerResources.EXPECT().
+			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -144,6 +156,18 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.ReconcilerName == "nais:namespace" && req.Action == "nais:namespace:create-namespace"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Times(2)
+		mockServer.ReconcilerResources.EXPECT().
+			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+				return len(req.Resources) == 2
+			})).
+			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
 		reconciler, err := nais_namespace_reconciler.New(ctx, clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
@@ -217,6 +241,12 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.ReconcilerName == "nais:namespace" && req.Action == "nais:namespace:delete-namespace"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		reconciler, err := nais_namespace_reconciler.New(ctx, clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
