@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -63,13 +64,14 @@ type GcpServices struct {
 }
 
 type googleGcpReconciler struct {
-	billingAccount       string
-	clusters             gcp.Clusters
-	cnrmRoleName         string
-	cnrmServiceAccountID string
-	gcpServices          *GcpServices
-	tenantDomain         string
-	tenantName           string
+	billingAccount            string
+	clusters                  gcp.Clusters
+	cnrmRoleName              string
+	cnrmServiceAccountID      string
+	gcpServices               *GcpServices
+	googleManagementProjectID string
+	tenantDomain              string
+	tenantName                string
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -82,12 +84,13 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 
 func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
-		billingAccount:       billingAccount,
-		clusters:             clusters,
-		cnrmRoleName:         cnrmRoleName,
-		cnrmServiceAccountID: cnrmServiceAccountID,
-		tenantDomain:         tenantDomain,
-		tenantName:           tenantName,
+		billingAccount:            billingAccount,
+		clusters:                  clusters,
+		cnrmRoleName:              cnrmRoleName,
+		cnrmServiceAccountID:      cnrmServiceAccountID,
+		googleManagementProjectID: googleManagementProjectID,
+		tenantDomain:              tenantDomain,
+		tenantName:                tenantName,
 	}
 
 	for _, opt := range opts {
@@ -190,7 +193,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.setupCDN(ctx, naisTeam, environment, teamProject); err != nil {
+		if err := r.setupCDN(ctx, naisTeam, environment, teamProject, log); err != nil {
 			return fmt.Errorf("setup CDN for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
 		}
 	}
@@ -553,32 +556,32 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 	return err
 }
 
-func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project, managementProject *cloudresourcemanager.Project) error {
-	domain := "TODO-SETUP-DOMAIN" // Somehow we need to recieve the desired domain from somewhere
+// TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
+func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project, log logrus.FieldLogger) error {
+	domain := "dev-nais.io" // TODO: Somehow we need to recieve the desired domain from somewhere
 	urlMapName := "nais-cdn-urlmap"
-	// Todo:
-	// - Add checks for existing cdn
-	// - google_compute_url_map
-	//  - Create these too -> these are probably handled in nais-terraform-modules
-	//      -- resource "google_compute_global_forwarding_rule" "redirect"
-	//      -- resource "google_compute_target_http_proxy" "redirect"
-	//      -- resource "google_compute_url_map" "redirect"
-	//      -- resource "google_compute_global_forwarding_rule" "cdn"
-	//      -- resource "google_compute_target_https_proxy" "cdn"
-	//      -- resource "google_compute_managed_ssl_certificate" "cdn"
+	cacheInvalidatorRole := "roles/cdnCacheInvalidator"
+
+	bucketName := fmt.Sprintf("nais-cdn-%s-%s-%s", r.tenantName, environment, naisTeam.Slug)
+
+	// check for existence for early return
+	_, err := r.gcpServices.StorageClient.Bucket(bucketName).Attrs(ctx)
+	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
+		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
+		return nil
+	}
 
 	// set up a storage bucket
-	bucketName := fmt.Sprintf("nais-cdn-%s-%s-%s", r.tenantName, environment, naisTeam.Slug)
-	err := r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, nil)
+	err = r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, nil)
 	if err != nil {
 		return fmt.Errorf("create bucket: %w", err)
 	}
 
+	// set up iam policy for the bucket
 	policy, err := r.gcpServices.StorageClient.Bucket(bucketName).IAM().Policy(ctx)
 	if err != nil {
 		return fmt.Errorf("get bucket policy: %w", err)
 	}
-
 	policy.Add("allUsers", "roles/storage.objectViewer")
 	policy.Add(fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail), "roles/storage.objectAdmin")
 
@@ -587,135 +590,103 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 		return fmt.Errorf("add object viewer role to allUsers: %w", err)
 	}
 
-	// TODO: for feature parity, these should be configurable for each team, to be recieved from somewhere.
-	const defaultTTL = int32(3600)
-	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+	// check for existing backend bucket
+	needsBackendBucket := false
+	backendBucket, err := r.gcpServices.BackendBucketsClient.Get(ctx, &computepb.GetBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	// TODO: this is very not good my guy
+	if err != nil {
+		var gapiError *googleapi.Error
+
+		if errors.As(err, &gapiError) {
+			// retry transient errors
+			if gapiError.Code != http.StatusNotFound {
+				return err
+			}
+			// otherwise, we need a bucket i guess
+			needsBackendBucket = true
+		}
+		// if it's not a google api error, shit's fucked
+		return err
+	}
 
 	// set up a backend bucket
-	req := &computepb.InsertBackendBucketRequest{
-		BackendBucketResource: &computepb.BackendBucket{
-			BucketName: &bucketName,
-			CdnPolicy: &computepb.BackendBucketCdnPolicy{
-				// Enables Cloud CDN to cache all static content served from the backend
-				// bucket. This includes content with a file extension that is typically
-				// associated with static content, such as .html, .css, and .js.
-				CacheMode:  ptr.To("CACHE_ALL_STATIC"),
-				ClientTtl:  ptr.To(defaultTTL),
-				DefaultTtl: ptr.To(defaultTTL),
-				MaxTtl:     ptr.To(defaultMaxTTL),
-				// If true then Cloud CDN will combine multiple concurrent cache fill
-				// requests into a small number of requests to the origin.
-				RequestCoalescing: ptr.To(true),
+	if needsBackendBucket {
+		// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
+		const defaultTTL = int32(3600)
+		const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+
+		req := &computepb.InsertBackendBucketRequest{
+			BackendBucketResource: &computepb.BackendBucket{
+				BucketName: &bucketName,
+				CdnPolicy: &computepb.BackendBucketCdnPolicy{
+					// Enables Cloud CDN to cache all static content served from the backend
+					// bucket. This includes content with a file extension that is typically
+					// associated with static content, such as .html, .css, and .js.
+					CacheMode:  ptr.To("CACHE_ALL_STATIC"),
+					ClientTtl:  ptr.To(defaultTTL),
+					DefaultTtl: ptr.To(defaultTTL),
+					MaxTtl:     ptr.To(defaultMaxTTL),
+					// If true then Cloud CDN will combine multiple concurrent cache fill
+					// requests into a small number of requests to the origin.
+					RequestCoalescing: ptr.To(true),
+				},
+				// When enabled, Cloud CDN automatically compresses content served from the
+				// backend bucket using gzip compression. This can reduce the amount of data
+				// sent over the network, resulting in faster load times for end users.
+				// Enum of "AUTOMATIC", "DISABLED".
+				CompressionMode: ptr.To("AUTOMATIC"),
+				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s/%s", domain, naisTeam.Slug)),
+				EnableCdn:       ptr.To(true),
+				Name:            &bucketName,
 			},
-			// When enabled, Cloud CDN automatically compresses content served from the
-			// backend bucket using gzip compression. This can reduce the amount of data
-			// sent over the network, resulting in faster load times for end users.
-			// Enum of "AUTOMATIC", "DISABLED".
-			CompressionMode: ptr.To("AUTOMATIC"),
-			Description:     ptr.To(fmt.Sprintf("Backend bucket for %s/%s", domain, naisTeam.Slug)),
-			EnableCdn:       ptr.To(true),
-			Name:            &bucketName,
-		},
-		Project: teamProject.ProjectId,
+			Project: r.googleManagementProjectID,
+		}
+
+		backendBucketInsertion, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
+		if err != nil {
+			return fmt.Errorf("insert backend bucket: %w", err)
+		}
+
+		err = backendBucketInsertion.Wait(ctx)
+		if err != nil {
+			return fmt.Errorf("wait for insert backend bucket operation: %w", err)
+		}
+
+		backendBucket, err = r.gcpServices.BackendBucketsClient.Get(ctx, &computepb.GetBackendBucketRequest{
+			BackendBucket: bucketName,
+			Project:       r.googleManagementProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get backend bucket: %w", err)
+		}
 	}
 
-	backendBucketInsertion, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
-	if err != nil {
-		return fmt.Errorf("insert backend bucket: %w", err)
-	}
-
-	err = backendBucketInsertion.Wait(ctx)
-	if err != nil {
-		return fmt.Errorf("wait for insert backend bucket operation: %w", err)
-	}
-
-	backendBucket, err := r.gcpServices.BackendBucketsClient.Get(ctx, req)
-	if err != nil {
-		return fmt.Errorf("get backend bucket: %w", err)
-	}
-
-	// set up iam for the team members
-	iamRoleReq := &iam.CreateRoleRequest{
-		Role: &iam.Role{
-			Title:               "Frontend Platform Cache Invalidator",
-			Description:         "Allows invalidating the cache of the CDN for the frontend platform",
-			IncludedPermissions: []string{"compute.urlMaps.get", "compute.urlMaps.invalidateCache"},
-			Stage:               "GA",
-		},
-		RoleId: "frontendPlatformCacheInvalidator",
-	}
-	customRole, err := r.gcpServices.IamService.Projects.Roles.Create("projects/"+teamProject.ProjectId, iamRoleReq).Do()
-	if err != nil {
-		return fmt.Errorf("create custom cdn role: %w", err)
-	}
-
-	customRolePolicy, err := r.gcpServices.CloudResourceManagerProjectsService.GetIamPolicy(teamProject.Name, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	// grant teams access to cache invalidation
+	managementProjectName := "projects/" + r.googleManagementProjectID
+	projectPolicy, err := r.gcpServices.CloudResourceManagerProjectsService.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := calculateRoleBindings(customRolePolicy.Bindings, map[string]string{
-		"roles/viewer":  "group:" + naisTeam.GoogleGroupEmail,
-		customRole.Name: "group:" + naisTeam.GoogleGroupEmail,
+	newBindings, updated := calculateRoleBindings(projectPolicy.Bindings, map[string]string{
+		cacheInvalidatorRole: "group:" + naisTeam.GoogleGroupEmail,
 	})
 
 	if updated {
-		customRolePolicy.Bindings = newBindings
-		_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
-			Policy: customRolePolicy,
+		projectPolicy.Bindings = newBindings
+		_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: projectPolicy,
 		}).Context(ctx).Do()
 		if err != nil {
 			return fmt.Errorf("assign GCP project IAM policy: %w", err)
 		}
 	}
 
-	// CND resources only live in nais management, there is no cdn-dev because cdn is a "global" offering
-
-	// resource "google_compute_url_map" "cdn"
-
-	// 	    dynamic "path_rule" {
-	//   for_each = local.enabled_teams
-	//   content {
-	//     paths   = [format("/%s/*", path_rule.key)]
-	//     service = google_compute_backend_bucket.teams[path_rule.key].id
-	//   }
-	// }
-
-	u := compute.UrlMap{
-		CreationTimestamp:  "",
-		DefaultRouteAction: &compute.HttpRouteAction{},
-		DefaultService:     "",
-		DefaultUrlRedirect: &compute.HttpRedirectAction{},
-		Description:        "",
-		Fingerprint:        "",
-		HeaderAction:       &compute.HttpHeaderAction{},
-		HostRules:          []*compute.HostRule{},
-		Id:                 0,
-		Kind:               "",
-		Name:               reconcilerName,
-		PathMatchers:       []*compute.PathMatcher{},
-		Region:             "",
-		SelfLink:           "",
-		Tests:              []*compute.UrlMapTest{},
-		ServerResponse:     googleapi.ServerResponse{},
-		ForceSendFields:    []string{},
-		NullFields:         []string{},
-	}
-
-	p := compute.PathMatcher{
-		DefaultRouteAction: &compute.HttpRouteAction{},
-		DefaultService:     "",
-		DefaultUrlRedirect: &compute.HttpRedirectAction{},
-		Description:        "",
-		HeaderAction:       &compute.HttpHeaderAction{},
-		Name:               reconcilerName,
-		PathRules:          []*compute.PathRule{},
-		RouteRules:         []*compute.HttpRouteRule{},
-		ForceSendFields:    []string{},
-		NullFields:         []string{},
-	}
-
-	urlMap, err := r.gcpServices.UrlMapsService.Get(managementProject.Name, urlMapName).Do()
+	// update urlMap in management project
+	urlMap, err := r.gcpServices.UrlMapsService.Get(r.googleManagementProjectID, urlMapName).Do()
 	updatedUrlMap := false
 	for _, pm := range urlMap.PathMatchers {
 		seen := make(map[string]bool)
@@ -725,24 +696,22 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 			}
 		}
 		pr := compute.PathRule{
-			Paths:   []string{fmt.Sprintf("/%s/*", teamProject.Name)},
+			Paths:   []string{fmt.Sprintf("/%s/*", naisTeam.Slug)},
 			Service: *backendBucket.SelfLink,
 		}
 
 		if !seen[*backendBucket.SelfLink] {
 			pm.PathRules = append(pm.PathRules, &pr)
-			updated = true
+			updatedUrlMap = true
 		}
 	}
-	if updatedUrlMap {
-		r.gcpServices.UrlMapsService.Insert(managementProject.Name, urlMap).Do()
-	}
-	// get existing urlMap
 
-	// merge in the new path matcher that comes from somewhere, somehow
-	// update the urlMap
-	// ????
-	// profit
+	if updatedUrlMap {
+		_, err := r.gcpServices.UrlMapsService.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+		if err != nil {
+			return fmt.Errorf("update urlMap: %w", err)
+		}
+	}
 
 	return nil
 }
