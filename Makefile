@@ -12,6 +12,8 @@ build:
 	go build -o bin/api-reconcilers ./cmd/api-reconcilers
 
 local:
+	PUBSUB_EMULATOR_HOST="localhost:3004" \
+	GOOGLE_MANAGEMENT_PROJECT_ID="nais-local-dev" \
 	go run ./cmd/api-reconcilers
 
 test:

@@ -31,6 +31,7 @@ func runHttpServer(
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
+		defer log.Debug("Done running http shutdown logic")
 		<-ctx.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -43,6 +44,7 @@ func runHttpServer(
 	})
 
 	wg.Go(func() error {
+		defer log.Debug("Done running http server")
 		log.Infof("HTTP server accepting requests on %q", listenAddress)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.WithError(err).Infof("unexpected error from HTTP server")

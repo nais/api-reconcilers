@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -42,7 +44,7 @@ type Manager struct {
 }
 
 // NewManager creates a new Manager instance
-func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistration []string, pubsubSubscriptionID string, log logrus.FieldLogger) *Manager {
+func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistration []string, pubsubSubscriptionID, pubsubProjectID string, log logrus.FieldLogger) *Manager {
 	meter := otel.Meter("reconcilers")
 	recTime, err := meter.Int64Histogram("reconciler_duration", metric.WithDescription("Duration of a specific reconciler, regardless of team, in milliseconds"))
 	if err != nil {
@@ -54,7 +56,7 @@ func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistr
 	}
 
 	var pubsubSubscription *pubsub.Subscription
-	pubsubClient, err := pubsub.NewClient(ctx, pubsub.DetectProjectID)
+	pubsubClient, err := pubsub.NewClient(ctx, pubsubProjectID)
 	if err != nil {
 		log.WithError(err).Errorf("error when creating pubsub client")
 	} else {
@@ -97,12 +99,14 @@ func (m *Manager) RegisterReconcilersWithAPI(ctx context.Context) error {
 // context is canceled.
 func (m *Manager) ListenForEvents(ctx context.Context) error {
 	if m.pubsubSubscription == nil {
+		m.log.Warn("no pubsub subscription configured, not listening for events")
 		return nil
 	}
 
 	for {
 		err := m.pubsubSubscription.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
 			defer msg.Ack()
+			m.log.WithField("type", msg.Attributes["EventType"]).Debug("received pubsub message")
 
 			correlationID := uuid.New()
 
@@ -163,7 +167,8 @@ func (m *Manager) ListenForEvents(ctx context.Context) error {
 			}
 		})
 
-		if errors.Is(err, context.Canceled) {
+		if err == nil || errors.Is(err, context.Canceled) {
+			// Receive will return nil error when canceled
 			return nil
 		} else if err != nil {
 			m.log.WithError(err).Error("error while receiving pubsub message")
@@ -180,7 +185,10 @@ func (m *Manager) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case input := <-m.syncQueueChan:
+		case input, ok := <-m.syncQueueChan:
+			if !ok {
+				return
+			}
 			m.syncTeam(ctx, input)
 		}
 	}
@@ -224,6 +232,11 @@ func (m *Manager) syncTeam(ctx context.Context, input Input) {
 
 	resp, err := m.apiclient.Teams().Get(ctx, &protoapi.GetTeamRequest{Slug: input.TeamSlug})
 	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			log.Info("team not found, team will not be requeued")
+			return
+		}
+
 		log.WithError(err).Error("error while getting team")
 		if err := m.syncQueue.Add(input); err != nil {
 			log.WithError(err).Error("failed while re-queueing team that is in flight")

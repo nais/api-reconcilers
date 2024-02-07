@@ -13,7 +13,9 @@ type inFlight struct {
 }
 
 func NewInFlight() InFlight {
-	return &inFlight{}
+	return &inFlight{
+		teams: make(map[string]struct{}),
+	}
 }
 
 func (i *inFlight) Set(teamSlug string) bool {

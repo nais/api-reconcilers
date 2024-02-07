@@ -68,9 +68,6 @@ func Run(ctx context.Context) {
 }
 
 func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	ctx, signalStop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer signalStop()
 
@@ -81,6 +78,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
+		defer log.Debug("Done running main http server goroutine")
 		return runHttpServer(ctx, cfg.ListenAddress, promRegistry, log)
 	})
 
@@ -96,7 +94,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, log)
+	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, cfg.GoogleManagementProjectID, log)
 
 	azureGroupReconciler := azure_group_reconciler.New(cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
 
@@ -152,14 +150,16 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Go(func() error {
+			defer log.Debugf("Done running reconciler %v", i)
 			reconcilerManager.Run(ctx)
 			return nil
 		})
 	}
 
 	wg.Go(func() error {
+		defer log.Debug("Done listening for pubsub events")
 		return reconcilerManager.ListenForEvents(ctx)
 	})
 
