@@ -94,7 +94,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, cfg.GoogleManagementProjectID, log)
+	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, cfg.PubSubProjectID, log)
 
 	azureGroupReconciler := azure_group_reconciler.New(cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
 

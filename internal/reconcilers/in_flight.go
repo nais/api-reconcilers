@@ -29,13 +29,6 @@ func (i *inFlight) Set(teamSlug string) bool {
 	return false
 }
 
-func (i *inFlight) Add(teamSlug string) {
-	i.teamsLock.Lock()
-	defer i.teamsLock.Unlock()
-
-	i.teams[teamSlug] = struct{}{}
-}
-
 func (i *inFlight) Remove(teamSlug string) {
 	i.teamsLock.Lock()
 	defer i.teamsLock.Unlock()

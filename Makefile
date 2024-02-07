@@ -13,7 +13,7 @@ build:
 
 local:
 	PUBSUB_EMULATOR_HOST="localhost:3004" \
-	GOOGLE_MANAGEMENT_PROJECT_ID="nais-local-dev" \
+	PUBSUB_PROJECT_ID="nais-local-dev" \
 	go run ./cmd/api-reconcilers
 
 test:
