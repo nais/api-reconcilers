@@ -71,8 +71,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 				_ = json.Unmarshal(req.Resources[0].Metadata, m1)
 				_ = json.Unmarshal(req.Resources[1].Metadata, m2)
 
-				return req.Resources[0].Value == "org/some-repo-a" &&
-					req.Resources[1].Value == "org/some-repo-b" &&
+				return string(req.Resources[0].Value) == "org/some-repo-a" &&
+					string(req.Resources[1].Value) == "org/some-repo-b" &&
 					m1.Archived == false &&
 					m2.Archived == true &&
 					m1.Permissions[0].Name == "admin" &&

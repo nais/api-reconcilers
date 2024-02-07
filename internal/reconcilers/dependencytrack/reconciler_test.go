@@ -78,11 +78,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
-					Value: teamID,
+					Value: []byte(teamID),
 				},
 				{
 					Name:  "members",
-					Value: user,
+					Value: []byte(user),
 				},
 			}}).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -129,7 +129,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				Nodes: []*protoapi.ReconcilerResource{
 					{
 						Name:  "team_id",
-						Value: teamID,
+						Value: []byte(teamID),
 					},
 				},
 			}, nil).
@@ -148,11 +148,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
-					Value: teamID,
+					Value: []byte(teamID),
 				},
 				{
 					Name:  "members",
-					Value: user,
+					Value: []byte(user),
 				},
 			}}).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -185,11 +185,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				Nodes: []*protoapi.ReconcilerResource{
 					{
 						Name:  "team_id",
-						Value: teamID,
+						Value: []byte(teamID),
 					},
 					{
 						Name:  "members",
-						Value: user,
+						Value: []byte(user),
 					},
 				},
 			}, nil).
@@ -208,11 +208,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
-					Value: teamID,
+					Value: []byte(teamID),
 				},
 				{
 					Name:  "members",
-					Value: user,
+					Value: []byte(user),
 				},
 			}}).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -253,11 +253,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				Nodes: []*protoapi.ReconcilerResource{
 					{
 						Name:  "team_id",
-						Value: teamID,
+						Value: []byte(teamID),
 					},
 					{
 						Name:  "members",
-						Value: unknownMember,
+						Value: []byte(unknownMember),
 					},
 				},
 			}, nil).
@@ -276,11 +276,11 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
-					Value: teamID,
+					Value: []byte(teamID),
 				},
 				{
 					Name:  "members",
-					Value: user,
+					Value: []byte(user),
 				},
 			}}).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -331,7 +331,7 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 				Nodes: []*protoapi.ReconcilerResource{
 					{
 						Name:  "team_id",
-						Value: teamID,
+						Value: []byte(teamID),
 					},
 				},
 			}, nil).

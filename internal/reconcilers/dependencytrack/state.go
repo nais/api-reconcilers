@@ -24,7 +24,7 @@ func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient,
 		Resources: []*protoapi.NewReconcilerResource{
 			{
 				Name:  stateKeyTeamID,
-				Value: state.teamID,
+				Value: []byte(state.teamID),
 			},
 		},
 	}
@@ -32,7 +32,7 @@ func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient,
 	for _, member := range state.members {
 		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
 			Name:  stateKeyMembers,
-			Value: member,
+			Value: []byte(member),
 		})
 	}
 
@@ -56,9 +56,9 @@ func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient,
 	for _, resource := range resp.Nodes {
 		switch resource.Name {
 		case stateKeyTeamID:
-			s.teamID = resource.Value
+			s.teamID = string(resource.Value)
 		case stateKeyMembers:
-			s.members = append(s.members, resource.Value)
+			s.members = append(s.members, string(resource.Value))
 		}
 	}
 

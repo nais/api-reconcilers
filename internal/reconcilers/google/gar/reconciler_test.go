@@ -241,7 +241,7 @@ func TestReconcile(t *testing.T) {
 				Nodes: []*protoapi.ReconcilerResource{
 					{
 						Name:  "repo",
-						Value: "test/repository",
+						Value: []byte("test/repository"),
 						Metadata: toJson(&github_team_reconciler.GitHubRepository{
 							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
 								{Name: "push", Granted: true},
@@ -250,7 +250,7 @@ func TestReconcile(t *testing.T) {
 					},
 					{
 						Name:  "repo",
-						Value: "test/ro-repository",
+						Value: []byte("test/ro-repository"),
 						Metadata: toJson(&github_team_reconciler.GitHubRepository{
 							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
 								{Name: "push", Granted: false},
@@ -259,7 +259,7 @@ func TestReconcile(t *testing.T) {
 					},
 					{
 						Name:  "repo",
-						Value: "test/admin-repository",
+						Value: []byte("test/admin-repository"),
 						Metadata: toJson(&github_team_reconciler.GitHubRepository{
 							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
 								{Name: "push", Granted: true},
@@ -269,7 +269,7 @@ func TestReconcile(t *testing.T) {
 					},
 					{
 						Name:  "repo",
-						Value: "test/archived-repository",
+						Value: []byte("test/archived-repository"),
 						Metadata: toJson(&github_team_reconciler.GitHubRepository{
 							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
 								{Name: "push", Granted: true},
@@ -280,7 +280,7 @@ func TestReconcile(t *testing.T) {
 					},
 					{
 						Name:     "repo",
-						Value:    "test/no-permissions-repository",
+						Value:    []byte("test/no-permissions-repository"),
 						Metadata: toJson(&github_team_reconciler.GitHubRepository{}),
 					},
 				},

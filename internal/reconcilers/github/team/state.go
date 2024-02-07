@@ -40,7 +40,7 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 		}
 		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
 			Name:     stateKeyRepo,
-			Value:    repo.Name,
+			Value:    []byte(repo.Name),
 			Metadata: metadata,
 		})
 	}
@@ -89,7 +89,7 @@ func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, te
 		switch resource.Name {
 		case stateKeyRepo:
 			repo := &GitHubRepository{
-				Name: resource.Value,
+				Name: string(resource.Value),
 			}
 
 			if resource.Metadata != nil {
