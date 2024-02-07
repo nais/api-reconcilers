@@ -32,12 +32,12 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 	log, _ := test.NewNullLogger()
 
-	naisTeam := &protoapi.Team{
-		Slug:    teamSlug,
-		Purpose: teamPurpose,
-	}
-
 	t.Run("no existing state, github team available", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: teamPurpose,
+		}
+
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
@@ -168,6 +168,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	})
 
 	t.Run("no existing state, github team not available", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: teamPurpose,
+		}
+
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
@@ -191,8 +196,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	})
 
 	t.Run("existing state, github team exists", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			Purpose:        teamPurpose,
+			GithubTeamSlug: teamSlug,
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
@@ -248,8 +256,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 	t.Run("existing state, github team no longer exists", func(t *testing.T) {
 		const existingSlug = "existing-slug"
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = existingSlug
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			Purpose:        teamPurpose,
+			GithubTeamSlug: existingSlug,
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
@@ -333,14 +344,14 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		googleManagementProjectID = "some-project-id"
 	)
 
-	naisTeam := &protoapi.Team{
-		Slug:    teamSlug,
-		Purpose: teamPurpose,
-	}
-
 	httpOk := &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}
 
 	t.Run("unable to load state from database", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: teamPurpose,
+		}
+
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
 			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
@@ -360,6 +371,11 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 	// Give the reconciler enough data to create an entire team from scratch,
 	// remove members that shouldn't be present, and add members that should.
 	t.Run("create everything from scratch", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: teamPurpose,
+		}
+
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
 			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
@@ -528,8 +544,11 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 	})
 
 	t.Run("GetTeamBySlug error", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = "slug-from-state"
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			Purpose:        teamPurpose,
+			GithubTeamSlug: "slug-from-state",
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
@@ -571,12 +590,13 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	)
 
 	log, hook := test.NewNullLogger()
-	naisTeam := &protoapi.Team{
-		Slug: teamSlug,
-	}
 
 	t.Run("no GitHubTeamSlug on team instance", func(t *testing.T) {
 		defer hook.Reset()
+
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
@@ -609,8 +629,10 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("GitHub API client fails", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			GithubTeamSlug: teamSlug,
+		}
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
@@ -631,8 +653,10 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("unexpected response from GitHub API", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			GithubTeamSlug: teamSlug,
+		}
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
@@ -662,8 +686,10 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("successful delete", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GithubTeamSlug = teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:           teamSlug,
+			GithubTeamSlug: teamSlug,
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().

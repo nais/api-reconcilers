@@ -157,10 +157,6 @@ func TestReconcile(t *testing.T) {
 
 	abortTestErr := fmt.Errorf("abort test")
 
-	naisTeam := &protoapi.Team{
-		Slug: teamSlug,
-	}
-
 	email := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", teamSlug, managementProjectID)
 	expectedServiceAccount := &iam.ServiceAccount{
 		Email:       email,
@@ -184,6 +180,10 @@ func TestReconcile(t *testing.T) {
 	log, _ := logrustest.NewNullLogger()
 
 	t.Run("when service account does not exist, create it", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
+
 		mocks := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +213,10 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("after getOrCreateServiceAccount, set policy", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
+
 		mocks := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
@@ -298,6 +302,10 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("if no gar repository exists, create it", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
+
 		mocks := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
 				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
@@ -383,9 +391,11 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 
-		naisTeam := naisTeam
-		naisTeam.GoogleGroupEmail = groupEmail
-		naisTeam.GarRepository = garRepositoryParent + "/repositories/" + teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:             teamSlug,
+			GoogleGroupEmail: groupEmail,
+			GarRepository:    garRepositoryParent + "/repositories/" + teamSlug,
+		}
 
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
@@ -412,6 +422,10 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("gar repository exists, but has outdated info", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
+
 		mocks := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
 				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
@@ -476,12 +490,12 @@ func TestDelete(t *testing.T) {
 
 	log, hook := logrustest.NewNullLogger()
 
-	naisTeam := &protoapi.Team{
-		Slug: teamSlug,
-	}
-
 	t.Run("team is missing repository name", func(t *testing.T) {
 		defer hook.Reset()
+
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
@@ -508,8 +522,11 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("delete service account fails with unexpected error", func(t *testing.T) {
-		naisTeam := naisTeam
-		naisTeam.GarRepository = repositoryName
+		naisTeam := &protoapi.Team{
+			Slug:          teamSlug,
+			GarRepository: repositoryName,
+		}
+
 		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
@@ -535,19 +552,12 @@ func TestDelete(t *testing.T) {
 	t.Run("service account does not exist, and delete repo request fails", func(t *testing.T) {
 		defer hook.Reset()
 
-		apiClient, _ := apiclient.NewMockClient(t)
-		// mockServer.ReconcilerResources.EXPECT().
-		// 	List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "google:gcp:gar", TeamSlug: teamSlug}).
-		// 	Return(&protoapi.ListReconcilerResourcesResponse{
-		// 		Nodes: []*protoapi.ReconcilerResource{
-		// 			{
-		// 				Name:  "repository_name",
-		// 				Value: repositoryName,
-		// 			},
-		// 		},
-		// 	}, nil).
-		// 	Once()
+		naisTeam := &protoapi.Team{
+			Slug:          teamSlug,
+			GarRepository: repositoryName,
+		}
 
+		apiClient, _ := apiclient.NewMockClient(t)
 		mockedClients := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
 				delete: func(ctx context.Context, req *artifactregistrypb.DeleteRepositoryRequest) (*longrunningpb.Operation, error) {
@@ -581,6 +591,11 @@ func TestDelete(t *testing.T) {
 	})
 
 	t.Run("delete repo operation fails", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:          teamSlug,
+			GarRepository: repositoryName,
+		}
+
 		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
@@ -617,6 +632,11 @@ func TestDelete(t *testing.T) {
 
 	t.Run("successful delete", func(t *testing.T) {
 		defer hook.Reset()
+
+		naisTeam := &protoapi.Team{
+			Slug:          teamSlug,
+			GarRepository: repositoryName,
+		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Teams.EXPECT().
