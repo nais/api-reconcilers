@@ -21,7 +21,7 @@ func (r *naisNamespaceReconciler) saveState(ctx context.Context, client *apiclie
 	for env, ts := range updated {
 		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
 			Name:  "timestamp",
-			Value: env + "::" + ts.Format(time.RFC3339),
+			Value: []byte(env + "::" + ts.Format(time.RFC3339)),
 		})
 	}
 
@@ -38,7 +38,7 @@ func (r *naisNamespaceReconciler) loadState(ctx context.Context, client *apiclie
 		res := it.Value()
 		switch res.Name {
 		case "timestamp":
-			parts := strings.Split(res.Value, "::")
+			parts := strings.Split(string(res.Value), "::")
 			if len(parts) != 2 {
 				continue
 			}
