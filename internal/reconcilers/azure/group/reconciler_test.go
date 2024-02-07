@@ -79,11 +79,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		client, mockServer := apiclient.NewMockClient(t)
-		// Is not done when using the mock client
-		// mockServer.Reconcilers.EXPECT().
-		// 	Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "azure:group"}).
-		// 	Return(&protoapi.ConfigReconcilerResponse{}, nil).
-		// 	Once()
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{
 				Slug:         teamSlug,
