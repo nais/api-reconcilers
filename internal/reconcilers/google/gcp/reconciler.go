@@ -282,7 +282,6 @@ func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Con
 		"bigquery.googleapis.com":             {},
 		"cloudtrace.googleapis.com":           {},
 	}
-	// TODO - make sure apis needed for cdn is enabled for the team's project
 
 	response, err := r.gcpServices.ServiceUsageService.List(project.Name).Filter("state:ENABLED").Context(ctx).Do()
 	if err != nil {
@@ -554,8 +553,9 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 	return err
 }
 
-func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project) error {
-	domain := "TODO-SETUP-DOMAIN"
+func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project, managementProject *cloudresourcemanager.Project) error {
+	domain := "TODO-SETUP-DOMAIN" // Somehow we need to recieve the desired domain from somewhere
+	urlMapName := "nais-cdn-urlmap"
 	// Todo:
 	// - Add checks for existing cdn
 	// - google_compute_url_map
@@ -587,9 +587,9 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 		return fmt.Errorf("add object viewer role to allUsers: %w", err)
 	}
 
-	// TODO: for feature parity, these should be configurable for each team
+	// TODO: for feature parity, these should be configurable for each team, to be recieved from somewhere.
 	const defaultTTL = int32(3600)
-	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400)
+	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
 
 	// set up a backend bucket
 	req := &computepb.InsertBackendBucketRequest{
@@ -619,15 +619,19 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 		Project: teamProject.ProjectId,
 	}
 
-	operation, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
+	backendBucketInsertion, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
 	if err != nil {
 		return fmt.Errorf("insert backend bucket: %w", err)
 	}
 
-	// TODO: do something with the operation, poll i guess?
-	err = operation.Wait(ctx)
+	err = backendBucketInsertion.Wait(ctx)
 	if err != nil {
 		return fmt.Errorf("wait for insert backend bucket operation: %w", err)
+	}
+
+	backendBucket, err := r.gcpServices.BackendBucketsClient.Get(ctx, req)
+	if err != nil {
+		return fmt.Errorf("get backend bucket: %w", err)
 	}
 
 	// set up iam for the team members
@@ -650,27 +654,92 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	// TODO - handle the ignored return i guess
-	newBindings, _ := calculateRoleBindings(customRolePolicy.Bindings, map[string]string{
+	newBindings, updated := calculateRoleBindings(customRolePolicy.Bindings, map[string]string{
 		"roles/viewer":  "group:" + naisTeam.GoogleGroupEmail,
 		customRole.Name: "group:" + naisTeam.GoogleGroupEmail,
 	})
 
-	customRolePolicy.Bindings = newBindings
-	_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
-		Policy: customRolePolicy,
-	}).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("assign GCP project IAM policy: %w", err)
+	if updated {
+		customRolePolicy.Bindings = newBindings
+		_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(teamProject.Name, &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: customRolePolicy,
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("assign GCP project IAM policy: %w", err)
+		}
 	}
 
-	// TODO - where do the cdn resources live? management? one per environment? nais-dev and nais-prod?
-	//  clarify the above, which then tells us where to get the urlMap from
+	// CND resources only live in nais management, there is no cdn-dev because cdn is a "global" offering
 
 	// resource "google_compute_url_map" "cdn"
+
+	// 	    dynamic "path_rule" {
+	//   for_each = local.enabled_teams
+	//   content {
+	//     paths   = [format("/%s/*", path_rule.key)]
+	//     service = google_compute_backend_bucket.teams[path_rule.key].id
+	//   }
+	// }
+
+	u := compute.UrlMap{
+		CreationTimestamp:  "",
+		DefaultRouteAction: &compute.HttpRouteAction{},
+		DefaultService:     "",
+		DefaultUrlRedirect: &compute.HttpRedirectAction{},
+		Description:        "",
+		Fingerprint:        "",
+		HeaderAction:       &compute.HttpHeaderAction{},
+		HostRules:          []*compute.HostRule{},
+		Id:                 0,
+		Kind:               "",
+		Name:               reconcilerName,
+		PathMatchers:       []*compute.PathMatcher{},
+		Region:             "",
+		SelfLink:           "",
+		Tests:              []*compute.UrlMapTest{},
+		ServerResponse:     googleapi.ServerResponse{},
+		ForceSendFields:    []string{},
+		NullFields:         []string{},
+	}
+
+	p := compute.PathMatcher{
+		DefaultRouteAction: &compute.HttpRouteAction{},
+		DefaultService:     "",
+		DefaultUrlRedirect: &compute.HttpRedirectAction{},
+		Description:        "",
+		HeaderAction:       &compute.HttpHeaderAction{},
+		Name:               reconcilerName,
+		PathRules:          []*compute.PathRule{},
+		RouteRules:         []*compute.HttpRouteRule{},
+		ForceSendFields:    []string{},
+		NullFields:         []string{},
+	}
+
+	urlMap, err := r.gcpServices.UrlMapsService.Get(managementProject.Name, urlMapName).Do()
+	updatedUrlMap := false
+	for _, pm := range urlMap.PathMatchers {
+		seen := make(map[string]bool)
+		for _, pr := range pm.PathRules {
+			if !seen[pr.Service] {
+				seen[pr.Service] = true
+			}
+		}
+		pr := compute.PathRule{
+			Paths:   []string{fmt.Sprintf("/%s/*", teamProject.Name)},
+			Service: *backendBucket.SelfLink,
+		}
+
+		if !seen[*backendBucket.SelfLink] {
+			pm.PathRules = append(pm.PathRules, &pr)
+			updated = true
+		}
+	}
+	if updatedUrlMap {
+		r.gcpServices.UrlMapsService.Insert(managementProject.Name, urlMap).Do()
+	}
 	// get existing urlMap
 
-	// merge in the new path matcher
+	// merge in the new path matcher that comes from somewhere, somehow
 	// update the urlMap
 	// ????
 	// profit
@@ -762,13 +831,13 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 	for _, rule := range rules.Items {
 		for _, deleteTemplate := range rulesToDelete {
 			if rule.Name == deleteTemplate.name && rule.Priority == deleteTemplate.priority {
-				operation, err := r.gcpServices.FirewallService.Delete(project.ProjectId, rule.Name).Context(ctx).Do()
+				backendBucketInsertion, err := r.gcpServices.FirewallService.Delete(project.ProjectId, rule.Name).Context(ctx).Do()
 				if err != nil {
 					return err
 				}
 
-				for operation.Status != "DONE" {
-					operation, err = r.gcpServices.ComputeGlobalOperationsService.Wait(project.ProjectId, operation.Name).Context(ctx).Do()
+				for backendBucketInsertion.Status != "DONE" {
+					backendBucketInsertion, err = r.gcpServices.ComputeGlobalOperationsService.Wait(project.ProjectId, backendBucketInsertion.Name).Context(ctx).Do()
 					if err != nil {
 						return err
 					}
