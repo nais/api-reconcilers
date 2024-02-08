@@ -82,6 +82,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
@@ -157,7 +158,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -173,6 +174,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Purpose: teamPurpose,
 		}
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
@@ -185,7 +187,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -219,6 +221,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
 			Once()
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			GetTeamBySlug(ctx, org, gitHubSlug).
@@ -245,7 +248,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -285,6 +288,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
 			Once()
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			GetTeamBySlug(ctx, org, existingSlug).
@@ -315,7 +319,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -353,13 +357,15 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Purpose: teamPurpose,
 		}
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
+		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
 			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID)
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -557,6 +563,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			GetTeamBySlug(mock.Anything, org, "slug-from-state").
@@ -569,7 +576,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -599,13 +606,15 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			Slug: teamSlug,
 		}
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
+		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.ReconcilerResources.EXPECT().
 			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID)
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -630,6 +639,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			DeleteTeamBySlug(ctx, org, gitHubSlug).
@@ -638,7 +648,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -655,6 +665,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			DeleteTeamBySlug(ctx, org, gitHubSlug).
@@ -672,7 +683,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -701,6 +712,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
+		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			DeleteTeamBySlug(ctx, org, gitHubSlug).
@@ -716,7 +728,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
