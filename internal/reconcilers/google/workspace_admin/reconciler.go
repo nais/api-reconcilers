@@ -104,7 +104,7 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 		return err
 	}
 
-	if googleGroup.Email != naisTeam.GoogleGroupEmail {
+	if naisTeam.GoogleGroupEmail == nil || *naisTeam.GoogleGroupEmail != googleGroup.Email {
 		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 			Slug:             naisTeam.Slug,
 			GoogleGroupEmail: &googleGroup.Email,
@@ -118,10 +118,10 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 }
 
 func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	if naisTeam.GoogleGroupEmail == "" {
+	if naisTeam.GoogleGroupEmail == nil {
 		log.Warnf("missing group email in team, assume team has already been deleted")
-	} else if err := r.adminDirectoryService.Groups.Delete(naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
-		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", naisTeam.GoogleGroupEmail, naisTeam.Slug, err)
+	} else if err := r.adminDirectoryService.Groups.Delete(*naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
+		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", *naisTeam.GoogleGroupEmail, naisTeam.Slug, err)
 	}
 
 	_, err := client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
@@ -132,14 +132,23 @@ func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *api
 		return err
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleWorkspaceAdminDelete, naisTeam.Slug, "Delete Google directory group with email %q", naisTeam.GoogleGroupEmail)
+	if naisTeam.GoogleGroupEmail != nil {
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionGoogleWorkspaceAdminDelete,
+			naisTeam.Slug,
+			"Delete Google directory group with email %q", *naisTeam.GoogleGroupEmail,
+		)
+	}
 
 	return nil
 }
 
 func (r *googleWorkspaceAdminReconciler) getOrCreateGroup(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team) (*admin_directory_v1.Group, error) {
-	if naisTeam.GoogleGroupEmail != "" {
-		googleGroup, err := r.adminDirectoryService.Groups.Get(naisTeam.GoogleGroupEmail).Context(ctx).Do()
+	if naisTeam.GoogleGroupEmail != nil {
+		googleGroup, err := r.adminDirectoryService.Groups.Get(*naisTeam.GoogleGroupEmail).Context(ctx).Do()
 		if err != nil {
 			return nil, err
 		}

@@ -140,7 +140,7 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 }
 
 func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	if naisTeam.GarRepository == "" {
+	if naisTeam.GarRepository == nil {
 		log.Warnf("missing repository name in team, assume team has already been deleted")
 		return nil
 	}
@@ -156,7 +156,7 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	}
 
 	req := &artifactregistrypb.DeleteRepositoryRequest{
-		Name: naisTeam.GarRepository,
+		Name: *naisTeam.GarRepository,
 	}
 	operation, err := r.artifactRegistry.DeleteRepository(ctx, req)
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		r,
 		auditActionDeleteGarRepository,
 		naisTeam.Slug,
-		"Delete GAR repository %q", naisTeam.GarRepository,
+		"Delete GAR repository %q", *naisTeam.GarRepository,
 	)
 	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 		Slug:          naisTeam.Slug,
@@ -320,7 +320,7 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 	return repository, nil
 }
 
-func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail string) error {
+func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail *string) error {
 	bindings := []*iampb.Binding{
 		{
 			Role:    "roles/artifactregistry.writer",
@@ -328,10 +328,10 @@ func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *
 		},
 	}
 
-	if groupEmail != "" {
+	if groupEmail != nil {
 		bindings = append(bindings, &iampb.Binding{
 			Role:    "roles/artifactregistry.repoAdmin",
-			Members: []string{"group:" + groupEmail},
+			Members: []string{"group:" + *groupEmail},
 		})
 	}
 

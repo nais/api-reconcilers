@@ -90,13 +90,13 @@ func (r *naisNamespaceReconciler) Name() string {
 }
 
 func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	if naisTeam.GoogleGroupEmail == "" {
+	if naisTeam.GoogleGroupEmail == nil {
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
 	azureGroupID := uuid.Nil
-	if r.azureEnabled && naisTeam.AzureGroupId != "" {
-		id, err := uuid.Parse(naisTeam.AzureGroupId)
+	if r.azureEnabled && naisTeam.AzureGroupId != nil {
+		id, err := uuid.Parse(*naisTeam.AzureGroupId)
 		if err != nil {
 			return fmt.Errorf("unable to parse Azure group ID: %w", err)
 		}

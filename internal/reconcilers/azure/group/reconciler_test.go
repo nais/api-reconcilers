@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/ptr"
 )
 
 func TestAzureReconciler_Reconcile(t *testing.T) {
@@ -301,7 +302,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	azGroupID := uuid.New()
 	team := &protoapi.Team{
 		Slug:         "slug",
-		AzureGroupId: azGroupID.String(),
+		AzureGroupId: ptr.To(azGroupID.String()),
 	}
 	ctx := context.Background()
 	log, _ := test.NewNullLogger()

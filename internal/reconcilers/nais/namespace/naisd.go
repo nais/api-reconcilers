@@ -39,11 +39,15 @@ func createNamespacePayload(naisTeam *protoapi.Team, env *protoapi.TeamEnvironme
 		cnrmEmail = cnrmServiceAccountID + "@" + gcpProjectID + ".iam.gserviceaccount.com"
 	}
 
+	var gge string
+	if naisTeam.GoogleGroupEmail != nil {
+		gge = *naisTeam.GoogleGroupEmail
+	}
 	createReq, err := json.Marshal(
 		NaisdCreateNamespace{
 			Name:       naisTeam.Slug,
 			GcpProject: gcpProjectID,
-			GroupEmail: naisTeam.GoogleGroupEmail,
+			GroupEmail: gge,
 			AzureGroupID: func(id uuid.UUID) string {
 				if id == uuid.Nil {
 					return ""

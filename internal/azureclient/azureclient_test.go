@@ -12,6 +12,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/utils/ptr"
 )
 
 func Test_GetUser(t *testing.T) {
@@ -257,7 +258,7 @@ func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
 	team := &protoapi.Team{
 		Slug:         "slug",
 		Purpose:      "description",
-		AzureGroupId: groupId.String(),
+		AzureGroupId: ptr.To(groupId.String()),
 	}
 
 	client := azureclient.New(httpClient)
@@ -295,7 +296,7 @@ func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 	team := &protoapi.Team{
 		Slug:         "slug",
 		Purpose:      "description",
-		AzureGroupId: groupId.String(),
+		AzureGroupId: ptr.To(groupId.String()),
 	}
 
 	client := azureclient.New(httpClient)

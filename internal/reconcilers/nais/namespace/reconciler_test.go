@@ -64,8 +64,8 @@ func TestReconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
-			GoogleGroupEmail: googleGroupEmail,
-			AzureGroupId:     "invalid",
+			GoogleGroupEmail: ptr.To(googleGroupEmail),
+			AzureGroupId:     ptr.To("invalid"),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -84,7 +84,7 @@ func TestReconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
-			GoogleGroupEmail: googleGroupEmail,
+			GoogleGroupEmail: ptr.To(googleGroupEmail),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -115,8 +115,8 @@ func TestReconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
-			GoogleGroupEmail: googleGroupEmail,
-			AzureGroupId:     uuid.New().String(),
+			GoogleGroupEmail: ptr.To(googleGroupEmail),
+			AzureGroupId:     ptr.To(uuid.New().String()),
 		}
 
 		clusters := gcp.Clusters{
@@ -210,8 +210,8 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("expected slack alerts channel to be %q, got %q", expected, createNamespaceRequest.SlackAlertsChannel)
 		}
 
-		if createNamespaceRequest.AzureGroupID != naisTeam.AzureGroupId {
-			t.Fatalf("expected Azure group ID to be %q, got %q", naisTeam.AzureGroupId, createNamespaceRequest.AzureGroupID)
+		if createNamespaceRequest.AzureGroupID != *naisTeam.AzureGroupId {
+			t.Fatalf("expected Azure group ID to be %q, got %q", *naisTeam.AzureGroupId, createNamespaceRequest.AzureGroupID)
 		}
 	})
 

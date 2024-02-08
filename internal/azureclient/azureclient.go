@@ -134,10 +134,10 @@ func (s *client) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
 // GetOrCreateGroup Get or create a group from the Graph API. The second return value informs if the group was
 // created or not.
 func (s *client) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, groupName string) (*Group, bool, error) {
-	if naisTeam.AzureGroupId != "" {
-		existingGroupID, err := uuid.Parse(naisTeam.AzureGroupId)
+	if naisTeam.AzureGroupId != nil {
+		existingGroupID, err := uuid.Parse(*naisTeam.AzureGroupId)
 		if err != nil {
-			return nil, false, fmt.Errorf("group ID %q is not a valid UUID: %w", naisTeam.AzureGroupId, err)
+			return nil, false, fmt.Errorf("group ID %q is not a valid UUID: %w", *naisTeam.AzureGroupId, err)
 		}
 
 		grp, err := s.GetGroupById(ctx, existingGroupID)

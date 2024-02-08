@@ -211,12 +211,6 @@ func Test_Delete(t *testing.T) {
 			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:delete" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		service, closer := getAdminDirectoryServiceAndClient(t, ctx, nil)
 		defer closer()
@@ -248,7 +242,7 @@ func Test_Delete(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			Purpose:          teamPurpose,
-			GoogleGroupEmail: googleGroupEmail,
+			GoogleGroupEmail: ptr.To(googleGroupEmail),
 		}
 		googleAdminService, closer := getAdminDirectoryServiceAndClient(t, ctx, []http.HandlerFunc{
 			// delete group failure
@@ -284,7 +278,7 @@ func Test_Delete(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			Purpose:          teamPurpose,
-			GoogleGroupEmail: googleGroupEmail,
+			GoogleGroupEmail: ptr.To(googleGroupEmail),
 		}
 
 		googleAdminService, closer := getAdminDirectoryServiceAndClient(t, ctx, []http.HandlerFunc{

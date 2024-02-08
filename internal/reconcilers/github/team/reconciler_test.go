@@ -196,10 +196,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	})
 
 	t.Run("existing state, github team exists", func(t *testing.T) {
+		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: teamSlug,
+			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -220,27 +221,27 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			GetTeamBySlug(ctx, org, teamSlug).
-			Return(&github.Team{Slug: ptr.To(teamSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
+			GetTeamBySlug(ctx, org, gitHubSlug).
+			Return(&github.Team{Slug: ptr.To(gitHubSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
-			ListTeamMembersBySlug(mock.Anything, org, teamSlug, mock.Anything).
+			ListTeamMembersBySlug(mock.Anything, org, gitHubSlug, mock.Anything).
 			Return([]*github.User{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, teamSlug, mock.Anything).
+			ListTeamReposBySlug(ctx, org, gitHubSlug, mock.Anything).
 			Return([]*github.Repository{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
-			EditTeamBySlug(mock.Anything, org, teamSlug, github.NewTeam{
-				Name:        teamSlug,
+			EditTeamBySlug(mock.Anything, org, gitHubSlug, github.NewTeam{
+				Name:        gitHubSlug,
 				Description: ptr.To(teamPurpose),
 				Privacy:     ptr.To("closed"),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
-			CreateOrUpdateIDPGroupConnectionsBySlug(mock.Anything, org, teamSlug, github.IDPGroupList{Groups: []*github.IDPGroup{}}).
+			CreateOrUpdateIDPGroupConnectionsBySlug(mock.Anything, org, gitHubSlug, github.IDPGroupList{Groups: []*github.IDPGroup{}}).
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
@@ -255,11 +256,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	})
 
 	t.Run("existing state, github team no longer exists", func(t *testing.T) {
-		const existingSlug = "existing-slug"
+		existingSlug := "existing-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: existingSlug,
+			GithubTeamSlug: ptr.To(existingSlug),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -547,7 +548,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: "slug-from-state",
+			GithubTeamSlug: ptr.To("slug-from-state"),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -603,12 +604,6 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "github:team:delete"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID)
 		if err != nil {
@@ -629,14 +624,15 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("GitHub API client fails", func(t *testing.T) {
+		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: teamSlug,
+			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			DeleteTeamBySlug(ctx, org, teamSlug).
+			DeleteTeamBySlug(ctx, org, gitHubSlug).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
@@ -653,14 +649,15 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("unexpected response from GitHub API", func(t *testing.T) {
+		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: teamSlug,
+			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			DeleteTeamBySlug(ctx, org, teamSlug).
+			DeleteTeamBySlug(ctx, org, gitHubSlug).
 			Return(
 				&github.Response{
 					Response: &http.Response{
@@ -686,9 +683,10 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("successful delete", func(t *testing.T) {
+		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: teamSlug,
+			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -705,7 +703,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			DeleteTeamBySlug(ctx, org, teamSlug).
+			DeleteTeamBySlug(ctx, org, gitHubSlug).
 			Return(
 				&github.Response{
 					Response: &http.Response{

@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"k8s.io/utils/ptr"
 )
 
 type fakeArtifactRegistry struct {
@@ -393,8 +394,8 @@ func TestReconcile(t *testing.T) {
 
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
-			GoogleGroupEmail: groupEmail,
-			GarRepository:    garRepositoryParent + "/repositories/" + teamSlug,
+			GoogleGroupEmail: ptr.To(groupEmail),
+			GarRepository:    ptr.To(garRepositoryParent + "/repositories/" + teamSlug),
 		}
 
 		artifactregistryClient, iamService := mocks.start(t, ctx)
@@ -524,7 +525,7 @@ func TestDelete(t *testing.T) {
 	t.Run("delete service account fails with unexpected error", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:          teamSlug,
-			GarRepository: repositoryName,
+			GarRepository: ptr.To(repositoryName),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -554,7 +555,7 @@ func TestDelete(t *testing.T) {
 
 		naisTeam := &protoapi.Team{
 			Slug:          teamSlug,
-			GarRepository: repositoryName,
+			GarRepository: ptr.To(repositoryName),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -593,7 +594,7 @@ func TestDelete(t *testing.T) {
 	t.Run("delete repo operation fails", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:          teamSlug,
-			GarRepository: repositoryName,
+			GarRepository: ptr.To(repositoryName),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -635,7 +636,7 @@ func TestDelete(t *testing.T) {
 
 		naisTeam := &protoapi.Team{
 			Slug:          teamSlug,
-			GarRepository: repositoryName,
+			GarRepository: ptr.To(repositoryName),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -645,10 +646,9 @@ func TestDelete(t *testing.T) {
 			})).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
-
 		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "google:gar:delete"
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.ReconcilerName == "google:gcp:gar" && req.Action == "google:gar:delete"
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()

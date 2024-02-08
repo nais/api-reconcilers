@@ -145,12 +145,12 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	if naisTeam.AzureGroupId == "" {
+	if naisTeam.AzureGroupId == nil {
 		log.Info("team has no Azure AD group ID set, cannot delete external group")
 		return nil
 	}
 
-	id, err := uuid.Parse(naisTeam.AzureGroupId)
+	id, err := uuid.Parse(*naisTeam.AzureGroupId)
 	if err != nil {
 		return fmt.Errorf("invalid Azure AD group ID set on team, cannot delete external group")
 	}
@@ -165,7 +165,7 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 		r,
 		auditActionDeleteAzureGroup,
 		naisTeam.Slug,
-		"Delete Azure AD group with ID %q", naisTeam.AzureGroupId,
+		"Delete Azure AD group with ID %q", *naisTeam.AzureGroupId,
 	)
 
 	return nil

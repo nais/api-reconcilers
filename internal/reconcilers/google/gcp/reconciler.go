@@ -117,7 +117,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		return nil
 	}
 
-	if naisTeam.GoogleGroupEmail == "" {
+	if naisTeam.GoogleGroupEmail == nil {
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
@@ -422,7 +422,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 	}
 
 	newBindings, updated := calculateRoleBindings(policy.Bindings, map[string]string{
-		"roles/owner":  "group:" + naisTeam.GoogleGroupEmail,
+		"roles/owner":  "group:" + *naisTeam.GoogleGroupEmail,
 		r.cnrmRoleName: "serviceAccount:" + cnrmServiceAccount.Email,
 	})
 
