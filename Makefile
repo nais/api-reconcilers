@@ -6,7 +6,7 @@ generate: generate-mocks
 
 generate-mocks:
 	go run github.com/vektra/mockery/v2 --config ./.configs/mockery.yaml
-	find internal -type f -name "mock_*.go" -exec go run mvdan.cc/gofumpt -w {} \;
+	find internal -type f -name "mock_*.go" -exec go run mvdan.cc/gofumpt@latest -w {} \;
 
 build:
 	go build -o bin/api-reconcilers ./cmd/api-reconcilers
