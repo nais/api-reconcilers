@@ -193,10 +193,16 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		// TODO: ONLY ENABLE FOR DEV (split out to separate reconciler?)
-		if err := r.setupCDN(ctx, naisTeam, environment, teamProject, log); err != nil {
-			return fmt.Errorf("setup CDN for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, environment, err)
-		}
+	}
+
+	// TODO: ONLY ENABLE FOR DEV (split out to separate reconciler?)
+	labels := map[string]string{
+		"team":             naisTeam.Slug,
+		"tenant":           r.tenantName,
+		managedByLabelName: managedByLabelValue,
+	}
+	if err := r.setupCDN(ctx, naisTeam, log, labels); err != nil {
+		return fmt.Errorf("setup CDN in management project for team %q: %w", naisTeam.Slug, err)
 	}
 
 	return it.Err()
@@ -559,11 +565,15 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 
 // TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
 // TODO: federation/workload identity setup for each team
-func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project, log logrus.FieldLogger) error {
+// TODO: buckets must be in the same project as the backend bucket (and all other cdn thingies)
+// TODO: add labels for all resources that we create
+func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, log logrus.FieldLogger, labels map[string]string) error {
 	urlMapName := "nais-cdn-urlmap"
 	cacheInvalidatorRole := "roles/cdnCacheInvalidator"
 
-	bucketName := fmt.Sprintf("nais-cdn-%s-%s", environment, teamProject.ProjectId)
+	// bucket name needs to be globally unique
+	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
+	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
 
 	// check for existence for early return
 	_, err := r.gcpServices.StorageClient.Bucket(bucketName).Attrs(ctx)
@@ -573,7 +583,9 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 	}
 
 	// set up a storage bucket
-	err = r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, nil)
+	err = r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, &storage.BucketAttrs{
+		Labels: labels,
+	})
 	if err != nil {
 		return fmt.Errorf("create bucket: %w", err)
 	}
