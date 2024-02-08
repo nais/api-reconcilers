@@ -560,12 +560,10 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 // TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
 // TODO: federation/workload identity setup for each team
 func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, environment string, teamProject *cloudresourcemanager.Project, log logrus.FieldLogger) error {
-	domain := "dev-nais.io" // TODO: Somehow we need to recieve the desired domain from somewhere
 	urlMapName := "nais-cdn-urlmap"
 	cacheInvalidatorRole := "roles/cdnCacheInvalidator"
 
-	// TODO: validate bucket name ref. https://cloud.google.com/storage/docs/buckets#naming
-	bucketName := fmt.Sprintf("nais-cdn-%s-%s-%s", r.tenantName, environment, naisTeam.Slug)
+	bucketName := fmt.Sprintf("nais-cdn-%s-%s", environment, teamProject.ProjectId)
 
 	// check for existence for early return
 	_, err := r.gcpServices.StorageClient.Bucket(bucketName).Attrs(ctx)
@@ -641,7 +639,7 @@ func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.T
 				// sent over the network, resulting in faster load times for end users.
 				// Enum of "AUTOMATIC", "DISABLED".
 				CompressionMode: ptr.To("AUTOMATIC"),
-				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s/%s", domain, naisTeam.Slug)),
+				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
 				EnableCdn:       ptr.To(true),
 				Name:            &bucketName,
 			},
