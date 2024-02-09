@@ -137,7 +137,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
-	// V- this is very not good my guy
+	// 👇 this is very not good my guy
 	if err != nil {
 		var gapiError *googleapi.Error
 
@@ -149,7 +149,6 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 			// otherwise, we need a bucket i guess
 			needsBackendBucket = true
 		}
-		// if it's not a google api error, shit's fucked
 		return err
 	}
 
