@@ -46,18 +46,14 @@ const (
 )
 
 type GcpServices struct {
-	BackendBucketsClient                  *cloudcompute.BackendBucketsClient
 	CloudBillingProjectsService           *cloudbilling.ProjectsService
 	CloudResourceManagerOperationsService *cloudresourcemanager.OperationsService
 	CloudResourceManagerProjectsService   *cloudresourcemanager.ProjectsService
 	ComputeGlobalOperationsService        *compute.GlobalOperationsService
 	FirewallService                       *compute.FirewallsService
-	IamService                            *iam.Service
 	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
-	StorageClient                         *storage.Client
-	UrlMapsService                        *compute.UrlMapsService
 }
 
 type googleGcpReconciler struct {
