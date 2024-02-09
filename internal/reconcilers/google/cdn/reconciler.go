@@ -99,8 +99,12 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get or create service account: %w", err)
 	}
 
-	// check for existence for early return
+	err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
+	if err != nil {
+		return fmt.Errorf("set service account policy: %w", err)
+	}
 
+	// check for existence for early return
 	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
 		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
@@ -379,6 +383,8 @@ func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, team
 		if githubRepo.Archived {
 			continue
 		}
+
+		// TODO: this should only be for authorized repositories, get from api
 		for _, perm := range githubRepo.Permissions {
 			if perm.Name == "push" && perm.Granted {
 				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
