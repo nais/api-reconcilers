@@ -13,6 +13,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/gcp"
 	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
+	"github.com/nais/api/internal/database/teamsearch"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -73,7 +74,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 // TODO: add labels for all resources that we create
 
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	// TODO
+	// Done
 	// resource "google_service_account" "github" {
 	//   for_each = var.teams
 
@@ -82,6 +83,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	//   account_id   = "gh-${each.key}"
 	// }
 
+	// Todo
 	// resource "google_storage_bucket_iam_member" "github" {
 	//   for_each = var.teams
 
@@ -119,8 +121,13 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
 	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
 
+	googleServiceAccount, err := r.getOrCreateServiceAccount(ctx, naisTeam.Slug)
+	if err != nil {
+		return fmt.Errorf("get or create service account: %w", err)
+	}
+
 	// check for existence for early return
-	_, err := r.services.storage.Bucket(bucketName).Attrs(ctx)
+	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
 		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
 		return nil
@@ -336,4 +343,29 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 		storage:                        storageClient,
 		urlMap:                         computeService.UrlMaps,
 	}, nil
+}
+
+func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug string) (*iam.ServiceAccount, error) {
+	serviceAccountName, accountID := serviceAccountNameAndAccountID(teamSlug, r.googleManagementProjectID)
+
+	existing, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
+	if err == nil {
+
+		return existing, nil
+	}
+
+	return r.services.iam.Projects.ServiceAccounts.Create("projects/"+r.googleManagementProjectID, &iam.CreateServiceAccountRequest{
+		AccountId: accountID,
+		ServiceAccount: &iam.ServiceAccount{
+			Description: fmt.Sprintf("service account for uploading to cdn buckets and cache invalidation for %s", teamSlug),
+			DisplayName: fmt.Sprintf("CDN uploader for %s", teamSlug),
+		},
+	}).Context(ctx).Do()
+}
+
+func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountName, accountID string) {
+	accountID = str.SlugHashPrefixTruncate(teamSlug, "gar", gcp.GoogleServiceAccountMaxLength)
+	emailAddress := accountID + "@" + projectID + ".iam.gserviceaccount.com"
+	serviceAccountName = "projects/" + projectID + "/serviceAccounts/" + emailAddress
+	return
 }
