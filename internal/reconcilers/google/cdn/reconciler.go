@@ -73,6 +73,39 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 // TODO: add labels for all resources that we create
 
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	// TODO
+	// resource "google_service_account" "github" {
+	//   for_each = var.teams
+
+	//   display_name = "github-${each.key}-bucket-writer"
+	//   description  = "Service account for ${each.key} team to write to GCS bucket"
+	//   account_id   = "gh-${each.key}"
+	// }
+
+	// resource "google_storage_bucket_iam_member" "github" {
+	//   for_each = var.teams
+
+	//   bucket = google_storage_bucket.teams[each.key].name
+	//   role   = "roles/storage.objectAdmin"
+	//   member = "serviceAccount:${google_service_account.github[each.key].email}"
+	// }
+
+	// resource "google_service_account_iam_member" "github" {
+	//   for_each = local.repo-map
+
+	//   service_account_id = google_service_account.github[each.value.team].id
+	//   role               = "roles/iam.workloadIdentityUser"
+	//   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${each.value.repo}"
+	// }
+
+	// resource "google_project_iam_member" "github_cache_invalidator" {
+	//   for_each = var.teams
+
+	//   project = var.project
+	//   role    = google_project_iam_custom_role.team_cache_invalidator.name
+	//   member  = "serviceAccount:${google_service_account.github[each.key].email}"
+	// }
+
 	labels := map[string]string{
 		"team":             naisTeam.Slug,
 		"tenant":           r.tenantName,
