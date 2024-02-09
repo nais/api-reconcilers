@@ -133,7 +133,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
 	}
-	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName)
+	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		log.WithField("reconciler", "cdn").WithError(err).Errorf("error when creating reconciler")
 	}

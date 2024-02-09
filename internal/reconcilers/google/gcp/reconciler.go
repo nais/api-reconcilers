@@ -429,9 +429,9 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string]string{
-		"roles/owner":  "group:" + naisTeam.GoogleGroupEmail,
-		r.cnrmRoleName: "serviceAccount:" + cnrmServiceAccount.Email,
+	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
+		"roles/owner":  {"group:" + naisTeam.GoogleGroupEmail},
+		r.cnrmRoleName: {"serviceAccount:" + cnrmServiceAccount.Email},
 	})
 
 	if !updated {
@@ -679,27 +679,27 @@ func GetProjectDisplayName(teamSlug, environment string) string {
 }
 
 // CalculateRoleBindings Given a set of role bindings, make sure the ones in requiredRoleBindings are present
-func CalculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string]string) ([]*cloudresourcemanager.Binding, bool) {
+func CalculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string][]string) ([]*cloudresourcemanager.Binding, bool) {
 	updated := false
 
 REQUIRED:
-	for role, member := range requiredRoleBindings {
+	for role, members := range requiredRoleBindings {
 		for idx, binding := range existingRoleBindings {
 			if binding.Role != role {
 				continue
 			}
-
-			if !contains(binding.Members, member) {
-				existingRoleBindings[idx].Members = append(existingRoleBindings[idx].Members, member)
-				updated = true
+			for _, member := range members {
+				if !contains(binding.Members, member) {
+					existingRoleBindings[idx].Members = append(existingRoleBindings[idx].Members, member)
+					updated = true
+				}
 			}
-
 			continue REQUIRED
 		}
 
 		// the required role is missing altogether from the existing bindings
 		existingRoleBindings = append(existingRoleBindings, &cloudresourcemanager.Binding{
-			Members: []string{member},
+			Members: members,
 			Role:    role,
 		})
 		updated = true

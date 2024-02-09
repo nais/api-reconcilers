@@ -11,9 +11,9 @@ import (
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
-	"github.com/nais/api/internal/database/teamsearch"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -46,17 +46,19 @@ type cdnReconciler struct {
 	googleManagementProjectID string
 	tenantName                string
 	services                  *services
+	workloadIdentityPoolName  string
 }
 
 func (r *cdnReconciler) Name() string {
 	return reconcilerName
 }
 
-func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantName string) (*cdnReconciler, error) {
+func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantName string, workloadIdentityPoolName string) (*cdnReconciler, error) {
 	r := &cdnReconciler{
 		googleManagementProjectID: googleManagementProjectID,
 		tenantName:                tenantName,
 		services:                  nil,
+		workloadIdentityPoolName:  workloadIdentityPoolName,
 	}
 
 	gcpServices, err := createGcpServices(ctx, googleManagementProjectID, tenantDomain)
@@ -69,45 +71,10 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 }
 
 // TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
-// TODO: federation/workload identity setup for each team
-// TODO: buckets must be in the same project as the backend bucket (and all other cdn thingies)
-// TODO: add labels for all resources that we create
+
+// TODO: add labels for __all__ resources that we create
 
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	// Done
-	// resource "google_service_account" "github" {
-	//   for_each = var.teams
-
-	//   display_name = "github-${each.key}-bucket-writer"
-	//   description  = "Service account for ${each.key} team to write to GCS bucket"
-	//   account_id   = "gh-${each.key}"
-	// }
-
-	// Todo
-	// resource "google_storage_bucket_iam_member" "github" {
-	//   for_each = var.teams
-
-	//   bucket = google_storage_bucket.teams[each.key].name
-	//   role   = "roles/storage.objectAdmin"
-	//   member = "serviceAccount:${google_service_account.github[each.key].email}"
-	// }
-
-	// resource "google_service_account_iam_member" "github" {
-	//   for_each = local.repo-map
-
-	//   service_account_id = google_service_account.github[each.value.team].id
-	//   role               = "roles/iam.workloadIdentityUser"
-	//   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${each.value.repo}"
-	// }
-
-	// resource "google_project_iam_member" "github_cache_invalidator" {
-	//   for_each = var.teams
-
-	//   project = var.project
-	//   role    = google_project_iam_custom_role.team_cache_invalidator.name
-	//   member  = "serviceAccount:${google_service_account.github[each.key].email}"
-	// }
-
 	labels := map[string]string{
 		"team":             naisTeam.Slug,
 		"tenant":           r.tenantName,
@@ -127,6 +94,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 
 	// check for existence for early return
+
 	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
 		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
@@ -146,6 +114,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 	policy.Add("allUsers", "roles/storage.objectViewer")
 	policy.Add(fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail), "roles/storage.objectAdmin")
+	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
 
 	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
 	if err != nil {
@@ -158,7 +127,8 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
-	// TODO: this is very not good my guy
+
+	// V- this is very not good my guy
 	if err != nil {
 		var gapiError *googleapi.Error
 
@@ -232,8 +202,11 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	if err != nil {
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
-	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string]string{
-		cacheInvalidatorRole: "group:" + naisTeam.GoogleGroupEmail,
+	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
+		cacheInvalidatorRole: {
+			fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail),
+			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
+		},
 	})
 
 	if updated {
@@ -350,7 +323,6 @@ func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 
 	existing, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
 	if err == nil {
-
 		return existing, nil
 	}
 
@@ -364,8 +336,52 @@ func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 }
 
 func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountName, accountID string) {
-	accountID = str.SlugHashPrefixTruncate(teamSlug, "gar", gcp.GoogleServiceAccountMaxLength)
-	emailAddress := accountID + "@" + projectID + ".iam.gserviceaccount.com"
-	serviceAccountName = "projects/" + projectID + "/serviceAccounts/" + emailAddress
+	accountID = str.SlugHashPrefixTruncate(teamSlug, "cdn", gcp.GoogleServiceAccountMaxLength)
+	emailAddress := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", accountID, projectID)
+	serviceAccountName = fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, emailAddress)
 	return
+}
+
+func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.ReconcilerResources())
+	if err != nil {
+		return err
+	}
+
+	req := iam.SetIamPolicyRequest{
+		Policy: &iam.Policy{
+			Bindings: []*iam.Binding{
+				{
+					Members: members,
+					Role:    "roles/iam.workloadIdentityUser",
+				},
+			},
+		},
+	}
+
+	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
+	return err
+}
+
+func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilerResourcesClient) ([]string, error) {
+	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client, teamSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	members := make([]string, 0)
+	for _, githubRepo := range repos {
+		if githubRepo.Archived {
+			continue
+		}
+		for _, perm := range githubRepo.Permissions {
+			if perm.Name == "push" && perm.Granted {
+				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
+				members = append(members, member)
+				break
+			}
+		}
+	}
+
+	return members, nil
 }
