@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	cloudcompute "cloud.google.com/go/compute/apiv1"
-	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -57,14 +55,13 @@ type GcpServices struct {
 }
 
 type googleGcpReconciler struct {
-	billingAccount            string
-	clusters                  gcp.Clusters
-	cnrmRoleName              string
-	cnrmServiceAccountID      string
-	gcpServices               *GcpServices
-	googleManagementProjectID string
-	tenantDomain              string
-	tenantName                string
+	billingAccount       string
+	clusters             gcp.Clusters
+	cnrmRoleName         string
+	cnrmServiceAccountID string
+	gcpServices          *GcpServices
+	tenantDomain         string
+	tenantName           string
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -77,13 +74,12 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 
 func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
-		billingAccount:            billingAccount,
-		clusters:                  clusters,
-		cnrmRoleName:              cnrmRoleName,
-		cnrmServiceAccountID:      cnrmServiceAccountID,
-		googleManagementProjectID: googleManagementProjectID,
-		tenantDomain:              tenantDomain,
-		tenantName:                tenantName,
+		billingAccount:       billingAccount,
+		clusters:             clusters,
+		cnrmRoleName:         cnrmRoleName,
+		cnrmServiceAccountID: cnrmServiceAccountID,
+		tenantDomain:         tenantDomain,
+		tenantName:           tenantName,
 	}
 
 	for _, opt := range opts {
@@ -586,29 +582,15 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 		return nil, fmt.Errorf("retrieve compute service: %w", err)
 	}
 
-	storageClient, err := storage.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("retrieve storage client: %w", err)
-	}
-
-	backendBucketsClient, err := cloudcompute.NewBackendBucketsRESTClient(ctx, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("retrieve backend buckets client: %w", err)
-	}
-
 	return &GcpServices{
-		BackendBucketsClient:                  backendBucketsClient,
 		CloudBillingProjectsService:           cloudBillingService.Projects,
 		CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
 		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		ComputeGlobalOperationsService:        computeService.GlobalOperations,
 		FirewallService:                       computeService.Firewalls,
-		IamService:                            iamService,
 		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
 		ServiceUsageOperationsService:         serviceUsageService.Operations,
 		ServiceUsageService:                   serviceUsageService.Services,
-		StorageClient:                         storageClient,
-		UrlMapsService:                        computeService.UrlMaps,
 	}, nil
 }
 
