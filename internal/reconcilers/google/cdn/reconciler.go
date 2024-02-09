@@ -244,8 +244,13 @@ func (*cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, n
 	return nil
 }
 
-func (*cdnReconciler) Configuration() *protoapi.NewReconciler {
-	return nil
+func (r *cdnReconciler) Configuration() *protoapi.NewReconciler {
+	return &protoapi.NewReconciler{
+		Name:        r.Name(),
+		DisplayName: "CDN reconciler",
+		Description: "CDN",
+		MemberAware: false,
+	}
 }
 
 // createGcpServices Creates the GCP services used by the reconciler
