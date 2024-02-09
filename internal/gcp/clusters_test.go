@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestDecodeJSONToClusters(t *testing.T) {
@@ -12,14 +11,24 @@ func TestDecodeJSONToClusters(t *testing.T) {
 
 	t.Run("empty string", func(t *testing.T) {
 		err := clusters.Decode("")
-		assert.NoError(t, err)
-		assert.Len(t, clusters, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(clusters) != 0 {
+			t.Fatalf("expected 0 clusters, got %d", len(clusters))
+		}
 	})
 
 	t.Run("empty JSON object", func(t *testing.T) {
 		err := clusters.Decode("{}")
-		assert.NoError(t, err)
-		assert.Len(t, clusters, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(clusters) != 0 {
+			t.Fatalf("expected 0 clusters, got %d", len(clusters))
+		}
 	})
 
 	t.Run("JSON with clusters", func(t *testing.T) {
@@ -27,14 +36,34 @@ func TestDecodeJSONToClusters(t *testing.T) {
 			"env1": {"teams_folder_id": "123", "project_id": "some-id-123"},
 			"env2": {"teams_folder_id": "456", "project_id": "some-id-456"}
 		}`)
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
-		assert.Contains(t, clusters, "env1")
-		assert.Equal(t, int64(123), clusters["env1"].TeamsFolderID)
-		assert.Equal(t, "some-id-123", clusters["env1"].ProjectID)
+		cluster, exists := clusters["env1"]
+		if !exists {
+			t.Fatalf("expected cluster 'env1' to exist")
+		}
 
-		assert.Contains(t, clusters, "env2")
-		assert.Equal(t, int64(456), clusters["env2"].TeamsFolderID)
-		assert.Equal(t, "some-id-456", clusters["env2"].ProjectID)
+		if cluster.TeamsFolderID != 123 {
+			t.Fatalf("expected cluster 'env1' to have teams_folder_id 123, got %d", cluster.TeamsFolderID)
+		}
+
+		if expected := "some-id-123"; cluster.ProjectID != expected {
+			t.Fatalf("expected cluster 'env1' to have project ID %q, got %q", expected, cluster.TeamsFolderID)
+		}
+
+		cluster, exists = clusters["env2"]
+		if !exists {
+			t.Fatalf("expected cluster 'env2' to exist")
+		}
+
+		if cluster.TeamsFolderID != 456 {
+			t.Fatalf("expected cluster 'env2' to have teams_folder_id 456, got %d", cluster.TeamsFolderID)
+		}
+
+		if expected := "some-id-456"; cluster.ProjectID != expected {
+			t.Fatalf("expected cluster 'env2' to have project ID %q, got %q", expected, cluster.TeamsFolderID)
+		}
 	})
 }

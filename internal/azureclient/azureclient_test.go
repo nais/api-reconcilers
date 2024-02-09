@@ -5,20 +5,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/protoapi"
-	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/ptr"
 )
 
 func Test_GetUser(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/users/user@example.com", req.URL.String())
-		assert.Equal(t, http.MethodGet, req.Method)
+		if expected := "https://graph.microsoft.com/v1.0/users/user@example.com"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodGet; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
 
 		return test.Response("200 OK", `{
 			"mail": "user@example.com",
@@ -28,16 +33,28 @@ func Test_GetUser(t *testing.T) {
 
 	client := azureclient.New(httpClient)
 	member, err := client.GetUser(context.Background(), "user@example.com")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
-	assert.Equal(t, "user@example.com", member.Mail)
-	assert.Equal(t, "some-id", member.ID)
-	assert.NoError(t, err)
+	if expected := "user@example.com"; member.Mail != expected {
+		t.Errorf("Expected mail %q, got %q", expected, member.Mail)
+	}
+
+	if expected := "some-id"; member.ID != expected {
+		t.Errorf("Expected ID %q, got %q", expected, member.ID)
+	}
 }
 
 func Test_GetUserThatDoesNotExist(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/users/user@example.com", req.URL.String())
-		assert.Equal(t, http.MethodGet, req.Method)
+		if expected := "https://graph.microsoft.com/v1.0/users/user@example.com"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodGet; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
 
 		return test.Response("404 Not Found", `{"error": {"message": "user does not exist"}}`)
 	})
@@ -45,14 +62,24 @@ func Test_GetUserThatDoesNotExist(t *testing.T) {
 	client := azureclient.New(httpClient)
 	member, err := client.GetUser(context.Background(), "user@example.com")
 
-	assert.Nil(t, member)
-	assert.EqualError(t, err, `404 Not Found: {"error": {"message": "user does not exist"}}`)
+	if member != nil {
+		t.Errorf("Expected no member, got %v", member)
+	}
+
+	if expected := `404 Not Found: {"error": {"message": "user does not exist"}}`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_GetUserWithInvalidApiResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/users/user@example.com", req.URL.String())
-		assert.Equal(t, http.MethodGet, req.Method)
+		if expected := "https://graph.microsoft.com/v1.0/users/user@example.com"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodGet; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
 
 		return test.Response("200 OK", "some string")
 	})
@@ -60,15 +87,26 @@ func Test_GetUserWithInvalidApiResponse(t *testing.T) {
 	client := azureclient.New(httpClient)
 	member, err := client.GetUser(context.Background(), "user@example.com")
 
-	assert.Nil(t, member)
-	assert.EqualError(t, err, "invalid character 's' looking for beginning of value")
+	if member != nil {
+		t.Errorf("Expected no member, got %v", member)
+	}
+
+	if expected := "invalid character 's' looking for beginning of value"; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_GetGroupById(t *testing.T) {
 	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/"+groupId.String(), req.URL.String())
-		assert.Equal(t, http.MethodGet, req.Method)
+		if expected := "https://graph.microsoft.com/v1.0/groups/" + groupId.String(); req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodGet; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
+
 		return test.Response("200 OK", fmt.Sprintf(`{
 			"id":"%s",
 			"description":"description",
@@ -79,31 +117,53 @@ func Test_GetGroupById(t *testing.T) {
 
 	client := azureclient.New(httpClient)
 	group, err := client.GetGroupById(context.Background(), groupId)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
-	assert.NoError(t, err)
-	assert.Equal(t, groupId.String(), group.ID)
+	if group.ID != groupId.String() {
+		t.Errorf("Expected group ID %q, got %q", groupId.String(), group.ID)
+	}
 }
 
 func Test_GetGroupThatDoesNotExist(t *testing.T) {
 	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/"+groupId.String(), req.URL.String())
-		assert.Equal(t, http.MethodGet, req.Method)
+		if expected := "https://graph.microsoft.com/v1.0/groups/" + groupId.String(); req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodGet; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
 		return test.Response("404 Not Found", "{}")
 	})
 
 	client := azureclient.New(httpClient)
 	group, err := client.GetGroupById(context.Background(), groupId)
 
-	assert.Nil(t, group)
-	assert.ErrorContains(t, err, "azure group with ID")
+	if group != nil {
+		t.Errorf("Expected no group, got %v", group)
+	}
+
+	if contains := "azure group with ID"; !strings.Contains(err.Error(), contains) {
+		t.Errorf("Expected error to contain %q, got %q", contains, err)
+	}
 }
 
 func Test_CreateGroup(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-		assert.Equal(t, http.MethodPost, req.Method)
-		assert.Equal(t, "application/json", req.Header.Get("content-type"))
+		if expected := "https://graph.microsoft.com/v1.0/groups"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodPost; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
+
+		if expected := "application/json"; req.Header.Get("content-type") != expected {
+			t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+		}
 
 		return test.Response("201 Created", `{
 			"id":"some-id",
@@ -123,16 +183,28 @@ func Test_CreateGroup(t *testing.T) {
 	expectedOutput.ID = "some-id"
 
 	group, err := client.CreateGroup(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
-	assert.Equal(t, expectedOutput, group)
-	assert.NoError(t, err)
+	if expectedOutput.ID != group.ID {
+		t.Errorf("Expected group %v, got %v", expectedOutput, group)
+	}
 }
 
 func Test_CreateGroupWithInvalidStatus(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-		assert.Equal(t, http.MethodPost, req.Method)
-		assert.Equal(t, "application/json", req.Header.Get("content-type"))
+		if expected := "https://graph.microsoft.com/v1.0/groups"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodPost; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
+
+		if expected := "application/json"; req.Header.Get("content-type") != expected {
+			t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+		}
 
 		return test.Response("400 Bad Request", `{"error": {"message":"some error"}}`)
 	})
@@ -145,15 +217,28 @@ func Test_CreateGroupWithInvalidStatus(t *testing.T) {
 		MailNickname: "mail",
 	})
 
-	assert.Nil(t, group)
-	assert.EqualError(t, err, `create azure group "mail": 400 Bad Request: {"error": {"message":"some error"}}`)
+	if group != nil {
+		t.Errorf("Expected no group, got %v", group)
+	}
+
+	if expected := `create azure group "mail": 400 Bad Request: {"error": {"message":"some error"}}`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_CreateGroupWithInvalidResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-		assert.Equal(t, http.MethodPost, req.Method)
-		assert.Equal(t, "application/json", req.Header.Get("content-type"))
+		if expected := "https://graph.microsoft.com/v1.0/groups"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodPost; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
+
+		if expected := "application/json"; req.Header.Get("content-type") != expected {
+			t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+		}
 
 		return test.Response("201 Created", "response body")
 	})
@@ -166,15 +251,28 @@ func Test_CreateGroupWithInvalidResponse(t *testing.T) {
 		MailNickname: "mail",
 	})
 
-	assert.Nil(t, group)
-	assert.EqualError(t, err, "invalid character 'r' looking for beginning of value")
+	if group != nil {
+		t.Errorf("Expected no group, got %v", group)
+	}
+
+	if expected := "invalid character 'r' looking for beginning of value"; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_CreateGroupWithIncompleteResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(func(req *http.Request) *http.Response {
-		assert.Equal(t, "https://graph.microsoft.com/v1.0/groups", req.URL.String())
-		assert.Equal(t, http.MethodPost, req.Method)
-		assert.Equal(t, "application/json", req.Header.Get("content-type"))
+		if expected := "https://graph.microsoft.com/v1.0/groups"; req.URL.String() != expected {
+			t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+		}
+
+		if expected := http.MethodPost; req.Method != expected {
+			t.Errorf("Expected method %q, got %q", expected, req.Method)
+		}
+
+		if expected := "application/json"; req.Header.Get("content-type") != expected {
+			t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+		}
 
 		return test.Response("201 Created", `{
 			"description":"description",
@@ -191,23 +289,28 @@ func Test_CreateGroupWithIncompleteResponse(t *testing.T) {
 		MailNickname: "mail",
 	})
 
-	assert.Nil(t, group)
-	assert.EqualError(t, err, `azure group "mail" created, but no ID returned`)
+	if expected := `azure group "mail" created, but no ID returned`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
+
+	if group != nil {
+		t.Errorf("Expected no group, got %v", group)
+	}
 }
 
 func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			if req.URL.String() != "https://graph.microsoft.com/v1.0/groups" {
-				t.Errorf("Expected URL %s, got %s", "https://graph.microsoft.com/v1.0/groups", req.URL.String())
+			if expected := "https://graph.microsoft.com/v1.0/groups"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
 			}
 
-			if http.MethodPost != req.Method {
-				t.Errorf("Expected method %s, got %s", http.MethodPost, req.Method)
+			if expected := http.MethodPost; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
 			}
 
-			if req.Header.Get("content-type") != "application/json" {
-				t.Errorf("Expected content-type %s, got %s", "application/json", req.Header.Get("content-type"))
+			if expected := "application/json"; req.Header.Get("content-type") != expected {
+				t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
 			}
 
 			return test.Response("201 Created", `{
@@ -329,8 +432,13 @@ func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 func Test_ListGroupMembers(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members", req.URL.String())
-			assert.Equal(t, http.MethodGet, req.Method)
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodGet; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
 
 			return test.Response("200 OK", `{
 				"value": [
@@ -346,18 +454,33 @@ func Test_ListGroupMembers(t *testing.T) {
 	members, err := client.ListGroupMembers(context.Background(), &azureclient.Group{
 		ID: "group-id",
 	})
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 
-	assert.NoError(t, err)
-	assert.Len(t, members, 2)
-	assert.Equal(t, "user-id-1", members[0].ID)
-	assert.Equal(t, "user-id-2", members[1].ID)
+	if len(members) != 2 {
+		t.Fatalf("Expected 2 members, got %v", members)
+	}
+
+	if expected := "user-id-1"; members[0].ID != expected {
+		t.Errorf("Expected member ID %q, got %q", expected, members[0].ID)
+	}
+
+	if expected := "user-id-2"; members[1].ID != expected {
+		t.Errorf("Expected member ID %q, got %q", expected, members[1].ID)
+	}
 }
 
 func Test_ListGroupMembersWhenGroupDoesNotExist(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members", req.URL.String())
-			assert.Equal(t, http.MethodGet, req.Method)
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodGet; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
 
 			return test.Response("404 Not Found", `{"error":{"message":"some error"}}`)
 		},
@@ -370,15 +493,25 @@ func Test_ListGroupMembersWhenGroupDoesNotExist(t *testing.T) {
 		MailNickname: "mail",
 	})
 
-	assert.EqualError(t, err, `list group members "mail": 404 Not Found: {"error":{"message":"some error"}}`)
-	assert.Len(t, members, 0)
+	if expected := `list group members "mail": 404 Not Found: {"error":{"message":"some error"}}`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
+
+	if len(members) != 0 {
+		t.Errorf("Expected no members, got %v", members)
+	}
 }
 
 func Test_ListGroupMembersWithInvalidResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members", req.URL.String())
-			assert.Equal(t, http.MethodGet, req.Method)
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodGet; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
 
 			return test.Response("200 OK", "some response")
 		},
@@ -390,18 +523,34 @@ func Test_ListGroupMembersWithInvalidResponse(t *testing.T) {
 		ID: "group-id",
 	})
 
-	assert.EqualError(t, err, "invalid character 's' looking for beginning of value")
-	assert.Nil(t, members)
+	if expected := "invalid character 's' looking for beginning of value"; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
+
+	if members != nil {
+		t.Errorf("Expected no members, got %v", members)
+	}
 }
 
 func Test_AddMemberToGroup(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members/$ref", req.URL.String())
-			assert.Equal(t, http.MethodPost, req.Method)
-			assert.Equal(t, "application/json", req.Header.Get("content-type"))
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members/$ref"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodPost; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
+
+			if expected := "application/json"; req.Header.Get("content-type") != expected {
+				t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+			}
+
 			body, _ := io.ReadAll(req.Body)
-			assert.Equal(t, `{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/user-id"}`, string(body))
+			if expected := `{"@odata.id":"https://graph.microsoft.com/v1.0/directoryObjects/user-id"}`; string(body) != expected {
+				t.Errorf("Expected body %q, got %q", expected, string(body))
+			}
 
 			return test.Response("204 No Content", "")
 		},
@@ -415,16 +564,25 @@ func Test_AddMemberToGroup(t *testing.T) {
 		ID:   "user-id",
 		Mail: "mail@example.com",
 	})
-
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 }
 
 func Test_AddMemberToGroupWithInvalidResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members/$ref", req.URL.String())
-			assert.Equal(t, http.MethodPost, req.Method)
-			assert.Equal(t, "application/json", req.Header.Get("content-type"))
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members/$ref"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodPost; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
+
+			if expected := "application/json"; req.Header.Get("content-type") != expected {
+				t.Errorf("Expected content-type %q, got %q", expected, req.Header.Get("content-type"))
+			}
 
 			return test.Response("200 OK", "some response body")
 		},
@@ -440,14 +598,21 @@ func Test_AddMemberToGroupWithInvalidResponse(t *testing.T) {
 		Mail: "mail@example.com",
 	})
 
-	assert.EqualError(t, err, `add member "mail@example.com" to azure group "group": 200 OK: some response body`)
+	if expected := `add member "mail@example.com" to azure group "group": 200 OK: some response body`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_RemoveMemberFromGroup(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members/user-id/$ref", req.URL.String())
-			assert.Equal(t, http.MethodDelete, req.Method)
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members/user-id/$ref"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodDelete; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
 
 			return test.Response("204 No Content", "")
 		},
@@ -460,15 +625,21 @@ func Test_RemoveMemberFromGroup(t *testing.T) {
 	}, &azureclient.Member{
 		ID: "user-id",
 	})
-
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
 }
 
 func Test_RemoveMemberFromGroupWithInvalidResponse(t *testing.T) {
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
-			assert.Equal(t, "https://graph.microsoft.com/v1.0/groups/group-id/members/user-id/$ref", req.URL.String())
-			assert.Equal(t, http.MethodDelete, req.Method)
+			if expected := "https://graph.microsoft.com/v1.0/groups/group-id/members/user-id/$ref"; req.URL.String() != expected {
+				t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+			}
+
+			if expected := http.MethodDelete; req.Method != expected {
+				t.Errorf("Expected method %q, got %q", expected, req.Method)
+			}
 
 			return test.Response("200 OK", "some response body")
 		},
@@ -484,7 +655,9 @@ func Test_RemoveMemberFromGroupWithInvalidResponse(t *testing.T) {
 		Mail: "mail",
 	})
 
-	assert.EqualError(t, err, `remove member "mail" from azure group "mail@example.com": 200 OK: some response body`)
+	if expected := `remove member "mail" from azure group "mail@example.com": 200 OK: some response body`; err.Error() != expected {
+		t.Errorf("Expected error %q, got %q", expected, err)
+	}
 }
 
 func Test_DeleteGroup(t *testing.T) {
@@ -494,15 +667,25 @@ func Test_DeleteGroup(t *testing.T) {
 	t.Run("Successful delete", func(t *testing.T) {
 		httpClient := test.NewTestHttpClient(
 			func(req *http.Request) *http.Response {
-				assert.Equal(t, fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s", grpID), req.URL.String())
-				assert.Equal(t, http.MethodDelete, req.Method)
-				assert.Equal(t, ctx, req.Context())
+				if expected := "https://graph.microsoft.com/v1.0/groups/" + grpID.String(); req.URL.String() != expected {
+					t.Errorf("Expected URL %q, got %q", expected, req.URL.String())
+				}
+				if expected := http.MethodDelete; req.Method != expected {
+					t.Errorf("Expected method %q, got %q", expected, req.Method)
+				}
+
+				if req.Context() != ctx {
+					t.Errorf("Expected context %v, got %v", ctx, req.Context())
+				}
 				return test.Response("204 No Content", "some response body")
 			},
 		)
 
 		client := azureclient.New(httpClient)
-		assert.NoError(t, client.DeleteGroup(ctx, grpID))
+		err := client.DeleteGroup(ctx, grpID)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
 	})
 
 	t.Run("Delete error", func(t *testing.T) {
@@ -514,7 +697,13 @@ func Test_DeleteGroup(t *testing.T) {
 
 		client := azureclient.New(httpClient)
 		err := client.DeleteGroup(ctx, grpID)
-		assert.ErrorContains(t, err, "remove azure group with ID")
-		assert.ErrorContains(t, err, grpID.String())
+
+		if contains := "remove azure group with ID"; !strings.Contains(err.Error(), contains) {
+			t.Errorf("Expected error to contain %q, got %q", contains, err)
+		}
+
+		if contains := grpID.String(); !strings.Contains(err.Error(), contains) {
+			t.Errorf("Expected error to contain %q, got %q", contains, err)
+		}
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -85,20 +85,20 @@ func (f *fakeArtifactRegistry) SetIamPolicy(ctx context.Context, r *iampb.SetIam
 }
 
 func (f *fakeArtifactRegistry) assert(t *testing.T) {
-	if f.create != nil {
-		assert.Equal(t, f.createCounter, 1, "mock expected 1 call to create")
+	if f.create != nil && f.createCounter != 1 {
+		t.Errorf("mock expected 1 call to create, got %d", f.createCounter)
 	}
-	if f.update != nil {
-		assert.Equal(t, f.updateCounter, 1, "mock expected 1 call to update")
+	if f.update != nil && f.updateCounter != 1 {
+		t.Errorf("mock expected 1 call to update, got %d", f.updateCounter)
 	}
-	if f.get != nil {
-		assert.Equal(t, f.getCounter, 1, "mock expected 1 call to get")
+	if f.get != nil && f.getCounter != 1 {
+		t.Errorf("mock expected 1 call to get, got %d", f.getCounter)
 	}
-	if f.delete != nil {
-		assert.Equal(t, f.deleteCounter, 1, "mock expected 1 call to delete")
+	if f.delete != nil && f.deleteCounter != 1 {
+		t.Errorf("mock expected 1 call to delete, got %d", f.deleteCounter)
 	}
-	if f.setIamPolicy != nil {
-		assert.Equal(t, f.setIamPolicyCounter, 1, "mock expected 1 call to setIamPolicy")
+	if f.setIamPolicy != nil && f.setIamPolicyCounter != 1 {
+		t.Errorf("mock expected 1 call to setIamPolicy, got %d", f.setIamPolicyCounter)
 	}
 }
 
@@ -192,9 +192,14 @@ func TestReconcile(t *testing.T) {
 				},
 				func(w http.ResponseWriter, r *http.Request) {
 					var req iam.CreateServiceAccountRequest
-					assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-					assert.Equal(t, expectedServiceAccount.Description, req.ServiceAccount.Description)
-					assert.Equal(t, expectedServiceAccount.DisplayName, req.ServiceAccount.DisplayName)
+					_ = json.NewDecoder(r.Body).Decode(&req)
+					if req.ServiceAccount.Description != expectedServiceAccount.Description {
+						t.Errorf("expected description %q, got %q", expectedServiceAccount.Description, req.ServiceAccount.Description)
+					}
+
+					if req.ServiceAccount.DisplayName != expectedServiceAccount.DisplayName {
+						t.Errorf("expected display name %q, got %q", expectedServiceAccount.DisplayName, req.ServiceAccount.DisplayName)
+					}
 					w.WriteHeader(abortReconcilerCode) // abort test - we have asserted what we are interested in already
 				},
 			}),
@@ -221,18 +226,38 @@ func TestReconcile(t *testing.T) {
 		mocks := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(&expectedServiceAccount))
+					if err := json.NewEncoder(w).Encode(&expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 				func(w http.ResponseWriter, r *http.Request) {
 					var req iam.SetIamPolicyRequest
 					prefix := "principalSet://iam.googleapis.com/" + workloadIdentityPoolName + "/attribute.repository"
-					assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
-					assert.Contains(t, r.URL.Path, expectedServiceAccount.Name)
-					assert.Contains(t, req.Policy.Bindings[0].Members, prefix+"/test/repository")
-					assert.Contains(t, req.Policy.Bindings[0].Members, prefix+"/test/admin-repository")
-					assert.NotContains(t, req.Policy.Bindings[0].Members, prefix+"/test/ro-repository")
-					assert.NotContains(t, req.Policy.Bindings[0].Members, prefix+"/test/no-permissions-repository")
-					assert.NotContains(t, req.Policy.Bindings[0].Members, prefix+"/test/archived-repository")
+					_ = json.NewDecoder(r.Body).Decode(&req)
+					if contains := expectedServiceAccount.Name; !strings.Contains(r.URL.Path, contains) {
+						t.Errorf("expected path to contain %q, got %q", contains, r.URL.Path)
+					}
+
+					if contains := prefix + "/test/repository"; !slices.Contains(req.Policy.Bindings[0].Members, contains) {
+						t.Errorf("expected members to contain %q, got %v", contains, req.Policy.Bindings[0].Members)
+					}
+
+					if contains := prefix + "/test/admin-repository"; !slices.Contains(req.Policy.Bindings[0].Members, contains) {
+						t.Errorf("expected members to contain %q, got %v", contains, req.Policy.Bindings[0].Members)
+					}
+
+					if contains := prefix + "/test/ro-repository"; slices.Contains(req.Policy.Bindings[0].Members, contains) {
+						t.Errorf("did not expect members to contain %q, but it did", contains)
+					}
+
+					if contains := prefix + "/test/no-permissions-repository"; slices.Contains(req.Policy.Bindings[0].Members, contains) {
+						t.Errorf("did not expect members to contain %q, but it did", contains)
+					}
+
+					if contains := prefix + "/test/archived-repository"; slices.Contains(req.Policy.Bindings[0].Members, contains) {
+						t.Errorf("did not expect members to contain %q, but it did", contains)
+					}
+
 					w.WriteHeader(abortReconcilerCode)
 				},
 			}),
@@ -313,14 +338,26 @@ func TestReconcile(t *testing.T) {
 					return nil, status.Error(codes.NotFound, "not found")
 				},
 				create: func(ctx context.Context, r *artifactregistrypb.CreateRepositoryRequest) (*longrunningpb.Operation, error) {
-					assert.Equal(t, r.Repository.Name, expectedRepository.Name)
-					assert.Equal(t, r.Repository.Description, expectedRepository.Description)
-					assert.Equal(t, r.Parent, garRepositoryParent)
-					assert.Equal(t, r.Repository.Format, expectedRepository.Format)
+					if r.Repository.Name != expectedRepository.Name {
+						t.Errorf("expected name %q, got %q", expectedRepository.Name, r.Repository.Name)
+					}
+
+					if r.Repository.Description != expectedRepository.Description {
+						t.Errorf("expected description %q, got %q", expectedRepository.Description, r.Repository.Description)
+					}
+
+					if r.Parent != garRepositoryParent {
+						t.Errorf("expected parent %q, got %q", garRepositoryParent, r.Parent)
+					}
+
+					if r.Repository.Format != expectedRepository.Format {
+						t.Errorf("expected format %q, got %q", expectedRepository.Format, r.Repository.Format)
+					}
 
 					payload := anypb.Any{}
-					err := anypb.MarshalFrom(&payload, r.Repository, proto.MarshalOptions{})
-					assert.NoError(t, err)
+					if err := anypb.MarshalFrom(&payload, r.Repository, proto.MarshalOptions{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 
 					return &longrunningpb.Operation{
 						Done: true,
@@ -333,11 +370,15 @@ func TestReconcile(t *testing.T) {
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get service account
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(expectedServiceAccount))
+					if err := json.NewEncoder(w).Encode(expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 				// set iam policy
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(&iam.Policy{}))
+					if err := json.NewEncoder(w).Encode(&iam.Policy{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 			}),
 		}
@@ -366,16 +407,37 @@ func TestReconcile(t *testing.T) {
 					return &expectedRepository, nil
 				},
 				setIamPolicy: func(ctx context.Context, r *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
-					assert.Equal(t, expectedRepository.Name, r.Resource)
-					assert.Len(t, r.Policy.Bindings, 2)
-					assert.Len(t, r.Policy.Bindings[0].Members, 1)
-					assert.Len(t, r.Policy.Bindings[1].Members, 1)
+					if r.Resource != expectedRepository.Name {
+						t.Errorf("expected resource %q, got %q", expectedRepository.Name, r.Resource)
+					}
 
-					assert.Equal(t, "serviceAccount:"+expectedServiceAccount.Email, r.Policy.Bindings[0].Members[0])
-					assert.Equal(t, "roles/artifactregistry.writer", r.Policy.Bindings[0].Role)
+					if len(r.Policy.Bindings) != 2 {
+						t.Errorf("expected 2 bindings, got %d", len(r.Policy.Bindings))
+					}
 
-					assert.Equal(t, "group:"+groupEmail, r.Policy.Bindings[1].Members[0])
-					assert.Equal(t, "roles/artifactregistry.repoAdmin", r.Policy.Bindings[1].Role)
+					if len(r.Policy.Bindings[0].Members) != 1 {
+						t.Errorf("expected 1 member, got %d", len(r.Policy.Bindings[0].Members))
+					}
+
+					if len(r.Policy.Bindings[1].Members) != 1 {
+						t.Errorf("expected 1 member, got %d", len(r.Policy.Bindings[1].Members))
+					}
+
+					if expected := "serviceAccount:" + expectedServiceAccount.Email; r.Policy.Bindings[0].Members[0] != expected {
+						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[0].Members[0])
+					}
+
+					if expected := "roles/artifactregistry.writer"; r.Policy.Bindings[0].Role != expected {
+						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[0].Role)
+					}
+
+					if expected := "group:" + groupEmail; r.Policy.Bindings[1].Members[0] != expected {
+						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[1].Members[0])
+					}
+
+					if expected := "roles/artifactregistry.repoAdmin"; r.Policy.Bindings[1].Role != expected {
+						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[1].Role)
+					}
 
 					return &iampb.Policy{}, nil
 				},
@@ -383,11 +445,15 @@ func TestReconcile(t *testing.T) {
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get service account
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(expectedServiceAccount))
+					if err := json.NewEncoder(w).Encode(expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 				// set iam policy
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(&iam.Policy{}))
+					if err := json.NewEncoder(w).Encode(&iam.Policy{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 			}),
 		}
@@ -430,7 +496,9 @@ func TestReconcile(t *testing.T) {
 		mocks := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
 				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
-					assert.Equal(t, expectedRepository.Name, r.Name)
+					if r.Name != expectedRepository.Name {
+						t.Errorf("expected name %q, got %q", expectedRepository.Name, r.Name)
+					}
 
 					repo := expectedRepository
 					repo.Description = "some incorrect description"
@@ -440,9 +508,17 @@ func TestReconcile(t *testing.T) {
 					return &repo, nil
 				},
 				update: func(ctx context.Context, r *artifactregistrypb.UpdateRepositoryRequest) (*artifactregistrypb.Repository, error) {
-					assert.Equal(t, expectedRepository.Description, r.Repository.Description)
-					assert.Equal(t, expectedRepository.Name, r.Repository.Name)
-					assert.Equal(t, teamSlug, r.Repository.Labels["team"])
+					if r.Repository.Description != expectedRepository.Description {
+						t.Errorf("expected description %q, got %q", expectedRepository.Description, r.Repository.Description)
+					}
+
+					if r.Repository.Name != expectedRepository.Name {
+						t.Errorf("expected name %q, got %q", expectedRepository.Name, r.Repository.Name)
+					}
+
+					if r.Repository.Labels["team"] != teamSlug {
+						t.Errorf("expected team label %q, got %q", teamSlug, r.Repository.Labels["team"])
+					}
 
 					return nil, abortTestErr
 				},
@@ -450,11 +526,15 @@ func TestReconcile(t *testing.T) {
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get service account
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(expectedServiceAccount))
+					if err := json.NewEncoder(w).Encode(expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 				// set iam policy
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.NoError(t, json.NewEncoder(w).Encode(&iam.Policy{}))
+					if err := json.NewEncoder(w).Encode(&iam.Policy{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
 				},
 			}),
 		}
@@ -533,7 +613,9 @@ func TestDelete(t *testing.T) {
 		mockedClients := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
-					assert.Contains(t, r.URL.Path, "management-project-123/serviceAccounts/gar-my-team-a193@management-project-123.iam.gserviceaccount.com")
+					if contains := "management-project-123/serviceAccounts/gar-my-team-a193@management-project-123.iam.gserviceaccount.com"; !strings.Contains(r.URL.Path, contains) {
+						t.Errorf("expected path to contain %q, got %q", contains, r.URL.Path)
+					}
 					w.WriteHeader(http.StatusInternalServerError)
 				},
 			}),
@@ -656,7 +738,9 @@ func TestDelete(t *testing.T) {
 		mockedClients := mocks{
 			artifactRegistry: &fakeArtifactRegistry{
 				delete: func(ctx context.Context, req *artifactregistrypb.DeleteRepositoryRequest) (*longrunningpb.Operation, error) {
-					assert.Equal(t, repositoryName, req.Name)
+					if req.Name != repositoryName {
+						t.Errorf("expected name %q, got %q", repositoryName, req.Name)
+					}
 					return &longrunningpb.Operation{
 						Done:   true,
 						Result: &longrunningpb.Operation_Response{},
