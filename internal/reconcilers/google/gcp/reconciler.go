@@ -184,7 +184,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 
 	}
 
-	return nil
+	return it.Err()
 }
 
 func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
@@ -612,13 +612,13 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 	for _, rule := range rules.Items {
 		for _, deleteTemplate := range rulesToDelete {
 			if rule.Name == deleteTemplate.name && rule.Priority == deleteTemplate.priority {
-				backendBucketInsertion, err := r.gcpServices.FirewallService.Delete(project.ProjectId, rule.Name).Context(ctx).Do()
+				operation, err := r.gcpServices.FirewallService.Delete(project.ProjectId, rule.Name).Context(ctx).Do()
 				if err != nil {
 					return err
 				}
 
-				for backendBucketInsertion.Status != "DONE" {
-					backendBucketInsertion, err = r.gcpServices.ComputeGlobalOperationsService.Wait(project.ProjectId, backendBucketInsertion.Name).Context(ctx).Do()
+				for operation.Status != "DONE" {
+					operation, err = r.gcpServices.ComputeGlobalOperationsService.Wait(project.ProjectId, operation.Name).Context(ctx).Do()
 					if err != nil {
 						return err
 					}
