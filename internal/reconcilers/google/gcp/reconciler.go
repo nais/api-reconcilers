@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	cloudcompute "cloud.google.com/go/compute/apiv1"
-	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
@@ -30,7 +28,6 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/serviceusage/v1"
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -195,17 +192,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 
 	}
 
-	// TODO: ONLY ENABLE FOR DEV (split out to separate reconciler?)
-	labels := map[string]string{
-		"team":             naisTeam.Slug,
-		"tenant":           r.tenantName,
-		managedByLabelName: managedByLabelValue,
-	}
-	if err := r.setupCDN(ctx, naisTeam, log, labels); err != nil {
-		return fmt.Errorf("setup CDN in management project for team %q: %w", naisTeam.Slug, err)
-	}
-
-	return it.Err()
+	return nil
 }
 
 func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
@@ -442,8 +429,8 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := calculateRoleBindings(policy.Bindings, map[string]string{
-		"roles/owner":  "group:" + *naisTeam.GoogleGroupEmail,
+	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string]string{
+		"roles/owner":  "group:" + naisTeam.GoogleGroupEmail,
 		r.cnrmRoleName: "serviceAccount:" + cnrmServiceAccount.Email,
 	})
 
@@ -563,172 +550,6 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 	return err
 }
 
-// TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
-// TODO: federation/workload identity setup for each team
-// TODO: buckets must be in the same project as the backend bucket (and all other cdn thingies)
-// TODO: add labels for all resources that we create
-func (r *googleGcpReconciler) setupCDN(ctx context.Context, naisTeam *protoapi.Team, log logrus.FieldLogger, labels map[string]string) error {
-	urlMapName := "nais-cdn-urlmap"
-	cacheInvalidatorRole := "roles/cdnCacheInvalidator"
-
-	// bucket name needs to be globally unique
-	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
-	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
-
-	// check for existence for early return
-	_, err := r.gcpServices.StorageClient.Bucket(bucketName).Attrs(ctx)
-	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
-		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
-		return nil
-	}
-
-	// set up a storage bucket
-	err = r.gcpServices.StorageClient.Bucket(bucketName).Create(ctx, teamProject.ProjectId, &storage.BucketAttrs{
-		Labels: labels,
-	})
-	if err != nil {
-		return fmt.Errorf("create bucket: %w", err)
-	}
-
-	// set up iam policy for the bucket
-	policy, err := r.gcpServices.StorageClient.Bucket(bucketName).IAM().Policy(ctx)
-	if err != nil {
-		return fmt.Errorf("get bucket policy: %w", err)
-	}
-	policy.Add("allUsers", "roles/storage.objectViewer")
-	policy.Add(fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail), "roles/storage.objectAdmin")
-
-	err = r.gcpServices.StorageClient.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
-	if err != nil {
-		return fmt.Errorf("add object viewer role to allUsers: %w", err)
-	}
-
-	// check for existing backend bucket
-	needsBackendBucket := false
-	backendBucket, err := r.gcpServices.BackendBucketsClient.Get(ctx, &computepb.GetBackendBucketRequest{
-		BackendBucket: bucketName,
-		Project:       r.googleManagementProjectID,
-	})
-	// TODO: this is very not good my guy
-	if err != nil {
-		var gapiError *googleapi.Error
-
-		if errors.As(err, &gapiError) {
-			// retry transient errors
-			if gapiError.Code != http.StatusNotFound {
-				return err
-			}
-			// otherwise, we need a bucket i guess
-			needsBackendBucket = true
-		}
-		// if it's not a google api error, shit's fucked
-		return err
-	}
-
-	// set up a backend bucket
-	if needsBackendBucket {
-		// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
-		const defaultTTL = int32(3600)
-		const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
-
-		req := &computepb.InsertBackendBucketRequest{
-			BackendBucketResource: &computepb.BackendBucket{
-				BucketName: &bucketName,
-				CdnPolicy: &computepb.BackendBucketCdnPolicy{
-					// Enables Cloud CDN to cache all static content served from the backend
-					// bucket. This includes content with a file extension that is typically
-					// associated with static content, such as .html, .css, and .js.
-					CacheMode:  ptr.To("CACHE_ALL_STATIC"),
-					ClientTtl:  ptr.To(defaultTTL),
-					DefaultTtl: ptr.To(defaultTTL),
-					MaxTtl:     ptr.To(defaultMaxTTL),
-					// If true then Cloud CDN will combine multiple concurrent cache fill
-					// requests into a small number of requests to the origin.
-					RequestCoalescing: ptr.To(true),
-				},
-				// When enabled, Cloud CDN automatically compresses content served from the
-				// backend bucket using gzip compression. This can reduce the amount of data
-				// sent over the network, resulting in faster load times for end users.
-				// Enum of "AUTOMATIC", "DISABLED".
-				CompressionMode: ptr.To("AUTOMATIC"),
-				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
-				EnableCdn:       ptr.To(true),
-				Name:            &bucketName,
-			},
-			Project: r.googleManagementProjectID,
-		}
-
-		backendBucketInsertion, err := r.gcpServices.BackendBucketsClient.Insert(ctx, req)
-		if err != nil {
-			return fmt.Errorf("insert backend bucket: %w", err)
-		}
-
-		err = backendBucketInsertion.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("wait for insert backend bucket operation: %w", err)
-		}
-
-		backendBucket, err = r.gcpServices.BackendBucketsClient.Get(ctx, &computepb.GetBackendBucketRequest{
-			BackendBucket: bucketName,
-			Project:       r.googleManagementProjectID,
-		})
-		if err != nil {
-			return fmt.Errorf("get backend bucket: %w", err)
-		}
-	}
-
-	// grant teams access to cache invalidation
-	managementProjectName := "projects/" + r.googleManagementProjectID
-	projectPolicy, err := r.gcpServices.CloudResourceManagerProjectsService.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
-	}
-
-	newBindings, updated := calculateRoleBindings(projectPolicy.Bindings, map[string]string{
-		cacheInvalidatorRole: "group:" + naisTeam.GoogleGroupEmail,
-	})
-
-	if updated {
-		projectPolicy.Bindings = newBindings
-		_, err = r.gcpServices.CloudResourceManagerProjectsService.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
-			Policy: projectPolicy,
-		}).Context(ctx).Do()
-		if err != nil {
-			return fmt.Errorf("assign GCP project IAM policy: %w", err)
-		}
-	}
-
-	// update urlMap in management project
-	urlMap, err := r.gcpServices.UrlMapsService.Get(r.googleManagementProjectID, urlMapName).Do()
-	updatedUrlMap := false
-	for _, pm := range urlMap.PathMatchers {
-		seen := make(map[string]bool)
-		for _, pr := range pm.PathRules {
-			if !seen[pr.Service] {
-				seen[pr.Service] = true
-			}
-		}
-		pr := compute.PathRule{
-			Paths:   []string{fmt.Sprintf("/%s/*", naisTeam.Slug)},
-			Service: *backendBucket.SelfLink,
-		}
-
-		if !seen[*backendBucket.SelfLink] {
-			pm.PathRules = append(pm.PathRules, &pr)
-			updatedUrlMap = true
-		}
-	}
-
-	if updatedUrlMap {
-		_, err := r.gcpServices.UrlMapsService.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
-		if err != nil {
-			return fmt.Errorf("update urlMap: %w", err)
-		}
-	}
-
-	return nil
-}
-
 // createGcpServices Creates the GCP services used by the reconciler
 func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDomain string) (*GcpServices, error) {
 	builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
@@ -828,7 +649,6 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -858,8 +678,8 @@ func GetProjectDisplayName(teamSlug, environment string) string {
 	return prefix + suffix
 }
 
-// calculateRoleBindings Given a set of role bindings, make sure the ones in requiredRoleBindings are present
-func calculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string]string) ([]*cloudresourcemanager.Binding, bool) {
+// CalculateRoleBindings Given a set of role bindings, make sure the ones in requiredRoleBindings are present
+func CalculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string]string) ([]*cloudresourcemanager.Binding, bool) {
 	updated := false
 
 REQUIRED:
