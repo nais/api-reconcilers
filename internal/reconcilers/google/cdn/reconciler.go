@@ -241,6 +241,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 }
 
 func (*cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	// Todo: Delete??
 	return nil
 }
 
