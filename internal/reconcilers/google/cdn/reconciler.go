@@ -81,6 +81,12 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		managedByLabelName: managedByLabelValue,
 	}
 
+	if naisTeam.GoogleGroupEmail == nil {
+		return fmt.Errorf("team %s has no google group email", naisTeam.Slug)
+	}
+
+	email := *naisTeam.GoogleGroupEmail
+
 	urlMapName := "nais-cdn-urlmap"
 	cacheInvalidatorRole := "roles/cdnCacheInvalidator"
 
@@ -113,7 +119,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get bucket policy: %w", err)
 	}
 	policy.Add("allUsers", "roles/storage.objectViewer")
-	policy.Add(fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail), "roles/storage.objectAdmin")
+	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
 	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
 
 	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
@@ -203,7 +209,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
 		cacheInvalidatorRole: {
-			fmt.Sprintf("group:%s", naisTeam.GoogleGroupEmail),
+			fmt.Sprintf("group:%s", email),
 			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
 		},
 	})
