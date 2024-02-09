@@ -267,8 +267,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/moby/term v0.5.0 h1:xt8Q1nalod/v7BqbG21f8mQPqH+xAaC9C3N3wfWbVP0=
 github.com/moby/term v0.5.0/go.mod h1:8FzsFHVUBGZdbDsJw/ot+X+d5HLUbvklYLJ9uGfcI3Y=
-github.com/nais/api v0.0.0-20240209081440-38474f5d3d76 h1:2OUn/3QS2rURTBi/tUkzj0JTTCj4sGUSxk/nF/EyPLk=
-github.com/nais/api v0.0.0-20240209081440-38474f5d3d76/go.mod h1:d+j7DNE+21NqtKc2Hzz3nizEpepFdRTT2PCgpm7Pw/s=
+github.com/nais/api v0.0.0-20240209135958-7d714298fbad h1:7HJNcvIga+3jsZy1L2mbtPZVU7Qf6+dTTmyrcN9sG8E=
+github.com/nais/api v0.0.0-20240209135958-7d714298fbad/go.mod h1:d+j7DNE+21NqtKc2Hzz3nizEpepFdRTT2PCgpm7Pw/s=
 github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961 h1:FtfEwEQq2hWEZFmg3F8Ix9vq6x8o0PF4bEvCn7qwCxw=
 github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961/go.mod h1:zC59yj0La1TS291o/9XSVZ0XAY9UlJS6pUFD3ouHmjU=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=

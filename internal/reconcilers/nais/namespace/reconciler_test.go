@@ -88,12 +88,12 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
@@ -134,8 +134,8 @@ func TestReconcile(t *testing.T) {
 		defer closer()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
@@ -163,8 +163,8 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Times(2)
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
 				return len(req.Resources) == 2
 			})).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).

@@ -143,7 +143,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		}
 	}
 
-	_, err := client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.Reconcilers().DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})

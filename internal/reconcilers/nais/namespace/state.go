@@ -25,13 +25,13 @@ func (r *naisNamespaceReconciler) saveState(ctx context.Context, client *apiclie
 		})
 	}
 
-	_, err := client.ReconcilerResources().Save(ctx, req)
+	_, err := client.Reconcilers().SaveResources(ctx, req)
 	return err
 }
 
 func (r *naisNamespaceReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (state, error) {
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListReconcilerResourcesResponse, error) {
-		return client.ReconcilerResources().List(ctx, &protoapi.ListReconcilerResourcesRequest{Limit: limit, Offset: offset, TeamSlug: teamSlug, ReconcilerName: r.Name()})
+		return client.Reconcilers().Resources(ctx, &protoapi.ListReconcilerResourcesRequest{Limit: limit, Offset: offset, TeamSlug: teamSlug, ReconcilerName: r.Name()})
 	})
 	updated := state{}
 	for it.Next() {

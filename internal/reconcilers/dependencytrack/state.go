@@ -36,7 +36,7 @@ func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient,
 		})
 	}
 
-	if _, err := client.ReconcilerResources().Save(ctx, req); err != nil {
+	if _, err := client.Reconcilers().SaveResources(ctx, req); err != nil {
 		return err
 	}
 
@@ -44,7 +44,7 @@ func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient,
 }
 
 func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*dependencyTrackState, error) {
-	resp, err := client.ReconcilerResources().List(ctx, &protoapi.ListReconcilerResourcesRequest{
+	resp, err := client.Reconcilers().Resources(ctx, &protoapi.ListReconcilerResourcesRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})
@@ -65,8 +65,8 @@ func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient,
 	return s, nil
 }
 
-func (r *reconciler) deleteState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) error {
-	_, err := client.Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+func (r *reconciler) deleteState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) error {
+	_, err := client.DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       teamSlug,
 	})

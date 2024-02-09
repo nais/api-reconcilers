@@ -265,8 +265,8 @@ func TestReconcile(t *testing.T) {
 		_, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{
 				Nodes: []*protoapi.ReconcilerResource{
 					{
@@ -385,8 +385,8 @@ func TestReconcile(t *testing.T) {
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -473,8 +473,8 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -542,8 +542,8 @@ func TestReconcile(t *testing.T) {
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 

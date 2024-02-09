@@ -45,8 +45,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
@@ -59,8 +59,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
 				if len(req.Resources) != 2 {
 					return false
 				}
@@ -182,8 +182,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Once()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -206,12 +206,12 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
 				return len(req.Resources) == 0
 			})).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -267,8 +267,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().
@@ -277,8 +277,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
 				return len(req.Resources) == 0
 			})).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -360,8 +360,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
@@ -384,8 +384,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().
@@ -406,8 +406,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
-		mockServer.ReconcilerResources.EXPECT().
-			Save(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
+		mockServer.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
 				return len(req.Resources) == 0
 			})).
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
@@ -558,8 +558,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -609,8 +609,8 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -701,8 +701,8 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+		mockServer.Reconcilers.EXPECT().
+			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().

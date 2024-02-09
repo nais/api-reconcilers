@@ -13,7 +13,7 @@ require (
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api v0.0.0-20240209081440-38474f5d3d76
+	github.com/nais/api v0.0.0-20240209135958-7d714298fbad
 	github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sethvargo/go-envconfig v1.0.0

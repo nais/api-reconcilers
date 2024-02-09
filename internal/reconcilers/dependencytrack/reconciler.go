@@ -108,7 +108,7 @@ func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, na
 		return err
 	}
 
-	if err := r.deleteState(ctx, client.ReconcilerResources(), naisTeam.Slug); err != nil {
+	if err := r.deleteState(ctx, client.Reconcilers(), naisTeam.Slug); err != nil {
 		return err
 	}
 

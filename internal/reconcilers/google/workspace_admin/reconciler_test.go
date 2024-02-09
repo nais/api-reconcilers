@@ -207,8 +207,8 @@ func Test_Delete(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
+		mockServer.Reconcilers.EXPECT().
+			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
@@ -290,8 +290,8 @@ func Test_Delete(t *testing.T) {
 		defer closer()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
+		mockServer.Reconcilers.EXPECT().
+			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().

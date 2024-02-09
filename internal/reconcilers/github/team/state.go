@@ -45,7 +45,7 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 		})
 	}
 
-	if _, err := client.ReconcilerResources().Save(ctx, req); err != nil {
+	if _, err := client.Reconcilers().SaveResources(ctx, req); err != nil {
 		return err
 	}
 
@@ -63,10 +63,10 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 }
 
 func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*GitHubState, error) {
-	return getState(ctx, client.ReconcilerResources(), teamSlug)
+	return getState(ctx, client.Reconcilers(), teamSlug)
 }
 
-func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) ([]*GitHubRepository, error) {
+func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) ([]*GitHubRepository, error) {
 	state, err := getState(ctx, client, teamSlug)
 	if err != nil {
 		return nil, err
@@ -75,8 +75,8 @@ func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilerResource
 	return state.Repositories, nil
 }
 
-func getState(ctx context.Context, client protoapi.ReconcilerResourcesClient, teamSlug string) (*GitHubState, error) {
-	resp, err := client.List(ctx, &protoapi.ListReconcilerResourcesRequest{
+func getState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) (*GitHubState, error) {
+	resp, err := client.Resources(ctx, &protoapi.ListReconcilerResourcesRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})

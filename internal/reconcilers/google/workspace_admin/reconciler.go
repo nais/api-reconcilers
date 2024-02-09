@@ -124,7 +124,7 @@ func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *api
 		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", *naisTeam.GoogleGroupEmail, naisTeam.Slug, err)
 	}
 
-	_, err := client.ReconcilerResources().Delete(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.Reconcilers().DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})

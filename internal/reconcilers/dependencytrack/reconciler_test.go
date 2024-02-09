@@ -60,8 +60,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
-		grpcServers.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
 			Once()
 		grpcServers.Teams.EXPECT().
@@ -74,8 +74,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				},
 			}}, nil).
 			Once()
-		grpcServers.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+		grpcServers.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
 					Value: []byte(teamID),
@@ -123,8 +123,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
-		grpcServers.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{
 				Nodes: []*protoapi.ReconcilerResource{
 					{
@@ -144,8 +144,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				},
 			}}, nil).
 			Once()
-		grpcServers.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+		grpcServers.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
 					Value: []byte(teamID),
@@ -179,8 +179,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 		dpClient := dependencytrack_reconciler.NewMockClient(t)
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
-		grpcServers.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{
 				Nodes: []*protoapi.ReconcilerResource{
 					{
@@ -204,8 +204,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				},
 			}}, nil).
 			Once()
-		grpcServers.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+		grpcServers.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
 					Value: []byte(teamID),
@@ -247,8 +247,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
-		grpcServers.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{
 				Nodes: []*protoapi.ReconcilerResource{
 					{
@@ -272,8 +272,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 				},
 			}}, nil).
 			Once()
-		grpcServers.ReconcilerResources.EXPECT().
-			Save(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
+		grpcServers.Reconcilers.EXPECT().
+			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
 				{
 					Name:  "team_id",
 					Value: []byte(teamID),
@@ -325,8 +325,8 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 		dpClient.EXPECT().DeleteTeam(mock.Anything, teamID).Return(nil).Once()
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
-		grpcServers.ReconcilerResources.EXPECT().
-			List(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.ListReconcilerResourcesResponse{
 				Nodes: []*protoapi.ReconcilerResource{
 					{
@@ -336,8 +336,8 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 				},
 			}, nil).
 			Once()
-		grpcServers.ReconcilerResources.EXPECT().
-			Delete(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+		grpcServers.Reconcilers.EXPECT().
+			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
 			Once()
 
