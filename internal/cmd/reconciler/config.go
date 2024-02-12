@@ -71,7 +71,7 @@ type Config struct {
 
 	PubSub struct {
 		// SubscriptionID The ID of the Pub/Sub subscription used to listen for events from the NAIS API.
-		SubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=api-reconcilers-api-events"`
+		SubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=nais-api-reconcilers-api-events"`
 
 		// ProjectID The ID of the Pub/Sub project used to listen for events from the NAIS API. Defaults to GoogleManagementProjectID.
 		ProjectID string `env:"PUBSUB_PROJECT_ID,default=$GOOGLE_MANAGEMENT_PROJECT_ID"`
@@ -86,7 +86,7 @@ type Config struct {
 	// LogFormat Customize the log format. Can be "text" or "json".
 	LogFormat string `env:"LOG_FORMAT,default=json"`
 
-	// LogLevel The log level used in teams-backend.
+	// LogLevel The log level used in api-reconcilers
 	LogLevel string `env:"LOG_LEVEL,default=info"`
 
 	// TenantDomain The domain for the tenant.
