@@ -17,7 +17,6 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
@@ -80,7 +79,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadI
 		}
 
 		if r.iamService == nil {
-			iamService, err := iam.NewService(ctx, option.WithTokenSource(ts), option.WithHTTPClient(otelhttp.DefaultClient))
+			iamService, err := iam.NewService(ctx, option.WithTokenSource(ts))
 			if err != nil {
 				return nil, err
 			}

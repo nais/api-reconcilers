@@ -11,7 +11,6 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	admin_directory_v1 "google.golang.org/api/admin/directory/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
@@ -62,7 +61,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain string, op
 			return nil, fmt.Errorf("get delegated token source: %w", err)
 		}
 
-		srv, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts), option.WithHTTPClient(otelhttp.DefaultClient))
+		srv, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts))
 		if err != nil {
 			return nil, fmt.Errorf("retrieve directory client: %w", err)
 		}

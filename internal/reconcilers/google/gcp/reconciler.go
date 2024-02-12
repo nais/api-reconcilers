@@ -19,7 +19,6 @@ import (
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/cloudbilling/v1"
 	"google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/compute/v1"
@@ -555,7 +554,6 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 
 	opts := []option.ClientOption{
 		option.WithTokenSource(ts),
-		option.WithHTTPClient(otelhttp.DefaultClient),
 	}
 
 	cloudResourceManagerService, err := cloudresourcemanager.NewService(ctx, opts...)
