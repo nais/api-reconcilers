@@ -7,7 +7,6 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"github.com/google/uuid"
-	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
@@ -33,19 +32,13 @@ func WithPubSubClient(client *pubsub.Client) OptFunc {
 }
 
 type naisNamespaceReconciler struct {
-	azureEnabled              bool
-	clusters                  gcp.Clusters
-	cnrmServiceAccountID      string
 	googleManagementProjectID string
 	pubsubClient              *pubsub.Client
 	tenantDomain              string
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID string, azureEnabled bool, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, tenantDomain, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &naisNamespaceReconciler{
-		azureEnabled:              azureEnabled,
-		clusters:                  clusters,
-		cnrmServiceAccountID:      cnrmServiceAccountID,
 		googleManagementProjectID: googleManagementProjectID,
 		tenantDomain:              tenantDomain,
 	}
@@ -95,7 +88,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	}
 
 	azureGroupID := uuid.Nil
-	if r.azureEnabled && naisTeam.AzureGroupId != nil {
+	if naisTeam.AzureGroupId != nil {
 		id, err := uuid.Parse(*naisTeam.AzureGroupId)
 		if err != nil {
 			return fmt.Errorf("unable to parse Azure group ID: %w", err)
@@ -177,7 +170,7 @@ func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, teamSlug,
 }
 
 func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, azureGroupID uuid.UUID) error {
-	payload, err := createNamespacePayload(naisTeam, env, r.cnrmServiceAccountID, azureGroupID)
+	payload, err := createNamespacePayload(naisTeam, env, azureGroupID)
 	if err != nil {
 		return err
 	}

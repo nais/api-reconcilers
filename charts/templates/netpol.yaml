@@ -1,9 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "teams-backend.fullname" . }}
+  name: {{ include "api-reconcilers.fullname" . }}
   labels:
-    {{- include "teams-backend.labels" . | nindent 4 }}
+    {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
   egress:
   - to:

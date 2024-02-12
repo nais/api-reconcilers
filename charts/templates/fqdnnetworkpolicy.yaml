@@ -2,9 +2,9 @@
 apiVersion: networking.gke.io/v1alpha3
 kind: FQDNNetworkPolicy
 metadata:
-  name: {{ include "teams-backend.fullname" . }}
+  name: {{ include "api-reconcilers.fullname" . }}
   labels:
-    {{- include "teams-backend.labels" . | nindent 4 }}
+    {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
   egress:
     {{- if  .Values.gitHub.authEndpoint }}
@@ -17,7 +17,7 @@ spec:
     {{- end }}
   podSelector:
     matchLabels:
-      {{- include "teams-backend.selectorLabels" . | nindent 6 }}
+      {{- include "api-reconcilers.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Egress
 {{- end }}

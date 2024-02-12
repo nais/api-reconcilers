@@ -55,13 +55,12 @@ type GcpServices struct {
 }
 
 type googleGcpReconciler struct {
-	billingAccount       string
-	clusters             gcp.Clusters
-	cnrmRoleName         string
-	cnrmServiceAccountID string
-	gcpServices          *GcpServices
-	tenantDomain         string
-	tenantName           string
+	billingAccount string
+	clusters       gcp.Clusters
+	cnrmRoleName   string
+	gcpServices    *GcpServices
+	tenantDomain   string
+	tenantName     string
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -72,14 +71,13 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
-		billingAccount:       billingAccount,
-		clusters:             clusters,
-		cnrmRoleName:         cnrmRoleName,
-		cnrmServiceAccountID: cnrmServiceAccountID,
-		tenantDomain:         tenantDomain,
-		tenantName:           tenantName,
+		billingAccount: billingAccount,
+		clusters:       clusters,
+		cnrmRoleName:   cnrmRoleName,
+		tenantDomain:   tenantDomain,
+		tenantName:     tenantName,
 	}
 
 	for _, opt := range opts {
@@ -452,7 +450,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 // getOrCreateProjectCnrmServiceAccount Get the CNRM service account for the project in this env. If the service account
 // does not exist, attempt to create it, and then return it.
 func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, teamProjectID string) (*iam.ServiceAccount, error) {
-	email := r.cnrmServiceAccountID + "@" + teamProjectID + ".iam.gserviceaccount.com"
+	email := "nais-sa-cnrm@" + teamProjectID + ".iam.gserviceaccount.com"
 	name := "projects/-/serviceAccounts/" + email
 	serviceAccount, err := r.gcpServices.IamProjectsServiceAccountsService.Get(name).Context(ctx).Do()
 	if err == nil {
@@ -460,7 +458,7 @@ func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.C
 	}
 
 	createServiceAccountRequest := &iam.CreateServiceAccountRequest{
-		AccountId: r.cnrmServiceAccountID,
+		AccountId: "nais-sa-cnrm",
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: "CNRM service account",
 			Description: "Managed by github.com/nais/api-reconcilers",

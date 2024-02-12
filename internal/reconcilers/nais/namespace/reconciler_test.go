@@ -9,7 +9,6 @@ import (
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsub/pstest"
 	"github.com/google/uuid"
-	"github.com/nais/api-reconcilers/internal/gcp"
 	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
@@ -31,17 +30,12 @@ func TestReconcile(t *testing.T) {
 		teamSlug                  = "slug"
 		environmentDev            = "dev"
 		environmentProd           = "prod"
-		clusterProjectIDDev       = "cluster-dev-123"
-		clusterProjectIDProd      = "cluster-prod-123"
 		cnrmEmail                 = "nais-sa-cnrm@team-project-123.iam.gserviceaccount.com"
 		slackChannel              = "#team-channel"
 		googleGroupEmail          = "group-email@example.com"
-		azureEnabled              = true
-		cnrmServiceAccountID      = "nais-sa-cnrm"
 	)
 
 	log, _ := test.NewNullLogger()
-	noClusters := gcp.Clusters{}
 
 	t.Run("no google group email on team", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
@@ -50,7 +44,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -70,7 +64,7 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -101,7 +95,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.ListTeamEnvironmentsResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -117,17 +111,6 @@ func TestReconcile(t *testing.T) {
 			SlackChannel:     slackChannel,
 			GoogleGroupEmail: ptr.To(googleGroupEmail),
 			AzureGroupId:     ptr.To(uuid.New().String()),
-		}
-
-		clusters := gcp.Clusters{
-			environmentDev: gcp.Cluster{
-				TeamsFolderID: 123,
-				ProjectID:     clusterProjectIDDev,
-			},
-			environmentProd: gcp.Cluster{
-				TeamsFolderID: 123,
-				ProjectID:     clusterProjectIDProd,
-			},
 		}
 
 		srv, pubsubClient, closer := getPubsubServerAndClient(ctx, googleManagementProjectID, "naisd-console-"+environmentDev, "naisd-console-"+environmentProd)
@@ -170,7 +153,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
+		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -221,13 +204,6 @@ func TestReconcile(t *testing.T) {
 			SlackChannel: slackChannel,
 		}
 
-		clusters := gcp.Clusters{
-			environmentDev: gcp.Cluster{
-				TeamsFolderID: 123,
-				ProjectID:     clusterProjectIDDev,
-			},
-		}
-
 		srv, pubsubClient, closer := getPubsubServerAndClient(ctx, googleManagementProjectID, "naisd-console-"+environmentDev)
 		defer closer()
 
@@ -249,7 +225,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, clusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
+		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -296,8 +272,8 @@ func getPubsubServerAndClient(ctx context.Context, projectID string, topics ...s
 }
 
 func noopPubsub() *pubsub.Client {
-	ctx, close := context.WithCancel(context.Background())
-	close()
+	ctx, closer := context.WithCancel(context.Background())
+	closer()
 
 	client, err := pubsub.NewClient(
 		ctx,

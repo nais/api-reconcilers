@@ -18,7 +18,7 @@ type Config struct {
 		Endpoint string `env:"DEPENDENCYTRACK_ENDPOINT"`
 
 		// Username The username to use when authenticating with DependencyTrack.
-		Username string `env:"DEPENDENCYTRACK_USERNAME"`
+		Username string `env:"DEPENDENCYTRACK_USERNAME,default=nais-api-reconcilers"`
 
 		// Password The password to use when authenticating with DependencyTrack.
 		Password string `env:"DEPENDENCYTRACK_PASSWORD"`
@@ -38,9 +38,6 @@ type Config struct {
 		//
 		// Example: `organizations/<org_id>/roles/CustomCNRMRole`, where `<org_id>` is a numeric ID.
 		CnrmRole string `env:"GCP_CNRM_ROLE"`
-
-		// CnrmServiceAccountID The ID of the service account used by CNRM to manage GCP resources.
-		CnrmServiceAccountID string `env:"GCP_CNRM_SERVICE_ACCOUNT_ID,default=nais-sa-cnrm"`
 
 		// WorkloadIdentityPoolName The name of the workload identity pool used in the management project.
 		//
@@ -72,10 +69,12 @@ type Config struct {
 		ProvisionKey string `env:"NAIS_DEPLOY_PROVISION_KEY"`
 	}
 
-	NaisNamespace struct {
-		// AzureEnabled When set to true teams-backend will send the Azure group ID of the team, if it has been created by
-		// the Azure AD group reconciler, to naisd when creating a namespace for the NAIS team.
-		AzureEnabled bool `env:"NAIS_NAMESPACE_AZURE_ENABLED"`
+	PubSub struct {
+		// SubscriptionID The ID of the Pub/Sub subscription used to listen for events from the NAIS API.
+		SubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=api-reconcilers-api-events"`
+
+		// ProjectID The ID of the Pub/Sub project used to listen for events from the NAIS API. Defaults to GoogleManagementProjectID.
+		ProjectID string `env:"PUBSUB_PROJECT_ID,default=$GOOGLE_MANAGEMENT_PROJECT_ID"`
 	}
 
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
@@ -98,12 +97,6 @@ type Config struct {
 
 	// Reconcilers to enable when first registering the reconciler
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
-
-	// PubsubSubscriptionID The ID of the Pub/Sub subscription used to listen for events from the NAIS API.
-	PubsubSubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=api-reconcilers-api-events"`
-
-	// PubSubProjectID The ID of the Pub/Sub project used to listen for events from the NAIS API. Defaults to GoogleManagementProjectID.
-	PubSubProjectID string `env:"PUBSUB_PROJECT_ID,default=$GOOGLE_MANAGEMENT_PROJECT_ID"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

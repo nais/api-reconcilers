@@ -1,9 +1,9 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: {{ include "teams-backend.fullname" . }}
+  name: {{ include "api-reconcilers.fullname" . }}
   labels:
-    {{- include "teams-backend.labels" . | nindent 4 }}
+    {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
   endpoints:
   - interval: 1m
@@ -14,4 +14,4 @@ spec:
     - {{ .Release.Namespace }}
   selector:
     matchLabels:
-      {{- include "teams-backend.selectorLabels" . | nindent 6 }}
+      {{- include "api-reconcilers.selectorLabels" . | nindent 6 }}

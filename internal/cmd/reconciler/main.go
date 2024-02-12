@@ -94,7 +94,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubsubSubscriptionID, cfg.PubSubProjectID, log)
+	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubSub.SubscriptionID, cfg.PubSub.ProjectID, log)
 
 	azureGroupReconciler := azure_group_reconciler.New(cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
 
@@ -113,7 +113,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount, cfg.GCP.CnrmServiceAccountID)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.Clusters, cfg.TenantDomain, cfg.GoogleManagementProjectID, cfg.GCP.CnrmServiceAccountID, cfg.NaisNamespace.AzureEnabled)
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.TenantDomain, cfg.GoogleManagementProjectID)
 	if err != nil {
 		return err
 	}

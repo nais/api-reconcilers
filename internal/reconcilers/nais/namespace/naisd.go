@@ -32,11 +32,11 @@ type NaisdRequest struct {
 	Data json.RawMessage `json:"data"`
 }
 
-func createNamespacePayload(naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, cnrmServiceAccountID string, azureGroupID uuid.UUID) ([]byte, error) {
+func createNamespacePayload(naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, azureGroupID uuid.UUID) ([]byte, error) {
 	cnrmEmail, gcpProjectID := "", ""
 	if env.GcpProjectId != nil {
 		gcpProjectID = *env.GcpProjectId
-		cnrmEmail = cnrmServiceAccountID + "@" + gcpProjectID + ".iam.gserviceaccount.com"
+		cnrmEmail = "nais-sa-cnrm@" + gcpProjectID + ".iam.gserviceaccount.com"
 	}
 
 	var gge string

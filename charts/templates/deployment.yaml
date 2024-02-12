@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "teams-backend.fullname" . }}
+  name: {{ include "api-reconcilers.fullname" . }}
   labels:
-    {{- include "teams-backend.labels" . | nindent 4 }}
+    {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "teams-backend.selectorLabels" . | nindent 6 }}
+      {{- include "api-reconcilers.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "teams-backend.selectorLabels" . | nindent 8 }}
+        {{- include "api-reconcilers.selectorLabels" . | nindent 8 }}
       annotations:
         kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
     spec:
-      serviceAccountName: {{ include "teams-backend.fullname" . }}
+      serviceAccountName: {{ include "api-reconcilers.fullname" . }}
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -30,7 +30,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
             - secretRef:
-                name: {{ include "teams-backend.fullname" . }}
+                name: {{ include "api-reconcilers.fullname" . }}
                 optional: true
           securityContext:
             runAsNonRoot: true
@@ -48,20 +48,44 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.logLevel }}
             - name: INSECURE_GRPC
-              value: {{ .Values.nais_api.insecure }}
+              value: {{ .Values.naisAPI.insecure }}
             - name: GRPC_TARGET
-              value: {{ .Values.nais_api.url }}
+              value: {{ .Values.naisAPI.target }}
             - name: LISTEN_ADDRESS
               value: :3005
             - name: TENANT_DOMAIN
               value: {{ .Values.tenantDomain }}
             - name: TENANT_NAME
               value: {{ .Values.tenantName }}
+            - name: RECONCILERS_TO_ENABLE
+              value: {{ .Values.reconcilersToEnable | quote }}
             # GitHub
             - name: GITHUB_AUTH_ENDPOINT
               value: {{ .Values.gitHub.authEndpoint }}
             - name: GITHUB_ORG
               value: {{ .Values.gitHub.organization }}
+            # Azure
+            {{- if .Values.azure.groupNamePrefix }}
+            - name: AZURE_GROUP_NAME_PREFIX
+              value: {{ .Values.azure.groupNamePrefix }}
+            {{- end }}
+            # NAIS deploy
+            - name: NAIS_DEPLOY_ENDPOINT
+              value: {{ .Values.naisDeploy.endpoint }}
+            # GCP
+            - name: GCP_BILLING_ACCOUNT
+              value: {{ .Values.gcp.billingAccount | quote }}
+            - name: GCP_CLUSTERS
+              value: {{ .Values.gcp.clusters | quote }}
+            - name: GCP_CNRM_ROLE
+              value: {{ .Values.gcp.cnrmRole | quote }}
+            - name: GCP_WORKLOAD_IDENTITY_POOL_NAME
+              value: {{ .Values.gcp.workloadIdentityPoolName | quote }}
+            # DependencyTrack
+            - name: DEPENDENCYTRACK_ENDPOINT
+              value: {{ .Values.dependencyTrack.endpoint | quote }}
+            - name: DEPENDENCYTRACK_USERNAME
+              value: {{ .Values.dependencyTrack.username | quote }}
 
           ports:
             - name: http

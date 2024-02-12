@@ -11,39 +11,34 @@ logFormat: json
 googleManagementProjectID: # mapped in fasit
 tenantDomain: # mapped in fasit
 tenantName: # mapped in fasit
-legacyNaisNamespaceMapping: # mapped in fasit
+reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar"
 
 azure:
-  groupNamePrefix: nais-team-
+  groupNamePrefix:
 
 gitHub:
   authEndpoint:
   organization:
 
-naisNamespace:
-  azureEnabled: false
-
 naisDeploy:
-  endpoint: # mapped in fasit
-  deployKeyEndpoint: # mapped in fasit
+  endpoint: http://hookd/internal/api/v1/provision
   provisionKey: # mapped in fasit
 
 google:
   serviceAccountEmail: # mapped in fasit
 
 gcp:
+  billingAccount: # mapped in fasit
   clusters: # mapped in fasit
   cnrmRole: # mapped in fasit
-  billingAccount: # mapped in fasit
   workloadIdentityPoolName: # mapped in fasit
 
-dependencytrack:
+dependencyTrack:
   endpoint: # mapped in fasit
   username: teams
   password: # mapped in fasit
 
-nais_api:
+naisAPI:
   insecure: "true"
-  url: nais-api:3001
+  target: nais-api:3001
 
-firstRunEnableReconcilers: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar"
