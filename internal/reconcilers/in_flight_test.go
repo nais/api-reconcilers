@@ -32,7 +32,7 @@ func TestInFlight(t *testing.T) {
 	inFlight.Remove(team1)
 
 	if !inFlight.Set(team1) {
-		t.Errorf("Expected Set to return false")
+		t.Errorf("Expected Set to return true")
 	}
 
 	if inFlight.Set(team2) {
