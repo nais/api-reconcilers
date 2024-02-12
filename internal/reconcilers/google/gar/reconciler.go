@@ -68,7 +68,6 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadI
 	}
 
 	if r.iamService == nil || r.artifactRegistry == nil {
-		fmt.Println("CUSTOM HANDLER", r.iamService != nil, r.artifactRegistry != nil)
 		builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
 		if err != nil {
 			return nil, err
