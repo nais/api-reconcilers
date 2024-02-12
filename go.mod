@@ -13,14 +13,14 @@ require (
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api v0.0.0-20240209135958-7d714298fbad
-	github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961
+	github.com/nais/api v0.0.0-20240209152755-005fb86efda4
+	github.com/nais/dependencytrack v0.0.0-20240212045319-10e523c017ff
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sethvargo/go-envconfig v1.0.0
 	github.com/shurcooL/githubv4 v0.0.0-20240120211514-18a1ae0e79dc
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
-	github.com/vektra/mockery/v2 v2.40.2
+	github.com/vektra/mockery/v2 v2.40.3
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.48.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.48.0
 	go.opentelemetry.io/otel v1.23.1

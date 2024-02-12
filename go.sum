@@ -267,10 +267,10 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/moby/term v0.5.0 h1:xt8Q1nalod/v7BqbG21f8mQPqH+xAaC9C3N3wfWbVP0=
 github.com/moby/term v0.5.0/go.mod h1:8FzsFHVUBGZdbDsJw/ot+X+d5HLUbvklYLJ9uGfcI3Y=
-github.com/nais/api v0.0.0-20240209135958-7d714298fbad h1:7HJNcvIga+3jsZy1L2mbtPZVU7Qf6+dTTmyrcN9sG8E=
-github.com/nais/api v0.0.0-20240209135958-7d714298fbad/go.mod h1:d+j7DNE+21NqtKc2Hzz3nizEpepFdRTT2PCgpm7Pw/s=
-github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961 h1:FtfEwEQq2hWEZFmg3F8Ix9vq6x8o0PF4bEvCn7qwCxw=
-github.com/nais/dependencytrack v0.0.0-20240208124913-513b3ad1d961/go.mod h1:zC59yj0La1TS291o/9XSVZ0XAY9UlJS6pUFD3ouHmjU=
+github.com/nais/api v0.0.0-20240209152755-005fb86efda4 h1:T6qv3GBE56cXGo1z3axRfxQsakLCY83mAfoPvjnEgvc=
+github.com/nais/api v0.0.0-20240209152755-005fb86efda4/go.mod h1:Uvltp+8JGkw0EpYBUvkue24FHpttnJQSa0K+//xme8w=
+github.com/nais/dependencytrack v0.0.0-20240212045319-10e523c017ff h1:vEBRGIUHbRw9Df/ajxggBe6ef31VdK+zetms7pE9mhA=
+github.com/nais/dependencytrack v0.0.0-20240212045319-10e523c017ff/go.mod h1:tO3PgO7achftJKGgTBNAf4rARTa4ICsoxUwQOyuScmw=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.0.2 h1:9yCKha/T5XdGtO0q9Q9a6T5NUCsTn/DrBg0D7ufOcFM=
@@ -348,8 +348,8 @@ github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcU
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
 github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
-github.com/vektra/mockery/v2 v2.40.2 h1:JKuQ74IXibMCGKG6F0yvH/s2sNs1CHy/nGBP0We5DJ8=
-github.com/vektra/mockery/v2 v2.40.2/go.mod h1:KYBZF/7sqOa86BaOZPYsoCZWEWLS90a5oBLg2pVudxY=
+github.com/vektra/mockery/v2 v2.40.3 h1:IZ2lydSDFsY0khnEsbSu13VLcqSsa6UYSS/8F+uOJmo=
+github.com/vektra/mockery/v2 v2.40.3/go.mod h1:KYBZF/7sqOa86BaOZPYsoCZWEWLS90a5oBLg2pVudxY=
 github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb h1:zGWFAtiMcyryUHoUjUJX0/lt1H2+i2Ka2n+D3DImSNo=
 github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb/go.mod h1:N2zxlSyiKSe5eX1tZViRH5QA0qijqEDrYZiPEAiq3wU=
 github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 h1:EzJWgHovont7NscjpAxXsDA8S8BMYve8Y5+7cuRE7R0=
