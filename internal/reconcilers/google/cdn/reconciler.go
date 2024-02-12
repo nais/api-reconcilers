@@ -351,7 +351,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 }
 
 func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.ReconcilerResources())
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.Reconcilers())
 	if err != nil {
 		return err
 	}
@@ -371,7 +371,7 @@ func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAcco
 	return err
 }
 
-func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilerResourcesClient) ([]string, error) {
+func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilersClient) ([]string, error) {
 	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client, teamSlug)
 	if err != nil {
 		return nil, err
