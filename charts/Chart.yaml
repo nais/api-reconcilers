@@ -1,0 +1,7 @@
+apiVersion: v2
+name: nais-api-reconcilers
+description: Reconcilers for NAIS API
+type: application
+version: 0.0.1
+sources:
+  - https://github.com/nais/api-reconcilers/tree/main/charts

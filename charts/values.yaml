@@ -1,0 +1,49 @@
+image:
+  repository: europe-north1-docker.pkg.dev/nais-io/nais/images/api-reconcilers
+  tag: main
+resources:
+  requests:
+    cpu: 400m
+    memory: 256Mi
+
+logLevel: info
+logFormat: json
+googleManagementProjectID: # mapped in fasit
+tenantDomain: # mapped in fasit
+tenantName: # mapped in fasit
+legacyNaisNamespaceMapping: # mapped in fasit
+
+azure:
+  groupNamePrefix: nais-team-
+
+gitHub:
+  authEndpoint:
+  organization:
+
+naisNamespace:
+  azureEnabled: false
+
+naisDeploy:
+  endpoint: # mapped in fasit
+  deployKeyEndpoint: # mapped in fasit
+  provisionKey: # mapped in fasit
+
+google:
+  serviceAccountEmail: # mapped in fasit
+
+gcp:
+  clusters: # mapped in fasit
+  cnrmRole: # mapped in fasit
+  billingAccount: # mapped in fasit
+  workloadIdentityPoolName: # mapped in fasit
+
+dependencytrack:
+  endpoint: # mapped in fasit
+  username: teams
+  password: # mapped in fasit
+
+nais_api:
+  insecure: "true"
+  url: nais-api:3001
+
+firstRunEnableReconcilers: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar"
