@@ -186,6 +186,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		mocks := mocks{
+			artifactRegistry: &fakeArtifactRegistry{},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(404)
@@ -204,11 +205,11 @@ func TestReconcile(t *testing.T) {
 				},
 			}),
 		}
-		_, iamService := mocks.start(t, ctx)
+		artifactRegistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactRegistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -224,6 +225,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		mocks := mocks{
+			artifactRegistry: &fakeArtifactRegistry{},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
 					if err := json.NewEncoder(w).Encode(&expectedServiceAccount); err != nil {
@@ -262,7 +264,7 @@ func TestReconcile(t *testing.T) {
 				},
 			}),
 		}
-		_, iamService := mocks.start(t, ctx)
+		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
@@ -317,7 +319,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -580,7 +582,13 @@ func TestDelete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName)
+		mocks := mocks{
+			artifactRegistry: &fakeArtifactRegistry{},
+			iam:              test.HttpServerWithHandlers(t, []http.HandlerFunc{}),
+		}
+		artifactregistryClient, iamService := mocks.start(t, ctx)
+
+		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -611,6 +619,7 @@ func TestDelete(t *testing.T) {
 		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
+			artifactRegistry: &fakeArtifactRegistry{},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, r *http.Request) {
 					if contains := "management-project-123/serviceAccounts/gar-my-team-a193@management-project-123.iam.gserviceaccount.com"; !strings.Contains(r.URL.Path, contains) {

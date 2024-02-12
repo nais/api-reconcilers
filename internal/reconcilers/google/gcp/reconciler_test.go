@@ -67,7 +67,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -81,7 +81,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -95,7 +95,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_gcp_reconciler.New(ctx, gcp.Clusters{}, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		reconcilers, err := google_gcp_reconciler.New(ctx, gcp.Clusters{}, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -466,7 +466,7 @@ func TestDelete(t *testing.T) {
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -490,7 +490,7 @@ func TestDelete(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID)
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, cnrmServiceAccountID, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

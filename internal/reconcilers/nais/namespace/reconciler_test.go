@@ -50,7 +50,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled)
+		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -70,7 +70,7 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled)
+		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -101,7 +101,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.ListTeamEnvironmentsResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled)
+		reconciler, err := nais_namespace_reconciler.New(ctx, noClusters, tenantDomain, googleManagementProjectID, cnrmServiceAccountID, azureEnabled, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -293,4 +293,20 @@ func getPubsubServerAndClient(ctx context.Context, projectID string, topics ...s
 		_ = srv.Close()
 		_ = client.Close()
 	}
+}
+
+func noopPubsub() *pubsub.Client {
+	ctx, close := context.WithCancel(context.Background())
+	close()
+
+	client, err := pubsub.NewClient(
+		ctx,
+		"asdf",
+		option.WithEndpoint("asdf"),
+		option.WithoutAuthentication(),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return client
 }
