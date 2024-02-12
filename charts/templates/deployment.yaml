@@ -48,7 +48,7 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.logLevel }}
             - name: INSECURE_GRPC
-              value: {{ .Values.naisAPI.insecure }}
+              value: {{ .Values.naisAPI.insecure | quote }}
             - name: GRPC_TARGET
               value: {{ .Values.naisAPI.target }}
             - name: LISTEN_ADDRESS
@@ -59,6 +59,8 @@ spec:
               value: {{ .Values.tenantName }}
             - name: RECONCILERS_TO_ENABLE
               value: {{ .Values.reconcilersToEnable | quote }}
+            - name: GOOGLE_MANAGEMENT_PROJECT_ID
+              value: {{ .Values.googleManagementProjectID | quote }}
             # GitHub
             - name: GITHUB_AUTH_ENDPOINT
               value: {{ .Values.gitHub.authEndpoint }}
