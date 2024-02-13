@@ -68,19 +68,16 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 	return r, nil
 }
 
-// TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
-
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	if naisTeam.GoogleGroupEmail == nil {
+		return fmt.Errorf("team %s has no google group email", naisTeam.Slug)
+	}
+
 	labels := map[string]string{
 		"team":             naisTeam.Slug,
 		"tenant":           r.tenantName,
 		managedByLabelName: managedByLabelValue,
 	}
-
-	if naisTeam.GoogleGroupEmail == nil {
-		return fmt.Errorf("team %s has no google group email", naisTeam.Slug)
-	}
-
 	email := *naisTeam.GoogleGroupEmail
 
 	urlMapName := "nais-cdn-urlmap"
