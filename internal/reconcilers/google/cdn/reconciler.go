@@ -259,8 +259,66 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	return nil
 }
 
-func (*cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	// Todo: Delete??
+func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	// reverse order of creation
+
+	// bucket name needs to be globally unique
+	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
+	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
+
+	// TODO:
+	//  remove from urlmap
+	//  remove access to cache invalidation
+
+	// remove backendbucket
+	needsBackendBucket := false
+	_, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	if err != nil {
+		var gapiError *googleapi.Error
+
+		if errors.As(err, &gapiError) {
+			// retry transient errors
+			if gapiError.Code != http.StatusNotFound {
+				return err
+			}
+			// otherwise, we need a bucket i guess
+			needsBackendBucket = true
+		}
+		return err
+	}
+
+	if !needsBackendBucket {
+		_, err = r.services.backendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
+			BackendBucket: bucketName,
+			Project:       r.googleManagementProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("delete backend bucket: %w", err)
+		}
+	}
+
+	// remove bucket
+	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
+	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
+		err = r.services.storage.Bucket(bucketName).Delete(ctx)
+		if err != nil {
+			return fmt.Errorf("delete bucket: %w", err)
+		}
+	}
+
+	// remove service account
+	serviceAccountName, _ := serviceAccountNameAndAccountID(naisTeam.Slug, r.googleManagementProjectID)
+	_, err = r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
+	if err == nil {
+		_, err = r.services.iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("delete service account: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -349,7 +407,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 }
 
 func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembersrs(ctx, teamSlug, client)
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
 	if err != nil {
 		return err
 	}
