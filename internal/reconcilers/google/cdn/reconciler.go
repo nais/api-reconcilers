@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
+	"github.com/nais/api-reconcilers/internal/google_token_source"
 	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
@@ -21,10 +22,8 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
-	"k8s.io/utils/ptr"
-
-	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"google.golang.org/api/option"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -101,17 +100,9 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("set service account policy: %w", err)
 	}
 
-	// check for existence for early return
-	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
-	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
-		log.Infof("bucket %q already exists, skipping cdn setup", bucketName)
-		return nil
-	}
-
-	// set up a storage bucket
-	err = r.services.storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, &storage.BucketAttrs{Labels: labels})
+	err = r.createBucketIfNotExists(ctx, bucketName, labels)
 	if err != nil {
-		return fmt.Errorf("create bucket: %w", err)
+		return err
 	}
 
 	// set up iam policy for the bucket
@@ -128,78 +119,8 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("add object viewer role to allUsers: %w", err)
 	}
 
-	// check for existing backend bucket
-	needsBackendBucket := false
-	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
-		BackendBucket: bucketName,
-		Project:       r.googleManagementProjectID,
-	})
-	// 👇 this is very not good my guy
-	if err != nil {
-		var gapiError *googleapi.Error
-
-		if errors.As(err, &gapiError) {
-			// retry transient errors
-			if gapiError.Code != http.StatusNotFound {
-				return err
-			}
-			// otherwise, we need a bucket i guess
-			needsBackendBucket = true
-		}
-		return err
-	}
-
-	// set up a backend bucket
-	if needsBackendBucket {
-		// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
-		const defaultTTL = int32(3600)
-		const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
-
-		req := &computepb.InsertBackendBucketRequest{
-			BackendBucketResource: &computepb.BackendBucket{
-				BucketName: &bucketName,
-				CdnPolicy: &computepb.BackendBucketCdnPolicy{
-					// Enables Cloud CDN to cache all static content served from the backend
-					// bucket. This includes content with a file extension that is typically
-					// associated with static content, such as .html, .css, and .js.
-					CacheMode:  ptr.To("CACHE_ALL_STATIC"),
-					ClientTtl:  ptr.To(defaultTTL),
-					DefaultTtl: ptr.To(defaultTTL),
-					MaxTtl:     ptr.To(defaultMaxTTL),
-					// If true then Cloud CDN will combine multiple concurrent cache fill
-					// requests into a small number of requests to the origin.
-					RequestCoalescing: ptr.To(true),
-				},
-				// When enabled, Cloud CDN automatically compresses content served from the
-				// backend bucket using gzip compression. This can reduce the amount of data
-				// sent over the network, resulting in faster load times for end users.
-				// Enum of "AUTOMATIC", "DISABLED".
-				CompressionMode: ptr.To("AUTOMATIC"),
-				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
-				EnableCdn:       ptr.To(true),
-				Name:            &bucketName,
-			},
-			Project: r.googleManagementProjectID,
-		}
-
-		backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
-		if err != nil {
-			return fmt.Errorf("insert backend bucket: %w", err)
-		}
-
-		err = backendBucketInsertion.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("wait for insert backend bucket operation: %w", err)
-		}
-
-		backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
-			BackendBucket: bucketName,
-			Project:       r.googleManagementProjectID,
-		})
-		if err != nil {
-			return fmt.Errorf("get backend bucket: %w", err)
-		}
-	}
+	//  backend bucket
+	backendBucket, err := r.getOrCreateBackendBucket(ctx)
 
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
@@ -395,6 +316,97 @@ func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 			DisplayName: fmt.Sprintf("CDN uploader for %s", teamSlug),
 		},
 	}).Context(ctx).Do()
+}
+
+func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName string, labels map[string]string) error {
+	_, err := r.services.storage.Bucket(bucketName).Attrs(ctx)
+	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
+		return fmt.Errorf("get bucket: %w", err)
+	}
+
+	if errors.Is(err, storage.ErrBucketNotExist) {
+		// set up a storage bucket
+		err = r.services.storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, &storage.BucketAttrs{Labels: labels})
+		if err != nil {
+			return fmt.Errorf("create bucket: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context) (*computepb.BackendBucket, error) {
+	needsBackendBucket := false
+	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	// 👇 this is very not good my guy
+	if err != nil {
+		var gapiError *googleapi.Error
+
+		if errors.As(err, &gapiError) {
+			// retry transient errors
+			if gapiError.Code != http.StatusNotFound {
+				return err
+			}
+			// otherwise, we need a bucket i guess
+			needsBackendBucket = true
+		}
+		return err
+	}
+
+	// set up a backend bucket
+	if needsBackendBucket {
+		// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
+		const defaultTTL = int32(3600)
+		const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+
+		req := &computepb.InsertBackendBucketRequest{
+			BackendBucketResource: &computepb.BackendBucket{
+				BucketName: &bucketName,
+				CdnPolicy: &computepb.BackendBucketCdnPolicy{
+					// Enables Cloud CDN to cache all static content served from the backend
+					// bucket. This includes content with a file extension that is typically
+					// associated with static content, such as .html, .css, and .js.
+					CacheMode:  ptr.To("CACHE_ALL_STATIC"),
+					ClientTtl:  ptr.To(defaultTTL),
+					DefaultTtl: ptr.To(defaultTTL),
+					MaxTtl:     ptr.To(defaultMaxTTL),
+					// If true then Cloud CDN will combine multiple concurrent cache fill
+					// requests into a small number of requests to the origin.
+					RequestCoalescing: ptr.To(true),
+				},
+				// When enabled, Cloud CDN automatically compresses content served from the
+				// backend bucket using gzip compression. This can reduce the amount of data
+				// sent over the network, resulting in faster load times for end users.
+				// Enum of "AUTOMATIC", "DISABLED".
+				CompressionMode: ptr.To("AUTOMATIC"),
+				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
+				EnableCdn:       ptr.To(true),
+				Name:            &bucketName,
+			},
+			Project: r.googleManagementProjectID,
+		}
+
+		backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
+		if err != nil {
+			return fmt.Errorf("insert backend bucket: %w", err)
+		}
+
+		err = backendBucketInsertion.Wait(ctx)
+		if err != nil {
+			return fmt.Errorf("wait for insert backend bucket operation: %w", err)
+		}
+
+		backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+			BackendBucket: bucketName,
+			Project:       r.googleManagementProjectID,
+		})
+		if err != nil {
+			return fmt.Errorf("get backend bucket: %w", err)
+		}
+	}
 }
 
 func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountName, accountID string) {
