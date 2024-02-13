@@ -102,13 +102,13 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 
 	err = r.createBucketIfNotExists(ctx, bucketName, labels)
 	if err != nil {
-		return err
+		return fmt.Errorf("create bucket: %w", err)
 	}
 
 	// set up iam policy for the bucket
 	err = r.setBucketPolicy(ctx, bucketName, email, googleServiceAccount)
 	if err != nil {
-		return err
+		return fmt.Errorf("set bucket policy: %w", err)
 	}
 
 	//  backend bucket
