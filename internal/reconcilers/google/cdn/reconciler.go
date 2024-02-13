@@ -72,8 +72,6 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 
 // TODO: this does a lot of things that are not idempotent and we should probably have some kind of pattern for that in the reconciler(s)
 
-// TODO: add labels for __all__ resources that we create
-
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	labels := map[string]string{
 		"team":             naisTeam.Slug,
@@ -351,7 +349,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 }
 
 func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.Reconcilers())
+	members, err := r.getServiceAccountPolicyMembersrs(ctx, teamSlug, client)
 	if err != nil {
 		return err
 	}
@@ -371,8 +369,8 @@ func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAcco
 	return err
 }
 
-func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilersClient) ([]string, error) {
-	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client, teamSlug)
+func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
+	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.Reconcilers(), teamSlug)
 	if err != nil {
 		return nil, err
 	}
