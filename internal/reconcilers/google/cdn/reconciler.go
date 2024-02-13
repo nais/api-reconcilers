@@ -106,22 +106,31 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 
 	// set up iam policy for the bucket
-	policy, err := r.services.storage.Bucket(bucketName).IAM().Policy(ctx)
+	err = r.setBucketPolicy(ctx, bucketName, email, googleServiceAccount)
 	if err != nil {
-		return fmt.Errorf("get bucket policy: %w", err)
-	}
-	policy.Add("allUsers", "roles/storage.objectViewer")
-	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
-	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
-
-	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
-	if err != nil {
-		return fmt.Errorf("add object viewer role to allUsers: %w", err)
+		return err
 	}
 
 	//  backend bucket
-	backendBucket, err := r.getOrCreateBackendBucket(ctx)
+	backendBucket, err := r.getOrCreateBackendBucket(ctx, naisTeam, bucketName)
+	if err != nil {
+		return fmt.Errorf("get or create backend bucket: %w", err)
+	}
 
+	err = r.cacheInvalidationTeamAccess(ctx, email, googleServiceAccount, cacheInvalidatorRole)
+	if err != nil {
+		return fmt.Errorf("create team access for cache invalidation: %w", err)
+	}
+
+	err = r.createUrlMapIfNotExists(urlMapName, naisTeam, backendBucket)
+	if err != nil {
+		return fmt.Errorf("create urlMap: %w", err)
+	}
+
+	return nil
+}
+
+func (r *cdnReconciler) cacheInvalidationTeamAccess(ctx context.Context, email string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
 	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
@@ -144,7 +153,10 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 			return fmt.Errorf("assign GCP project IAM policy: %w", err)
 		}
 	}
+	return nil
+}
 
+func (r *cdnReconciler) createUrlMapIfNotExists(urlMapName string, naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket) error {
 	// update urlMap in management project
 	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
@@ -175,7 +187,22 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 			return fmt.Errorf("update urlMap: %w", err)
 		}
 	}
+	return nil
+}
 
+func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, email string, googleServiceAccount *iam.ServiceAccount) error {
+	policy, err := r.services.storage.Bucket(bucketName).IAM().Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("get bucket policy: %w", err)
+	}
+	policy.Add("allUsers", "roles/storage.objectViewer")
+	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
+	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
+
+	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
+	if err != nil {
+		return fmt.Errorf("add object viewer role to allUsers: %w", err)
+	}
 	return nil
 }
 
@@ -335,7 +362,7 @@ func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName 
 	return nil
 }
 
-func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context) (*computepb.BackendBucket, error) {
+func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *protoapi.Team, bucketName string) (*computepb.BackendBucket, error) {
 	needsBackendBucket := false
 	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
@@ -348,12 +375,12 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context) (*computep
 		if errors.As(err, &gapiError) {
 			// retry transient errors
 			if gapiError.Code != http.StatusNotFound {
-				return err
+				return nil, err
 			}
 			// otherwise, we need a bucket i guess
 			needsBackendBucket = true
 		}
-		return err
+		return nil, err
 	}
 
 	// set up a backend bucket
@@ -391,12 +418,12 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context) (*computep
 
 		backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
 		if err != nil {
-			return fmt.Errorf("insert backend bucket: %w", err)
+			return nil, fmt.Errorf("insert backend bucket: %w", err)
 		}
 
 		err = backendBucketInsertion.Wait(ctx)
 		if err != nil {
-			return fmt.Errorf("wait for insert backend bucket operation: %w", err)
+			return nil, fmt.Errorf("wait for insert backend bucket operation: %w", err)
 		}
 
 		backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
@@ -404,9 +431,10 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context) (*computep
 			Project:       r.googleManagementProjectID,
 		})
 		if err != nil {
-			return fmt.Errorf("get backend bucket: %w", err)
+			return backendBucket, fmt.Errorf("get backend bucket: %w", err)
 		}
 	}
+	return backendBucket, nil
 }
 
 func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountName, accountID string) {
