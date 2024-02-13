@@ -75,7 +75,7 @@ func (r *reconciler) Reconcile(ctx context.Context, client *apiclient.APIClient,
 		return err
 	}
 
-	teamId, err := r.syncTeamAndUsers(ctx, client, naisTeam.Slug, teamMembers, state)
+	teamId, err := r.syncTeamAndUsers(ctx, client, naisTeam.Slug, teamMembers, state, log)
 	if err != nil {
 		return err
 	}
@@ -115,14 +115,18 @@ func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, na
 	return nil
 }
 
-func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, naisTeamMembers []*protoapi.TeamMember, state *dependencyTrackState) (string, error) {
+func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, naisTeamMembers []*protoapi.TeamMember, state *dependencyTrackState, log logrus.FieldLogger) (string, error) {
 	if state != nil && state.teamID != "" {
+		log.Debugf("team has existing state")
 		for _, member := range naisTeamMembers {
 			if !slices.Contains(state.members, member.User.Email) {
+				log := log.WithField("email", member.User.Email)
+				log.Debugf("creating user in DependencyTrack")
 				if err := r.client.CreateOidcUser(ctx, member.User.Email); err != nil {
 					return "", err
 				}
 
+				log.Debugf("adding user to team in DependencyTrack")
 				if err := r.client.AddToTeam(ctx, member.User.Email, state.teamID); err != nil {
 					return "", err
 				}
@@ -141,6 +145,7 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 
 		for _, email := range state.members {
 			if !inputMembersContains(naisTeamMembers, email) {
+				log.WithField("email", email).Debugf("removing user from team in DependencyTrack")
 				if err := r.client.DeleteUserMembership(ctx, state.teamID, email); err != nil {
 					return "", err
 				}
@@ -160,6 +165,7 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 		return state.teamID, nil
 	}
 
+	log.Debugf("team does not yet exist in DependencyTrack, creating")
 	team, err := r.createDependencyTrackTeam(ctx, teamSlug)
 	if err != nil {
 		return "", err
@@ -175,9 +181,13 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 	)
 
 	for _, member := range naisTeamMembers {
+		log := log.WithField("email", member.User.Email)
+		log.Debugf("creating user in DependencyTrack")
 		if err := r.client.CreateOidcUser(ctx, member.User.Email); err != nil {
 			return "", err
 		}
+
+		log.Debugf("adding user to team in DependencyTrack.")
 		if err := r.client.AddToTeam(ctx, member.User.Email, team.Uuid); err != nil {
 			return "", err
 		}
