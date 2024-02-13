@@ -35,7 +35,7 @@ func New(c *http.Client) Client {
 }
 
 func (s *client) GetUser(ctx context.Context, email string) (*Member, error) {
-	u := fmt.Sprintf("https://graph.microsoft.com/v1.0/users/%s", email)
+	u := "https://graph.microsoft.com/v1.0/users/" + email
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -159,7 +159,7 @@ func (s *client) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, 
 }
 
 func (s *client) ListGroupOwners(ctx context.Context, grp *Group) ([]*Member, error) {
-	u := fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s/owners", grp.ID)
+	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/owners"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -188,7 +188,7 @@ func (s *client) ListGroupOwners(ctx context.Context, grp *Group) ([]*Member, er
 }
 
 func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, error) {
-	u := fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s/members", grp.ID)
+	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/members"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -217,7 +217,7 @@ func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, e
 }
 
 func (s *client) AddMemberToGroup(ctx context.Context, grp *Group, member *Member) error {
-	u := fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s/members/$ref", grp.ID)
+	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/members/$ref"
 
 	request := &AddMemberRequest{
 		ODataID: member.ODataID(),
@@ -249,7 +249,7 @@ func (s *client) AddMemberToGroup(ctx context.Context, grp *Group, member *Membe
 }
 
 func (s *client) RemoveMemberFromGroup(ctx context.Context, grp *Group, member *Member) error {
-	u := fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s/members/%s/$ref", grp.ID, member.ID)
+	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/members/" + member.ID + "/$ref"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
 	if err != nil {
@@ -271,7 +271,7 @@ func (s *client) RemoveMemberFromGroup(ctx context.Context, grp *Group, member *
 }
 
 func (s *client) DeleteGroup(ctx context.Context, grpID uuid.UUID) error {
-	url := fmt.Sprintf("https://graph.microsoft.com/v1.0/groups/%s", grpID)
+	url := "https://graph.microsoft.com/v1.0/groups/" + grpID.String()
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
 	if err != nil {
 		return err
