@@ -24,7 +24,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/nais/api-reconcilers/internal/google_token_source"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/option"
 )
 
@@ -325,8 +324,8 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 func (r *cdnReconciler) Configuration() *protoapi.NewReconciler {
 	return &protoapi.NewReconciler{
 		Name:        r.Name(),
-		DisplayName: "CDN reconciler",
-		Description: "CDN",
+		DisplayName: "Google CDN",
+		Description: "Provision CDN resources for team",
 		MemberAware: false,
 	}
 }
@@ -344,7 +343,6 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 
 	opts := []option.ClientOption{
 		option.WithTokenSource(ts),
-		option.WithHTTPClient(otelhttp.DefaultClient),
 	}
 
 	cloudResourceManagerService, err := cloudresourcemanager.NewService(ctx, opts...)
