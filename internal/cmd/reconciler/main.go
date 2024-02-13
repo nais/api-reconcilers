@@ -14,6 +14,7 @@ import (
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
 	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	google_cdn_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
 	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
@@ -132,6 +133,10 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
 	}
+	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
+	if err != nil {
+		log.WithField("reconciler", "cdn").WithError(err).Errorf("error when creating reconciler")
+	}
 
 	// The reconcilers will be run in the order they are added to the manager
 	reconcilerManager.AddReconciler(githubReconciler)
@@ -141,6 +146,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	reconcilerManager.AddReconciler(namespaceReconciler)
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
+	reconcilerManager.AddReconciler(cdnReconciler)
 
 	if dependencyTrackReconciler != nil {
 		reconcilerManager.AddReconciler(dependencyTrackReconciler)

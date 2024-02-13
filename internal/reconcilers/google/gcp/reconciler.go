@@ -179,6 +179,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		if err := r.deleteDefaultVPCNetworkRules(ctx, teamProject, log); err != nil {
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
+
 	}
 
 	return it.Err()
@@ -418,9 +419,9 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := calculateRoleBindings(policy.Bindings, map[string]string{
-		"roles/owner":  "group:" + *naisTeam.GoogleGroupEmail,
-		r.cnrmRoleName: "serviceAccount:" + cnrmServiceAccount.Email,
+	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
+		"roles/owner":  {fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)},
+		r.cnrmRoleName: {fmt.Sprintf("serviceAccount:%s", cnrmServiceAccount.Email)},
 	})
 
 	if !updated {
@@ -581,13 +582,13 @@ func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDom
 
 	return &GcpServices{
 		CloudBillingProjectsService:           cloudBillingService.Projects,
-		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
-		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
-		ServiceUsageService:                   serviceUsageService.Services,
-		ServiceUsageOperationsService:         serviceUsageService.Operations,
-		FirewallService:                       computeService.Firewalls,
+		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		ComputeGlobalOperationsService:        computeService.GlobalOperations,
+		FirewallService:                       computeService.Firewalls,
+		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
+		ServiceUsageOperationsService:         serviceUsageService.Operations,
+		ServiceUsageService:                   serviceUsageService.Services,
 	}, nil
 }
 
@@ -624,7 +625,6 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -654,28 +654,28 @@ func GetProjectDisplayName(teamSlug, environment string) string {
 	return prefix + suffix
 }
 
-// calculateRoleBindings Given a set of role bindings, make sure the ones in requiredRoleBindings are present
-func calculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string]string) ([]*cloudresourcemanager.Binding, bool) {
+// CalculateRoleBindings Given a set of role bindings, make sure the ones in requiredRoleBindings are present
+func CalculateRoleBindings(existingRoleBindings []*cloudresourcemanager.Binding, requiredRoleBindings map[string][]string) ([]*cloudresourcemanager.Binding, bool) {
 	updated := false
 
 REQUIRED:
-	for role, member := range requiredRoleBindings {
+	for role, members := range requiredRoleBindings {
 		for idx, binding := range existingRoleBindings {
 			if binding.Role != role {
 				continue
 			}
-
-			if !contains(binding.Members, member) {
-				existingRoleBindings[idx].Members = append(existingRoleBindings[idx].Members, member)
-				updated = true
+			for _, member := range members {
+				if !contains(binding.Members, member) {
+					existingRoleBindings[idx].Members = append(existingRoleBindings[idx].Members, member)
+					updated = true
+				}
 			}
-
 			continue REQUIRED
 		}
 
 		// the required role is missing altogether from the existing bindings
 		existingRoleBindings = append(existingRoleBindings, &cloudresourcemanager.Binding{
-			Members: []string{member},
+			Members: members,
 			Role:    role,
 		})
 		updated = true
