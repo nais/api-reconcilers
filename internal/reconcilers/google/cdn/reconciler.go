@@ -480,7 +480,8 @@ func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAcco
 func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
 	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.Reconcilers(), teamSlug)
 	if err != nil {
-		return nil, err
+		return nil,
+			fmt.Errorf("get team repositories: %w", err)
 	}
 
 	members := make([]string, 0)
