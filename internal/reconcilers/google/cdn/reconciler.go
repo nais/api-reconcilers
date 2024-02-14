@@ -123,7 +123,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
 
-	err = r.setCacheInvalidationIamPolicy(ctx, email, googleServiceAccount, cacheInvalidatorRole)
+	err = r.setCacheInvalidationIamPolicy(ctx, email, googleServiceAccount, cacheInvalidatorRole, log)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
@@ -199,19 +199,24 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	return nil
 }
 
-func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, email string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
+func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, email string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string, log logrus.FieldLogger) error {
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
 	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
+
 	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
 		cacheInvalidatorRole: {
-			// fmt.Sprintf("group:%s", email),
+			fmt.Sprintf("group:%s", email),
 			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
 		},
 	})
+
+	for _, binding := range newBindings {
+		log.Infof("setting IAM binding for role %q: members %v", binding.Role, binding.Members)
+	}
 
 	if updated {
 		projectPolicy.Bindings = newBindings
