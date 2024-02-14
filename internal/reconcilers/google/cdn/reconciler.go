@@ -208,7 +208,7 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, email
 	}
 	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
 		cacheInvalidatorRole: {
-			fmt.Sprintf("group:%s", email),
+			//fmt.Sprintf("group:%s", email),
 			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
 		},
 	})
