@@ -91,7 +91,7 @@ func (r *naisDeployReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *naisDeployReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	_, err := client.Reconcilers().DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.Reconcilers().DeleteState(ctx, &protoapi.DeleteReconcilerStateRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})

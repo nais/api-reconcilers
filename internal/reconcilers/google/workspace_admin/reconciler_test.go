@@ -208,8 +208,8 @@ func Test_Delete(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			DeleteState(mock.Anything, &protoapi.DeleteReconcilerStateRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
+			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
 			Once()
 
 		service, closer := getAdminDirectoryServiceAndClient(t, ctx, nil)
@@ -291,8 +291,8 @@ func Test_Delete(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			DeleteState(mock.Anything, &protoapi.DeleteReconcilerStateRequest{TeamSlug: teamSlug, ReconcilerName: "google:workspace-admin"}).
+			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
 			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {

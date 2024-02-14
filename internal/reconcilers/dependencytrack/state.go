@@ -2,49 +2,34 @@ package dependencytrack_reconciler
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 )
 
-const (
-	stateKeyTeamID  = "team_id"
-	stateKeyMembers = "members"
-)
-
-type dependencyTrackState struct {
-	teamID  string
-	members []string
+type DependencyTrackState struct {
+	TeamID  string   `json:"teamId"`
+	Members []string `json:"members"`
 }
 
-func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, state *dependencyTrackState) error {
-	req := &protoapi.SaveReconcilerResourceRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       teamSlug,
-		Resources: []*protoapi.NewReconcilerResource{
-			{
-				Name:  stateKeyTeamID,
-				Value: []byte(state.teamID),
-			},
-		},
-	}
-
-	for _, member := range state.members {
-		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
-			Name:  stateKeyMembers,
-			Value: []byte(member),
-		})
-	}
-
-	if _, err := client.Reconcilers().SaveResources(ctx, req); err != nil {
+func (r *reconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, st *DependencyTrackState) error {
+	j, err := json.Marshal(st)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	_, err = client.Reconcilers().SaveState(ctx, &protoapi.SaveReconcilerStateRequest{
+		ReconcilerName: r.Name(),
+		TeamSlug:       teamSlug,
+		Value:          j,
+	})
+
+	return err
 }
 
-func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*dependencyTrackState, error) {
-	resp, err := client.Reconcilers().Resources(ctx, &protoapi.ListReconcilerResourcesRequest{
+func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*DependencyTrackState, error) {
+	resp, err := client.Reconcilers().State(ctx, &protoapi.GetReconcilerStateRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})
@@ -52,21 +37,18 @@ func (r *reconciler) loadState(ctx context.Context, client *apiclient.APIClient,
 		return nil, err
 	}
 
-	s := &dependencyTrackState{}
-	for _, resource := range resp.Nodes {
-		switch resource.Name {
-		case stateKeyTeamID:
-			s.teamID = string(resource.Value)
-		case stateKeyMembers:
-			s.members = append(s.members, string(resource.Value))
-		}
+	st := DependencyTrackState{}
+	if resp.State == nil {
+		return &st, nil
 	}
-
-	return s, nil
+	if err := json.Unmarshal(resp.State.Value, &st); err != nil {
+		return nil, err
+	}
+	return &st, nil
 }
 
 func (r *reconciler) deleteState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) error {
-	_, err := client.DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.DeleteState(ctx, &protoapi.DeleteReconcilerStateRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       teamSlug,
 	})

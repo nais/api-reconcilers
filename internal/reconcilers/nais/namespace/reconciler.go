@@ -121,7 +121,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			)
 		}
 
-		updated[env.EnvironmentName] = time.Now()
+		updated[env.EnvironmentName] = time.Now().Unix()
 	}
 
 	if err := r.saveState(ctx, client, naisTeam.Slug, updated); err != nil {

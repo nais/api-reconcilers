@@ -2,6 +2,8 @@ package dependencytrack_reconciler_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,8 +63,8 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 		grpcServers.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
@@ -75,17 +77,17 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			}}, nil).
 			Once()
 		grpcServers.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
-				{
-					Name:  "team_id",
-					Value: []byte(teamID),
-				},
-				{
-					Name:  "members",
-					Value: []byte(user),
-				},
-			}}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
+				st := dependencytrack_reconciler.DependencyTrackState{}
+				_ = json.Unmarshal(req.Value, &st)
+
+				return req.ReconcilerName == "nais:dependencytrack" &&
+					req.TeamSlug == teamSlug &&
+					st.TeamID == teamID &&
+					len(st.Members) == 1 &&
+					st.Members[0] == user
+			})).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 		grpcServers.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
@@ -124,13 +126,10 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "team_id",
-						Value: []byte(teamID),
-					},
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{
+				State: &protoapi.ReconcilerState{
+					Value: []byte(fmt.Sprintf(`{"teamId": %q}`, teamID)),
 				},
 			}, nil).
 			Once()
@@ -145,17 +144,17 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			}}, nil).
 			Once()
 		grpcServers.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
-				{
-					Name:  "team_id",
-					Value: []byte(teamID),
-				},
-				{
-					Name:  "members",
-					Value: []byte(user),
-				},
-			}}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
+				st := dependencytrack_reconciler.DependencyTrackState{}
+				_ = json.Unmarshal(req.Value, &st)
+
+				return req.ReconcilerName == "nais:dependencytrack" &&
+					req.TeamSlug == teamSlug &&
+					st.TeamID == teamID &&
+					len(st.Members) == 1 &&
+					st.Members[0] == user
+			})).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 		grpcServers.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
@@ -180,17 +179,10 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "team_id",
-						Value: []byte(teamID),
-					},
-					{
-						Name:  "members",
-						Value: []byte(user),
-					},
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{
+				State: &protoapi.ReconcilerState{
+					Value: []byte(fmt.Sprintf(`{"teamId": %q, "members": [%q]}`, teamID, user)),
 				},
 			}, nil).
 			Once()
@@ -205,17 +197,17 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			}}, nil).
 			Once()
 		grpcServers.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
-				{
-					Name:  "team_id",
-					Value: []byte(teamID),
-				},
-				{
-					Name:  "members",
-					Value: []byte(user),
-				},
-			}}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
+				st := dependencytrack_reconciler.DependencyTrackState{}
+				_ = json.Unmarshal(req.Value, &st)
+
+				return req.ReconcilerName == "nais:dependencytrack" &&
+					req.TeamSlug == teamSlug &&
+					st.TeamID == teamID &&
+					len(st.Members) == 1 &&
+					st.Members[0] == user
+			})).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
@@ -248,17 +240,10 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "team_id",
-						Value: []byte(teamID),
-					},
-					{
-						Name:  "members",
-						Value: []byte(unknownMember),
-					},
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{
+				State: &protoapi.ReconcilerState{
+					Value: []byte(fmt.Sprintf(`{"teamId": %q, "members": [%q]}`, teamID, unknownMember)),
 				},
 			}, nil).
 			Once()
@@ -273,17 +258,17 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			}}, nil).
 			Once()
 		grpcServers.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug, Resources: []*protoapi.NewReconcilerResource{
-				{
-					Name:  "team_id",
-					Value: []byte(teamID),
-				},
-				{
-					Name:  "members",
-					Value: []byte(user),
-				},
-			}}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
+				st := dependencytrack_reconciler.DependencyTrackState{}
+				_ = json.Unmarshal(req.Value, &st)
+
+				return req.ReconcilerName == "nais:dependencytrack" &&
+					req.TeamSlug == teamSlug &&
+					st.TeamID == teamID &&
+					len(st.Members) == 1 &&
+					st.Members[0] == user
+			})).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 		grpcServers.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
@@ -326,19 +311,16 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "team_id",
-						Value: []byte(teamID),
-					},
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{
+				State: &protoapi.ReconcilerState{
+					Value: []byte(fmt.Sprintf(`{"teamId": %q}`, teamID)),
 				},
 			}, nil).
 			Once()
 		grpcServers.Reconcilers.EXPECT().
-			DeleteResources(mock.Anything, &protoapi.DeleteReconcilerResourcesRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerResourcesResponse{}, nil).
+			DeleteState(mock.Anything, &protoapi.DeleteReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
+			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))

@@ -83,12 +83,12 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 		mockServer.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, &protoapi.SaveReconcilerResourceRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			SaveState(mock.Anything, &protoapi.SaveReconcilerStateRequest{Value: []byte("{}"), TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
@@ -118,8 +118,8 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{Limit: 100, Offset: 0, TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
@@ -147,10 +147,12 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Times(2)
 		mockServer.Reconcilers.EXPECT().
-			SaveResources(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerResourceRequest) bool {
-				return len(req.Resources) == 2
+			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
+				st := map[string]int64{}
+				_ = json.Unmarshal(req.Value, &st)
+				return len(st) == 2
 			})).
-			Return(&protoapi.SaveReconcilerResourceResponse{}, nil).
+			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))

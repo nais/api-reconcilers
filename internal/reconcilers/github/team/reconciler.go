@@ -93,7 +93,7 @@ func (r *githubTeamReconciler) Name() string {
 }
 
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	state, err := r.loadState(ctx, client, naisTeam.Slug)
+	st, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
 	}
@@ -111,12 +111,12 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	state.Repositories, err = r.getTeamRepositories(ctx, *githubTeam.Slug)
+	st.Repositories, err = r.getTeamRepositories(ctx, *githubTeam.Slug)
 	if err != nil {
 		return err
 	}
 
-	if err := r.saveState(ctx, client, naisTeam, *githubTeam.Slug, state); err != nil {
+	if err := r.saveState(ctx, client, naisTeam, *githubTeam.Slug, st); err != nil {
 		return err
 	}
 
@@ -143,7 +143,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		}
 	}
 
-	_, err := client.Reconcilers().DeleteResources(ctx, &protoapi.DeleteReconcilerResourcesRequest{
+	_, err := client.Reconcilers().DeleteState(ctx, &protoapi.DeleteReconcilerStateRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
 	})

@@ -268,53 +268,43 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{
-				Nodes: []*protoapi.ReconcilerResource{
-					{
-						Name:  "repo",
-						Value: []byte("test/repository"),
-						Metadata: toJson(&github_team_reconciler.GitHubRepository{
-							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
-								{Name: "push", Granted: true},
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{
+				State: &protoapi.ReconcilerState{
+					Value: toJson(&github_team_reconciler.GitHubState{
+						Repositories: []*github_team_reconciler.GitHubRepository{
+							{
+								Name: "test/repository",
+								Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+									{Name: "push", Granted: true},
+								},
 							},
-						}),
-					},
-					{
-						Name:  "repo",
-						Value: []byte("test/ro-repository"),
-						Metadata: toJson(&github_team_reconciler.GitHubRepository{
-							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
-								{Name: "push", Granted: false},
+							{
+								Name: "test/ro-repository",
+								Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+									{Name: "push", Granted: false},
+								},
 							},
-						}),
-					},
-					{
-						Name:  "repo",
-						Value: []byte("test/admin-repository"),
-						Metadata: toJson(&github_team_reconciler.GitHubRepository{
-							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
-								{Name: "push", Granted: true},
-								{Name: "admin", Granted: true},
+							{
+								Name: "test/admin-repository",
+								Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+									{Name: "push", Granted: true},
+									{Name: "admin", Granted: true},
+								},
 							},
-						}),
-					},
-					{
-						Name:  "repo",
-						Value: []byte("test/archived-repository"),
-						Metadata: toJson(&github_team_reconciler.GitHubRepository{
-							Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
-								{Name: "push", Granted: true},
-								{Name: "admin", Granted: true},
+							{
+								Name: "test/archived-repository",
+								Permissions: []*github_team_reconciler.GitHubRepositoryPermission{
+									{Name: "push", Granted: true},
+									{Name: "admin", Granted: true},
+								},
+								Archived: true,
 							},
-							Archived: true,
-						}),
-					},
-					{
-						Name:     "repo",
-						Value:    []byte("test/no-permissions-repository"),
-						Metadata: toJson(&github_team_reconciler.GitHubRepository{}),
-					},
+							{
+								Name: "test/no-permissions-repository",
+							},
+						},
+					}),
 				},
 			}, nil).
 			Once()
@@ -388,8 +378,8 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
@@ -476,8 +466,8 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
@@ -545,8 +535,8 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
-			Resources(mock.Anything, &protoapi.ListReconcilerResourcesRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.ListReconcilerResourcesResponse{}, nil).
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
 		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
@@ -775,7 +765,7 @@ func TestDelete(t *testing.T) {
 	})
 }
 
-func toJson(r *github_team_reconciler.GitHubRepository) []byte {
+func toJson(r *github_team_reconciler.GitHubState) []byte {
 	j, _ := json.Marshal(r)
 	return j
 }

@@ -9,14 +9,12 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 )
 
-const stateKeyRepo = "repo"
-
 type GitHubState struct {
-	Repositories []*GitHubRepository
+	Repositories []*GitHubRepository `json:"repositories"`
 }
 
 type GitHubRepository struct {
-	Name        string                        `json:"-"`
+	Name        string                        `json:"name"`
 	Permissions []*GitHubRepositoryPermission `json:"permissions"`
 	Archived    bool                          `json:"archived"`
 	RoleName    string                        `json:"roleName"`
@@ -27,25 +25,18 @@ type GitHubRepositoryPermission struct {
 	Granted bool   `json:"granted"`
 }
 
-func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredGitHubTeamSlug string, desiredState *GitHubState) error {
-	req := &protoapi.SaveReconcilerResourceRequest{
+func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, desiredGitHubTeamSlug string, st *GitHubState) error {
+	j, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Reconcilers().SaveState(ctx, &protoapi.SaveReconcilerStateRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       naisTeam.Slug,
-	}
-
-	for _, repo := range desiredState.Repositories {
-		metadata, err := json.Marshal(repo)
-		if err != nil {
-			return err
-		}
-		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
-			Name:     stateKeyRepo,
-			Value:    []byte(repo.Name),
-			Metadata: metadata,
-		})
-	}
-
-	if _, err := client.Reconcilers().SaveResources(ctx, req); err != nil {
+		Value:          j,
+	})
+	if err != nil {
 		return err
 	}
 
@@ -59,7 +50,7 @@ func (r *githubTeamReconciler) saveState(ctx context.Context, client *apiclient.
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (*GitHubState, error) {
@@ -67,16 +58,16 @@ func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.
 }
 
 func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) ([]*GitHubRepository, error) {
-	state, err := getState(ctx, client, teamSlug)
+	st, err := getState(ctx, client, teamSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	return state.Repositories, nil
+	return st.Repositories, nil
 }
 
 func getState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) (*GitHubState, error) {
-	resp, err := client.Resources(ctx, &protoapi.ListReconcilerResourcesRequest{
+	resp, err := client.State(ctx, &protoapi.GetReconcilerStateRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})
@@ -84,22 +75,13 @@ func getState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug s
 		return nil, err
 	}
 
-	s := &GitHubState{}
-	for _, resource := range resp.Nodes {
-		switch resource.Name {
-		case stateKeyRepo:
-			repo := &GitHubRepository{
-				Name: string(resource.Value),
-			}
-
-			if resource.Metadata != nil {
-				if err := json.Unmarshal(resource.Metadata, repo); err != nil {
-					return nil, err
-				}
-				s.Repositories = append(s.Repositories, repo)
-			}
-		}
+	st := GitHubState{}
+	if resp.State == nil {
+		return &st, nil
 	}
 
-	return s, nil
+	if err := json.Unmarshal(resp.State.Value, &st); err != nil {
+		return nil, err
+	}
+	return &st, nil
 }

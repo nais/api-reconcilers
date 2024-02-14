@@ -2,55 +2,44 @@ package nais_namespace_reconciler
 
 import (
 	"context"
-	"strings"
-	"time"
+	"encoding/json"
 
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
 )
 
-type state map[string]time.Time
+// state is a map of namespace names to unix timestamps
+type state map[string]int64
 
-func (r *naisNamespaceReconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, updated state) error {
-	req := &protoapi.SaveReconcilerResourceRequest{
+func (r *naisNamespaceReconciler) saveState(ctx context.Context, client *apiclient.APIClient, teamSlug string, st state) error {
+	j, err := json.Marshal(st)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.Reconcilers().SaveState(ctx, &protoapi.SaveReconcilerStateRequest{
 		ReconcilerName: r.Name(),
 		TeamSlug:       teamSlug,
-	}
-
-	for env, ts := range updated {
-		req.Resources = append(req.Resources, &protoapi.NewReconcilerResource{
-			Name:  "timestamp",
-			Value: []byte(env + "::" + ts.Format(time.RFC3339)),
-		})
-	}
-
-	_, err := client.Reconcilers().SaveResources(ctx, req)
+		Value:          j,
+	})
 	return err
 }
 
 func (r *naisNamespaceReconciler) loadState(ctx context.Context, client *apiclient.APIClient, teamSlug string) (state, error) {
-	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListReconcilerResourcesResponse, error) {
-		return client.Reconcilers().Resources(ctx, &protoapi.ListReconcilerResourcesRequest{Limit: limit, Offset: offset, TeamSlug: teamSlug, ReconcilerName: r.Name()})
+	resp, err := client.Reconcilers().State(ctx, &protoapi.GetReconcilerStateRequest{
+		ReconcilerName: r.Name(),
+		TeamSlug:       teamSlug,
 	})
-	updated := state{}
-	for it.Next() {
-		res := it.Value()
-		switch res.Name {
-		case "timestamp":
-			parts := strings.Split(string(res.Value), "::")
-			if len(parts) != 2 {
-				continue
-			}
-
-			ts, err := time.Parse(time.RFC3339, parts[1])
-			if err != nil {
-				continue
-			}
-
-			updated[parts[0]] = ts
-		}
+	if err != nil {
+		return nil, err
 	}
 
-	return updated, nil
+	st := state{}
+	if resp.State == nil {
+		return st, nil
+	}
+	if err := json.Unmarshal(resp.State.Value, &st); err != nil {
+		return nil, err
+	}
+	return st, nil
 }
