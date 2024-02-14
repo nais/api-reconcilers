@@ -68,6 +68,15 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 	return r, nil
 }
 
+func (r *cdnReconciler) Configuration() *protoapi.NewReconciler {
+	return &protoapi.NewReconciler{
+		Name:        r.Name(),
+		DisplayName: "Google CDN",
+		Description: "Provision CDN resources for team",
+		MemberAware: false,
+	}
+}
+
 func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GoogleGroupEmail == nil {
 		return fmt.Errorf("team %s has no google group email", naisTeam.Slug)
@@ -108,98 +117,21 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("set bucket policy: %w", err)
 	}
 
-	//  backend bucket
 	backendBucket, err := r.getOrCreateBackendBucket(ctx, naisTeam, bucketName)
 	if err != nil {
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
 
-	err = r.cacheInvalidationTeamAccess(ctx, email, googleServiceAccount, cacheInvalidatorRole)
+	err = r.setCacheInvalidationIamPolicy(ctx, email, googleServiceAccount, cacheInvalidatorRole)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
 
-	err = r.createUrlMapIfNotExists(urlMapName, naisTeam, backendBucket)
+	err = r.ensureUrlMapPathRule(urlMapName, naisTeam, backendBucket)
 	if err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
 	}
 
-	return nil
-}
-
-func (r *cdnReconciler) cacheInvalidationTeamAccess(ctx context.Context, email string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
-	// grant teams access to cache invalidation
-	managementProjectName := "projects/" + r.googleManagementProjectID
-	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
-	}
-	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
-		cacheInvalidatorRole: {
-			fmt.Sprintf("group:%s", email),
-			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
-		},
-	})
-
-	if updated {
-		projectPolicy.Bindings = newBindings
-		_, err = r.services.cloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
-			Policy: projectPolicy,
-		}).Context(ctx).Do()
-		if err != nil {
-			return fmt.Errorf("assign GCP project IAM policy: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *cdnReconciler) createUrlMapIfNotExists(urlMapName string, naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket) error {
-	// update urlMap in management project
-	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
-	if err != nil {
-		return fmt.Errorf("get urlmap: %w", err)
-	}
-	updatedUrlMap := false
-	for _, pm := range urlMap.PathMatchers {
-		seen := make(map[string]bool)
-		for _, pr := range pm.PathRules {
-			if !seen[pr.Service] {
-				seen[pr.Service] = true
-			}
-		}
-		pr := compute.PathRule{
-			Paths:   []string{fmt.Sprintf("/%s/*", naisTeam.Slug)},
-			Service: *backendBucket.SelfLink,
-		}
-
-		if !seen[*backendBucket.SelfLink] {
-			pm.PathRules = append(pm.PathRules, &pr)
-			updatedUrlMap = true
-		}
-	}
-
-	if updatedUrlMap {
-		_, err := r.services.urlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
-		if err != nil {
-			return fmt.Errorf("update urlMap: %w", err)
-		}
-	}
-	return nil
-}
-
-func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, email string, googleServiceAccount *iam.ServiceAccount) error {
-	policy, err := r.services.storage.Bucket(bucketName).IAM().Policy(ctx)
-	if err != nil {
-		return fmt.Errorf("get bucket policy: %w", err)
-	}
-	policy.Add("allUsers", "roles/storage.objectViewer")
-	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
-	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
-
-	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
-	if err != nil {
-		return fmt.Errorf("add object viewer role to allUsers: %w", err)
-	}
 	return nil
 }
 
@@ -266,13 +198,80 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	return nil
 }
 
-func (r *cdnReconciler) Configuration() *protoapi.NewReconciler {
-	return &protoapi.NewReconciler{
-		Name:        r.Name(),
-		DisplayName: "Google CDN",
-		Description: "Provision CDN resources for team",
-		MemberAware: false,
+func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, email string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
+	// grant teams access to cache invalidation
+	managementProjectName := "projects/" + r.googleManagementProjectID
+	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
+	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
+		cacheInvalidatorRole: {
+			fmt.Sprintf("group:%s", email),
+			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
+		},
+	})
+
+	if updated {
+		projectPolicy.Bindings = newBindings
+		_, err = r.services.cloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: projectPolicy,
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("assign GCP project IAM policy: %w", err)
+		}
+	}
+	return nil
+}
+
+// ensureUrlMapPathRule ensures that the backend bucket exists for at least one path rule in the given urlMap
+func (r *cdnReconciler) ensureUrlMapPathRule(urlMapName string, naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket) error {
+	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
+	if err != nil {
+		return fmt.Errorf("get urlmap: %w", err)
+	}
+	updatedUrlMap := false
+	for _, pm := range urlMap.PathMatchers {
+		seen := make(map[string]bool)
+		for _, pr := range pm.PathRules {
+			if !seen[pr.Service] {
+				seen[pr.Service] = true
+			}
+		}
+		pr := compute.PathRule{
+			Paths:   []string{fmt.Sprintf("/%s/*", naisTeam.Slug)},
+			Service: *backendBucket.SelfLink,
+		}
+
+		if !seen[*backendBucket.SelfLink] {
+			pm.PathRules = append(pm.PathRules, &pr)
+			updatedUrlMap = true
+		}
+	}
+
+	if updatedUrlMap {
+		_, err := r.services.urlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+		if err != nil {
+			return fmt.Errorf("update urlMap: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, email string, googleServiceAccount *iam.ServiceAccount) error {
+	policy, err := r.services.storage.Bucket(bucketName).IAM().Policy(ctx)
+	if err != nil {
+		return fmt.Errorf("get bucket policy: %w", err)
+	}
+	policy.Add("allUsers", "roles/storage.objectViewer")
+	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
+	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
+
+	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
+	if err != nil {
+		return fmt.Errorf("add object viewer role to allUsers: %w", err)
+	}
+	return nil
 }
 
 // createGcpServices Creates the GCP services used by the reconciler
@@ -365,7 +364,6 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
-	// 👇 this is very not good my guy
 	if err != nil {
 		var gapiError *googleapi.Error
 
@@ -374,62 +372,63 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 			if gapiError.Code != http.StatusNotFound {
 				return nil, err
 			}
-			// otherwise, we need a bucket i guess
+
 			needsBackendBucket = true
 		}
 		return nil, err
 	}
 
-	// set up a backend bucket
-	if needsBackendBucket {
-		// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
-		const defaultTTL = int32(3600)
-		const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+	if !needsBackendBucket {
+		return backendBucket, nil
+	}
 
-		req := &computepb.InsertBackendBucketRequest{
-			BackendBucketResource: &computepb.BackendBucket{
-				BucketName: &bucketName,
-				CdnPolicy: &computepb.BackendBucketCdnPolicy{
-					// Enables Cloud CDN to cache all static content served from the backend
-					// bucket. This includes content with a file extension that is typically
-					// associated with static content, such as .html, .css, and .js.
-					CacheMode:  ptr.To("CACHE_ALL_STATIC"),
-					ClientTtl:  ptr.To(defaultTTL),
-					DefaultTtl: ptr.To(defaultTTL),
-					MaxTtl:     ptr.To(defaultMaxTTL),
-					// If true then Cloud CDN will combine multiple concurrent cache fill
-					// requests into a small number of requests to the origin.
-					RequestCoalescing: ptr.To(true),
-				},
-				// When enabled, Cloud CDN automatically compresses content served from the
-				// backend bucket using gzip compression. This can reduce the amount of data
-				// sent over the network, resulting in faster load times for end users.
-				// Enum of "AUTOMATIC", "DISABLED".
-				CompressionMode: ptr.To("AUTOMATIC"),
-				Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
-				EnableCdn:       ptr.To(true),
-				Name:            &bucketName,
+	// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
+	const defaultTTL = int32(3600)
+	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+
+	req := &computepb.InsertBackendBucketRequest{
+		BackendBucketResource: &computepb.BackendBucket{
+			BucketName: &bucketName,
+			CdnPolicy: &computepb.BackendBucketCdnPolicy{
+				// Enables Cloud CDN to cache all static content served from the backend
+				// bucket. This includes content with a file extension that is typically
+				// associated with static content, such as .html, .css, and .js.
+				CacheMode:  ptr.To("CACHE_ALL_STATIC"),
+				ClientTtl:  ptr.To(defaultTTL),
+				DefaultTtl: ptr.To(defaultTTL),
+				MaxTtl:     ptr.To(defaultMaxTTL),
+				// If true then Cloud CDN will combine multiple concurrent cache fill
+				// requests into a small number of requests to the origin.
+				RequestCoalescing: ptr.To(true),
 			},
-			Project: r.googleManagementProjectID,
-		}
+			// When enabled, Cloud CDN automatically compresses content served from the
+			// backend bucket using gzip compression. This can reduce the amount of data
+			// sent over the network, resulting in faster load times for end users.
+			// Enum of "AUTOMATIC", "DISABLED".
+			CompressionMode: ptr.To("AUTOMATIC"),
+			Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
+			EnableCdn:       ptr.To(true),
+			Name:            &bucketName,
+		},
+		Project: r.googleManagementProjectID,
+	}
 
-		backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
-		if err != nil {
-			return nil, fmt.Errorf("insert backend bucket: %w", err)
-		}
+	backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("insert backend bucket: %w", err)
+	}
 
-		err = backendBucketInsertion.Wait(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("wait for insert backend bucket operation: %w", err)
-		}
+	err = backendBucketInsertion.Wait(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("wait for insert backend bucket operation: %w", err)
+	}
 
-		backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
-			BackendBucket: bucketName,
-			Project:       r.googleManagementProjectID,
-		})
-		if err != nil {
-			return backendBucket, fmt.Errorf("get backend bucket: %w", err)
-		}
+	backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get created backend bucket: %w", err)
 	}
 	return backendBucket, nil
 }
