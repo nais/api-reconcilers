@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	cloudcompute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
@@ -348,10 +349,23 @@ func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName 
 	}
 
 	if errors.Is(err, storage.ErrBucketNotExist) {
-		// set up a storage bucket
-		err = r.services.storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, &storage.BucketAttrs{Labels: labels})
+		attrs := &storage.BucketAttrs{
+			UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
+			Location:                 "europe-north1",
+			Labels:                   labels,
+			CORS: []storage.CORS{
+				{
+					MaxAge:          time.Hour,
+					Methods:         []string{"GET"},
+					Origins:         []string{"*"},
+					ResponseHeaders: []string{"Content-Type"},
+				},
+			},
+		}
+
+		err = r.services.storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, attrs)
 		if err != nil {
-			return fmt.Errorf("create bucket: %w", err)
+			return err
 		}
 	}
 
