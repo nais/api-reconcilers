@@ -459,7 +459,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
 	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
 	if err != nil {
-		return err
+		return fmt.Errorf("get service account policy members: %w", err)
 	}
 
 	req := iam.SetIamPolicyRequest{
