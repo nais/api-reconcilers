@@ -384,12 +384,13 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		if errors.As(err, &gapiError) {
 			// retry transient errors
 			if gapiError.Code != http.StatusNotFound {
-				return nil, err
+				return nil, fmt.Errorf("googleapi error: %w", err)
 			}
 
 			needsBackendBucket = true
+		} else {
+			return nil, fmt.Errorf("unknown error: %w", err)
 		}
-		return nil, err
 	}
 
 	if !needsBackendBucket {
