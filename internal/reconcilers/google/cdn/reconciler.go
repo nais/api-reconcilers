@@ -97,15 +97,17 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
 	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
 
+	// ✅
 	googleServiceAccount, err := r.getOrCreateServiceAccount(ctx, naisTeam.Slug)
 	if err != nil {
 		return fmt.Errorf("get or create service account: %w", err)
 	}
 
-	err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
-	if err != nil {
-		return fmt.Errorf("set service account policy: %w", err)
-	}
+	// ❌
+	//err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
+	//if err != nil {
+	//	return fmt.Errorf("set service account policy: %w", err)
+	//}
 
 	err = r.createBucketIfNotExists(ctx, bucketName, labels)
 	if err != nil {

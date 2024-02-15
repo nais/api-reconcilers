@@ -62,7 +62,6 @@ func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilersClient,
 	if err != nil {
 		return nil, err
 	}
-
 	return st.Repositories, nil
 }
 
