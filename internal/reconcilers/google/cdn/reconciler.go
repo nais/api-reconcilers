@@ -13,7 +13,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
-	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
@@ -458,49 +457,50 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	return
 }
 
-func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
-	if err != nil {
-		return fmt.Errorf("get service account policy members: %w", err)
-	}
+//
+//func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
+//	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
+//	if err != nil {
+//		return fmt.Errorf("get service account policy members: %w", err)
+//	}
+//
+//	req := iam.SetIamPolicyRequest{
+//		Policy: &iam.Policy{
+//			Bindings: []*iam.Binding{
+//				{
+//					Members: members,
+//					Role:    "roles/iam.workloadIdentityUser",
+//				},
+//			},
+//		},
+//	}
+//
+//	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
+//	return err
+//}
 
-	req := iam.SetIamPolicyRequest{
-		Policy: &iam.Policy{
-			Bindings: []*iam.Binding{
-				{
-					Members: members,
-					Role:    "roles/iam.workloadIdentityUser",
-				},
-			},
-		},
-	}
-
-	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
-	return err
-}
-
-func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
-	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.Reconcilers(), teamSlug)
-	if err != nil {
-		return nil,
-			fmt.Errorf("get team repositories: %w", err)
-	}
-
-	members := make([]string, 0)
-	for _, githubRepo := range repos {
-		if githubRepo.Archived {
-			continue
-		}
-
-		// TODO: this should only be for authorized repositories, get from api
-		for _, perm := range githubRepo.Permissions {
-			if perm.Name == "push" && perm.Granted {
-				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
-				members = append(members, member)
-				break
-			}
-		}
-	}
-
-	return members, nil
-}
+//func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
+//	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.Reconcilers(), teamSlug)
+//	if err != nil {
+//		return nil,
+//			fmt.Errorf("get team repositories: %w", err)
+//	}
+//
+//	members := make([]string, 0)
+//	for _, githubRepo := range repos {
+//		if githubRepo.Archived {
+//			continue
+//		}
+//
+//		// TODO: this should only be for authorized repositories, get from api
+//		for _, perm := range githubRepo.Permissions {
+//			if perm.Name == "push" && perm.Granted {
+//				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
+//				members = append(members, member)
+//				break
+//			}
+//		}
+//	}
+//
+//	return members, nil
+//}
