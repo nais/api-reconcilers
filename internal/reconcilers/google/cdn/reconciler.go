@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type services struct {
 	urlMap                         *compute.UrlMapsService
 }
 type cdnReconciler struct {
+	cacheReconcilerRoleID     string
 	googleManagementProjectID string
 	services                  *services
 	tenantName                string
@@ -65,6 +67,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 		return nil, err
 	}
 	r.services = gcpServices
+	r.cacheReconcilerRoleID = fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", googleManagementProjectID)
 
 	return r, nil
 }
@@ -89,8 +92,6 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		managedByLabelName: managedByLabelValue,
 	}
 	teamEmail := *naisTeam.GoogleGroupEmail
-
-	cacheInvalidatorRole := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", r.googleManagementProjectID)
 
 	// bucket name needs to be globally unique
 	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
@@ -123,7 +124,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
 
-	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount, cacheInvalidatorRole)
+	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
@@ -143,31 +144,41 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
 	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
 
-	// TODO:
-	//  remove from urlmap
-	//  remove access to cache invalidation
-
-	// remove backendbucket
-	needsBackendBucket := false
-	_, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+	// get backendbucket
+	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		var gapiError *googleapi.Error
-
-		if errors.As(err, &gapiError) {
-			// retry transient errors
-			if gapiError.Code != http.StatusNotFound {
-				return err
-			}
-			// otherwise, we need a bucket i guess
-			needsBackendBucket = true
-		}
 		return err
 	}
 
-	if !needsBackendBucket {
+	// remove entry from urlmap
+	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
+	if err != nil {
+		return fmt.Errorf("get urlmap: %w", err)
+	}
+
+	for _, pm := range urlMap.PathMatchers {
+		seen := make(map[string]bool)
+		for _, pr := range pm.PathRules {
+			if !seen[pr.Service] {
+				seen[pr.Service] = true
+			}
+		}
+
+		pm.PathRules = slices.DeleteFunc(pm.PathRules, func(rule *compute.PathRule) bool {
+			return rule.Service == *backendBucket.SelfLink
+		})
+	}
+
+	_, err = r.services.urlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+	if err != nil {
+		return fmt.Errorf("update urlMap: %w", err)
+	}
+
+	// delete backendbucket
+	if backendBucket != nil {
 		_, err = r.services.backendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
 			BackendBucket: bucketName,
 			Project:       r.googleManagementProjectID,
@@ -179,27 +190,56 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 
 	// remove bucket
 	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
-	if err == nil {
-		err = r.services.storage.Bucket(bucketName).Delete(ctx)
-		if err != nil {
-			return fmt.Errorf("delete bucket: %w", err)
-		}
+	if err != nil {
+		return fmt.Errorf("get bucket: %w", err)
+	}
+	err = r.services.storage.Bucket(bucketName).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("delete bucket: %w", err)
+	}
+
+	// get iam policy for project
+	managementProjectName := "projects/" + r.googleManagementProjectID
+	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
 	// remove service account
 	serviceAccountName, _ := serviceAccountNameAndAccountID(naisTeam.Slug, r.googleManagementProjectID)
-	_, err = r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
-	if err == nil {
-		_, err = r.services.iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
-		if err != nil {
-			return fmt.Errorf("delete service account: %w", err)
+	serviceAccount, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("get service account: %w", err)
+	}
+
+	// remove access to cache invalidation
+	for _, binding := range projectPolicy.Bindings {
+		if binding.Role == r.cacheReconcilerRoleID {
+			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+				return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
+			})
+			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+				return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
+			})
 		}
+	}
+
+	_, err = r.services.cloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: projectPolicy,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("assign GCP project IAM policy: %w", err)
+	}
+
+	_, err = r.services.iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("delete service account: %w", err)
 	}
 
 	return nil
 }
 
-func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamEmail string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
+func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamEmail string, googleServiceAccount *iam.ServiceAccount) error {
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
 	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
@@ -208,7 +248,7 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamE
 	}
 
 	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
-		cacheInvalidatorRole: {
+		r.cacheReconcilerRoleID: {
 			fmt.Sprintf("group:%s", teamEmail),
 			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
 		},
