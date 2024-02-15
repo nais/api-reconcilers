@@ -101,39 +101,48 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	if err != nil {
 		return fmt.Errorf("get or create service account: %w", err)
 	}
+	log.Infof("created service account %s", googleServiceAccount.Email)
 
 	// ❌ TODO: re-enable whenever github team state is fixed
 	//err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
 	//if err != nil {
 	//	return fmt.Errorf("set service account policy: %w", err)
 	//}
+	log.Infof("set service account policy for %s", googleServiceAccount.Email)
 
 	err = r.createBucketIfNotExists(ctx, bucketName, labels)
 	if err != nil {
 		return fmt.Errorf("create bucket: %w", err)
 	}
+	log.Infof("created bucket %s", bucketName)
 
 	// set up iam policy for the bucket
 	err = r.setBucketPolicy(ctx, bucketName, teamEmail, googleServiceAccount)
 	if err != nil {
 		return fmt.Errorf("set bucket policy: %w", err)
 	}
+	log.Infof("set bucket policy for %s", bucketName)
 
 	backendBucket, err := r.getOrCreateBackendBucket(ctx, naisTeam, bucketName)
 	if err != nil {
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
+	log.Infof("got backend bucket %s", *backendBucket.Name)
 
 	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
+	log.Infof("set cache invalidation IAM policy for %s", teamEmail)
+	log.Infof("set cache invalidation IAM policy for %s", googleServiceAccount.Email)
 
 	err = r.ensureUrlMapPathRule(naisTeam, backendBucket)
 	if err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
 	}
+	log.Infof("added path rule for %s to url map", naisTeam.Slug)
 
+	log.Infof("reconciled cdn for %s", naisTeam.Slug)
 	return nil
 }
 
@@ -176,6 +185,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	if err != nil {
 		return fmt.Errorf("update urlMap: %w", err)
 	}
+	log.Infof("removed path rule for %s from url map", naisTeam.Slug)
 
 	// delete backendbucket
 	if backendBucket != nil {
@@ -186,16 +196,21 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		if err != nil {
 			return fmt.Errorf("delete backend bucket: %w", err)
 		}
+		log.Infof("deleted backend bucket %s", *backendBucket.Name)
 	}
 
 	// remove bucket
 	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
-	if err != nil {
+	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
 		return fmt.Errorf("get bucket: %w", err)
 	}
-	err = r.services.storage.Bucket(bucketName).Delete(ctx)
-	if err != nil {
-		return fmt.Errorf("delete bucket: %w", err)
+
+	if err == nil {
+		err = r.services.storage.Bucket(bucketName).Delete(ctx)
+		if err != nil {
+			return fmt.Errorf("delete bucket: %w", err)
+		}
+		log.Infof("deleted bucket %s", bucketName)
 	}
 
 	// get iam policy for project
@@ -205,7 +220,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	// remove service account
+	// get existing service account
 	serviceAccountName, _ := serviceAccountNameAndAccountID(naisTeam.Slug, r.googleManagementProjectID)
 	serviceAccount, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
 	if err != nil {
@@ -230,12 +245,16 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	if err != nil {
 		return fmt.Errorf("assign GCP project IAM policy: %w", err)
 	}
+	log.Infof("removed cache invalidation IAM policy for %s", naisTeam.Slug)
 
+	// delete service account
 	_, err = r.services.iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("delete service account: %w", err)
 	}
+	log.Infof("deleted service account %s", serviceAccount.Email)
 
+	log.Infof("deleted cdn resources for %s", naisTeam.Slug)
 	return nil
 }
 
