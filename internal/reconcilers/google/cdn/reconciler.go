@@ -89,7 +89,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 	teamEmail := *naisTeam.GoogleGroupEmail
 
-	urlMapName := "nais-cdn-urlmap"
+	urlMapName := "nais-cdn"
 	cacheInvalidatorRole := "projects/nais-management-7178/roles/cdnCacheInvalidator"
 
 	// bucket name needs to be globally unique
@@ -129,6 +129,7 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
 
+	// ❌
 	err = r.ensureUrlMapPathRule(urlMapName, naisTeam, backendBucket)
 	if err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
