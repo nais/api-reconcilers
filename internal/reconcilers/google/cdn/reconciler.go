@@ -30,6 +30,7 @@ const (
 	managedByLabelName  = "managed-by"
 	managedByLabelValue = "api-reconcilers"
 	reconcilerName      = "google:gcp:cdn"
+	urlMapName          = "nais-cdn"
 )
 
 type services struct {
@@ -89,20 +90,18 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	}
 	teamEmail := *naisTeam.GoogleGroupEmail
 
-	urlMapName := "nais-cdn"
-	cacheInvalidatorRole := "projects/nais-management-7178/roles/cdnCacheInvalidator"
+	cacheInvalidatorRole := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", r.googleManagementProjectID)
 
 	// bucket name needs to be globally unique
 	tenantTeamName := fmt.Sprintf("%s-%s", strings.ReplaceAll(r.tenantName, ".", "-"), naisTeam.Slug)
 	bucketName := str.SlugHashPrefixTruncate(tenantTeamName, "nais-cdn", gcp.StorageBucketNameMaxLength)
 
-	// ✅
 	googleServiceAccount, err := r.getOrCreateServiceAccount(ctx, naisTeam.Slug)
 	if err != nil {
 		return fmt.Errorf("get or create service account: %w", err)
 	}
 
-	// ❌
+	// ❌ TODO: re-enable whenever github team state is fixed
 	//err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
 	//if err != nil {
 	//	return fmt.Errorf("set service account policy: %w", err)
@@ -124,13 +123,12 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
 
-	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount, cacheInvalidatorRole, log)
+	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount, cacheInvalidatorRole)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
 
-	// ❌
-	err = r.ensureUrlMapPathRule(urlMapName, naisTeam, backendBucket)
+	err = r.ensureUrlMapPathRule(naisTeam, backendBucket)
 	if err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
 	}
@@ -181,7 +179,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 
 	// remove bucket
 	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
-	if err != nil && errors.Is(err, storage.ErrBucketNotExist) {
+	if err == nil {
 		err = r.services.storage.Bucket(bucketName).Delete(ctx)
 		if err != nil {
 			return fmt.Errorf("delete bucket: %w", err)
@@ -201,7 +199,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	return nil
 }
 
-func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamEmail string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string, log logrus.FieldLogger) error {
+func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamEmail string, googleServiceAccount *iam.ServiceAccount, cacheInvalidatorRole string) error {
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
 	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
@@ -229,7 +227,7 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamE
 }
 
 // ensureUrlMapPathRule ensures that the backend bucket exists for at least one path rule in the given urlMap
-func (r *cdnReconciler) ensureUrlMapPathRule(urlMapName string, naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket) error {
+func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket) error {
 	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
 		return fmt.Errorf("get urlmap: %w", err)
