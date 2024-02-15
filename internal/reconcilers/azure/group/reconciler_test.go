@@ -14,7 +14,6 @@ import (
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
-	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -93,18 +92,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 				{User: addUser}, {User: keepUser},
 			}}, nil).
 			Once()
-		mockServer.Users.EXPECT().
-			Get(mock.Anything, mock.AnythingOfType("*protoapi.GetUserRequest")).
-			RunAndReturn(func(ctx context.Context, gur *protoapi.GetUserRequest) (*protoapi.GetUserResponse, error) {
-				switch gur.Email {
-				case addUser.Email:
-					return &protoapi.GetUserResponse{User: addUser}, nil
-				case keepUser.Email:
-					return &protoapi.GetUserResponse{User: keepUser}, nil
-				}
-				return nil, status.Error(404, "not found")
-			}).
-			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "azure:group:create"
@@ -114,6 +101,12 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "azure:group:add-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "azure:group:delete-member"
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
@@ -196,55 +189,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		mockClient.EXPECT().
 			RemoveMemberFromGroup(mock.Anything, group, removeMember).
 			Return(removeMemberFromGroupErr).
-			Once()
-
-		err := azure_group_reconciler.
-			New(domain, groupNamePrefix, azure_group_reconciler.WithAzureClient(mockClient)).
-			Reconcile(ctx, client, team, log)
-		if err != nil {
-			t.Errorf("unexpected error: %s", err)
-		}
-	})
-
-	t.Run("GetUser fail", func(t *testing.T) {
-		client, mockServer := apiclient.NewMockClient(t)
-		mockClient := azureclient.NewMockClient(t)
-		getUserError := errors.New("GetUser failed")
-
-		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
-			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
-				{User: addUser}, {User: keepUser},
-			}}, nil).
-			Once()
-		mockServer.Users.EXPECT().
-			Get(mock.Anything, mock.AnythingOfType("*protoapi.GetUserRequest")).
-			RunAndReturn(func(ctx context.Context, gur *protoapi.GetUserRequest) (*protoapi.GetUserResponse, error) {
-				switch gur.Email {
-				case addUser.Email:
-					return &protoapi.GetUserResponse{User: addUser}, nil
-				case keepUser.Email:
-					return &protoapi.GetUserResponse{User: keepUser}, nil
-				}
-				return nil, status.Error(404, "not found")
-			}).
-			Once()
-
-		mockClient.EXPECT().
-			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
-			Return(group, false, nil).
-			Once()
-		mockClient.EXPECT().
-			ListGroupMembers(mock.Anything, group).
-			Return([]*azureclient.Member{keepMember, removeMember}, nil).
-			Once()
-		mockClient.EXPECT().
-			RemoveMemberFromGroup(mock.Anything, group, removeMember).
-			Return(nil).
-			Once()
-		mockClient.EXPECT().
-			GetUser(mock.Anything, addUser.Email).
-			Return(nil, getUserError).
 			Once()
 
 		err := azure_group_reconciler.

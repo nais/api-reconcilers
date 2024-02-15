@@ -182,7 +182,6 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 		return fmt.Errorf("list existing members in Azure group %q: %s", azureGroup.MailNickname, err)
 	}
 
-	naisTeamUserMap := make(map[string]*protoapi.User)
 	membersToRemove := remoteOnlyMembers(members, naisTeamMembers)
 	for _, member := range membersToRemove {
 		remoteEmail := strings.ToLower(member.Mail)
@@ -190,17 +189,6 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 		if err := r.azureClient().RemoveMemberFromGroup(ctx, azureGroup, member); err != nil {
 			log.WithError(err).Errorf("remove member from group in Azure")
 			continue
-		}
-
-		if _, exists := naisTeamUserMap[remoteEmail]; !exists {
-			resp, err := client.Users().Get(ctx, &protoapi.GetUserRequest{
-				Email: remoteEmail,
-			})
-			if err != nil {
-				log.WithError(err).Warnf("user does not exist in NAIS teams")
-				continue
-			}
-			naisTeamUserMap[remoteEmail] = resp.User
 		}
 
 		reconcilers.AuditLogForTeamAndUser(
