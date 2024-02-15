@@ -257,13 +257,9 @@ func (m *Manager) syncTeam(ctx context.Context, input Input) {
 	}
 
 	if input.Delete {
-		if err := m.deleteTeam(ctx, reconcilers, team, input); err != nil {
-			log.WithError(err).Error("delete team")
-		}
+		m.deleteTeam(ctx, reconcilers, team, input)
 	} else {
-		if err := m.reconcileTeam(ctx, reconcilers, team, input); err != nil {
-			log.WithError(err).Error("reconcile team")
-		}
+		m.reconcileTeam(ctx, reconcilers, team, input)
 	}
 }
 
@@ -288,7 +284,7 @@ func (m *Manager) enabledReconcilers(ctx context.Context) ([]Reconciler, error) 
 
 // deleteTeam will pass the team through to all enabled reconcilers, effectively deleting the team from all configured
 // external systems.
-func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input Input) error {
+func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input Input) {
 	teamStart := time.Now()
 	log := m.log.WithField("team", input.TeamSlug)
 
@@ -359,12 +355,11 @@ func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, nais
 			attribute.Bool("delete", true),
 		),
 	)
-	return nil
 }
 
 // reconcileTeam will pass the team through to all enabled reconcilers, effectively synchronizing the team to all
 // configured external systems.
-func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input Input) error {
+func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input Input) {
 	teamStart := time.Now()
 	log := m.log.WithField("team", input.TeamSlug)
 
@@ -428,7 +423,6 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 	}
 
 	m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds())
-	return nil
 }
 
 // scheduleAllTeams will fetch all teams from the NAIS API and put them on the reconciler queue

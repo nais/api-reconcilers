@@ -281,6 +281,9 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 		ClientSecret: rc.clientSecret,
 		TokenURL:     endpoint.TokenURL,
 		AuthStyle:    endpoint.AuthStyle,
+		Scopes: []string{
+			"https://graph.microsoft.com/.default",
+		},
 	}
 
 	// Check if the client needs to be updated.
