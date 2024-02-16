@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"net/http"
 	"slices"
 	"strings"
@@ -28,10 +29,12 @@ import (
 )
 
 const (
-	managedByLabelName  = "managed-by"
-	managedByLabelValue = "api-reconcilers"
-	reconcilerName      = "google:gcp:cdn"
-	urlMapName          = "nais-cdn"
+	managedByLabelName    = "managed-by"
+	managedByLabelValue   = "api-reconcilers"
+	reconcilerName        = "google:gcp:cdn"
+	urlMapName            = "nais-cdn"
+	auditActionDeletedCdn = "cdn:provision-resources"
+	auditActionCreatedCdn = "cdn:delete-resources"
 )
 
 type services struct {
@@ -143,6 +146,15 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	log.Infof("added path rule for %s to url map", naisTeam.Slug)
 
 	log.Infof("reconciled cdn for %s", naisTeam.Slug)
+
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionCreatedCdn,
+		naisTeam.Slug,
+		"Provisioned CDN resources for %s", naisTeam.Slug,
+	)
 	return nil
 }
 
@@ -255,6 +267,15 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	log.Infof("deleted service account %s", serviceAccount.Email)
 
 	log.Infof("deleted cdn resources for %s", naisTeam.Slug)
+
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionDeletedCdn,
+		naisTeam.Slug,
+		"Deleted CDN resources for %s", naisTeam.Slug,
+	)
 	return nil
 }
 
