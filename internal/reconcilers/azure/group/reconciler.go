@@ -107,10 +107,10 @@ func (r *azureGroupReconciler) Name() string {
 
 func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	log.Debug("updating client")
-	if err := r.updateClient(ctx, client); err != nil {
+	azureClient, err := r.getClient(ctx, client)
+	if err != nil {
 		return err
 	}
-	azureClient := r.azureClient()
 	log.Debug("client updated")
 
 	prefixedName := r.azureGroupPrefix + naisTeam.Slug
@@ -147,6 +147,13 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	log.Debug("updating client")
+	azureClient, err := r.getClient(ctx, client)
+	if err != nil {
+		return err
+	}
+	log.Debug("client updated")
+
 	if naisTeam.AzureGroupId == nil {
 		log.Info("team has no Azure AD group ID set, cannot delete external group")
 		return nil
@@ -157,7 +164,7 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("invalid Azure AD group ID set on team, cannot delete external group")
 	}
 
-	if err := r.azureClient().DeleteGroup(ctx, id); err != nil {
+	if err := azureClient.DeleteGroup(ctx, id); err != nil {
 		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", id, naisTeam.Slug, err)
 	}
 
@@ -233,18 +240,18 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 	return nil
 }
 
-func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclient.APIClient) error {
+func (r *azureGroupReconciler) getClient(ctx context.Context, client *apiclient.APIClient) (azureclient.Client, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	if (r.lockedAzureClient != nil && time.Since(r.lastUpdated) < 1*time.Minute) || r.staticAzureClient {
-		return nil
+		return r.lockedAzureClient, nil
 	}
 
 	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
 		ReconcilerName: r.Name(),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	rc := &reconcilerConfig{}
@@ -257,7 +264,7 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 		case configTenantID:
 			rc.tenantID = c.Value
 		default:
-			return fmt.Errorf("unknown config key %q", c.Key)
+			return nil, fmt.Errorf("unknown config key %q", c.Key)
 		}
 	}
 
@@ -281,7 +288,7 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 	case conf.AuthStyle != r.lastConfig.AuthStyle:
 	default:
 		// All fields we care about are equal the old values, no need to update the client.
-		return nil
+		return r.lockedAzureClient, nil
 	}
 
 	aclient := conf.Client(r.mainCtx)
@@ -290,13 +297,7 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 	r.lastConfig = conf
 	r.lastUpdated = time.Now()
 
-	return nil
-}
-
-func (r *azureGroupReconciler) azureClient() azureclient.Client {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	return r.lockedAzureClient
+	return r.lockedAzureClient, nil
 }
 
 // localOnlyMembers Given a list of Azure group members and a list of NAIS team members, return NAIS team users not
