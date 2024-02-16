@@ -166,7 +166,8 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	wg.Go(func() error {
 		defer log.Debug("Done listening for pubsub events")
-		return reconcilerManager.ListenForEvents(ctx)
+		reconcilerManager.ListenForEvents(ctx)
+		return nil
 	})
 
 	if err = reconcilerManager.SyncAllTeams(ctx, time.Minute*30); err != nil {

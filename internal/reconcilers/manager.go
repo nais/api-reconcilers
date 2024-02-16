@@ -79,6 +79,7 @@ func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistr
 
 // AddReconciler will add a reconciler to the manager.
 func (m *Manager) AddReconciler(r Reconciler) {
+	m.log.WithField("reconciler", r.Name()).Debugf("adding reconciler to the manager")
 	m.reconcilers = append(m.reconcilers, r)
 }
 
@@ -97,10 +98,10 @@ func (m *Manager) RegisterReconcilersWithAPI(ctx context.Context) error {
 
 // ListenForEvents will listen for events on the pubsub subscription, if configured. This function will block until the
 // context is canceled.
-func (m *Manager) ListenForEvents(ctx context.Context) error {
+func (m *Manager) ListenForEvents(ctx context.Context) {
 	if m.pubsubSubscription == nil {
 		m.log.Warn("no pubsub subscription configured, not listening for events")
-		return nil
+		return
 	}
 
 	for {
@@ -169,7 +170,7 @@ func (m *Manager) ListenForEvents(ctx context.Context) error {
 
 		if err == nil || errors.Is(err, context.Canceled) {
 			// Receive will return nil error when canceled
-			return nil
+			return
 		} else if err != nil {
 			m.log.WithError(err).Error("error while receiving pubsub message")
 		}
@@ -198,6 +199,7 @@ func (m *Manager) Run(ctx context.Context) {
 // context is canceled.
 func (m *Manager) SyncAllTeams(ctx context.Context, fullSyncInterval time.Duration) error {
 	for {
+		m.log.Debugf("scheduling all teams for reconciliation")
 		if err := m.scheduleAllTeams(ctx, uuid.New()); err != nil {
 			m.log.WithError(err).Errorf("error when scheduling all teams")
 		}
@@ -221,7 +223,7 @@ func (m *Manager) syncTeam(ctx context.Context, input Input) {
 
 	if !m.inFlight.Set(input.TeamSlug) {
 		log.Info("already in flight - adding to back of queue")
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Second)
 		if err := m.syncQueue.Add(input); err != nil {
 			log.WithError(err).Error("failed while re-queueing team that is in flight")
 		}
@@ -297,12 +299,14 @@ func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, nais
 		log = log.WithField("trace_id", input.TraceID)
 	}
 
+	log.WithField("time", teamStart).Debugf("start team deletion process")
 	successfulDelete := true
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
 		hasError := false
 
+		log.WithField("time", start).Debugf("start delete")
 		if err := r.Delete(ctx, m.apiclient, naisTeam, log); err != nil {
 			successfulDelete = false
 			hasError = true
@@ -328,6 +332,11 @@ func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, nais
 			}
 		}
 
+		log.
+			WithField("duration", time.Since(start)).
+			WithField("has_error", hasError).
+			Debugf("finished delete")
+
 		m.metricReconcilerTime.Record(
 			ctx,
 			time.Since(start).Milliseconds(),
@@ -347,6 +356,11 @@ func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, nais
 			log.WithError(err).Errorf("error while deleting team")
 		}
 	}
+
+	log.
+		WithField("duration", time.Since(teamStart)).
+		WithField("success", successfulDelete).
+		Debugf("finished team deletion process")
 
 	m.metricReconcileTeam.Record(
 		ctx,
@@ -372,12 +386,14 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 		log = log.WithField("trace_id", input.TraceID)
 	}
 
+	log.WithField("time", teamStart).Debugf("start team reconciliation process")
 	successfulSync := true
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
 		hasError := false
 
+		log.WithField("time", start).Debugf("start reconcile")
 		if err := r.Reconcile(ctx, m.apiclient, naisTeam, log); err != nil {
 			successfulSync = false
 			hasError = true
@@ -403,6 +419,11 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 			}
 		}
 
+		log.
+			WithField("duration", time.Since(start)).
+			WithField("has_error", hasError).
+			Debugf("finished reconcile")
+
 		m.metricReconcilerTime.Record(
 			ctx,
 			time.Since(start).Milliseconds(),
@@ -422,6 +443,11 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 		}
 	}
 
+	log.
+		WithField("duration", time.Since(teamStart)).
+		WithField("success", successfulSync).
+		Debugf("finished team reconciliation process")
+
 	m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds())
 }
 
@@ -439,6 +465,8 @@ func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID)
 	if err != nil {
 		return err
 	}
+
+	m.log.WithField("num_teams", len(teams)).Debugf("fetched teams from API")
 
 	for _, team := range teams {
 		err := m.syncQueue.Add(Input{
