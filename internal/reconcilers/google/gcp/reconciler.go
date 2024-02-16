@@ -111,6 +111,7 @@ func (r *googleGcpReconciler) Name() string {
 
 func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if len(r.clusters) == 0 {
+		log.Debugf("no active environments, skipping reconcile")
 		return nil
 	}
 
@@ -118,13 +119,14 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
-	it := iterator.New[*protoapi.TeamEnvironment](ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
 	for it.Next() {
 		env := it.Value()
 		if !env.Gcp {
+			log.WithField("environment", env.EnvironmentName).Debug("environment is not a GCP environment, skipping")
 			continue
 		}
 
@@ -135,6 +137,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		}
 
 		projectID := GenerateProjectID(r.tenantDomain, env.EnvironmentName, naisTeam.Slug)
+		log.WithField("project_id", projectID).Debugf("generated GCP project ID")
 		teamProject, err := r.getOrCreateProject(ctx, client, projectID, env, cluster.TeamsFolderID, naisTeam)
 		if err != nil {
 			return fmt.Errorf("get or create a GCP project %q for team %q in environment %q: %w", projectID, naisTeam.Slug, env.EnvironmentName, err)
@@ -188,7 +191,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	var errors []error
 
-	it := iterator.New[*protoapi.TeamEnvironment, *protoapi.ListTeamEnvironmentsResponse](ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
