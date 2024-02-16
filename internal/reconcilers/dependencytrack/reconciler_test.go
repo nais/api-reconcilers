@@ -13,6 +13,8 @@ import (
 	"github.com/nais/dependencytrack/pkg/client"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestMissingConfig(t *testing.T) {
@@ -64,7 +66,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 		apiClient, grpcServers := apiclient.NewMockClient(t)
 		grpcServers.Reconcilers.EXPECT().
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
+			Return(nil, status.Error(codes.NotFound, "state not found")).
 			Once()
 		grpcServers.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).

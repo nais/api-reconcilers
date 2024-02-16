@@ -7,6 +7,8 @@ import (
 
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type GitHubState struct {
@@ -66,20 +68,20 @@ func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilersClient,
 }
 
 func getState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) (*GitHubState, error) {
+	st := GitHubState{}
 	resp, err := client.State(ctx, &protoapi.GetReconcilerStateRequest{
 		ReconcilerName: reconcilerName,
 		TeamSlug:       teamSlug,
 	})
 	if err != nil {
+		if e, ok := status.FromError(err); ok && e.Code() == codes.NotFound {
+			// special case: team does not yet have any state
+			return &st, nil
+		}
 		return nil, err
-	}
-
-	st := GitHubState{}
-	if resp.State == nil {
+	} else if resp.State == nil {
 		return &st, nil
-	}
-
-	if err := json.Unmarshal(resp.State.Value, &st); err != nil {
+	} else if err := json.Unmarshal(resp.State.Value, &st); err != nil {
 		return nil, err
 	}
 	return &st, nil

@@ -16,6 +16,8 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -47,7 +49,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Once()
 		mockServer.Reconcilers.EXPECT().
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
+			Return(nil, status.Error(codes.NotFound, "state not found")).
 			Once()
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {

@@ -16,7 +16,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -84,7 +86,7 @@ func TestReconcile(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.Reconcilers.EXPECT().
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
+			Return(nil, status.Error(codes.NotFound, "state not found")).
 			Once()
 		mockServer.Reconcilers.EXPECT().
 			SaveState(mock.Anything, &protoapi.SaveReconcilerStateRequest{Value: []byte("{}"), TeamSlug: teamSlug, ReconcilerName: "nais:namespace"}).
