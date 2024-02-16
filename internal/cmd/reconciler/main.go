@@ -97,7 +97,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubSub.SubscriptionID, cfg.PubSub.ProjectID, log)
 
-	azureGroupReconciler := azure_group_reconciler.New(cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
+	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
 
 	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GoogleManagementProjectID)
 	if err != nil {

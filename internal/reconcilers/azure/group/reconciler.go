@@ -32,7 +32,8 @@ const (
 )
 
 type azureGroupReconciler struct {
-	domain string
+	mainCtx context.Context
+	domain  string
 
 	lock              sync.RWMutex
 	lastUpdated       time.Time
@@ -56,8 +57,9 @@ func WithAzureClient(client azureclient.Client) OptFunc {
 	}
 }
 
-func New(domain, azureGroupPrefix string, opts ...OptFunc) reconcilers.Reconciler {
+func New(ctx context.Context, domain, azureGroupPrefix string, opts ...OptFunc) reconcilers.Reconciler {
 	r := &azureGroupReconciler{
+		mainCtx:          ctx,
 		domain:           domain,
 		azureGroupPrefix: azureGroupPrefix,
 	}
@@ -286,7 +288,7 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 		return nil
 	}
 
-	aclient := conf.Client(ctx)
+	aclient := conf.Client(r.mainCtx)
 	aclient.Transport = otelhttp.NewTransport(aclient.Transport)
 	r.lockedAzureClient = azureclient.New(aclient)
 	r.lastConfig = conf
