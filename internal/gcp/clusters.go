@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/sethvargo/go-envconfig"
 )
 
-type Clusters map[string]Cluster
+type (
+	Clusters map[string]Cluster
+	Cluster  struct {
+		TeamsFolderID int64
+		ProjectID     string
+	}
+)
 
-type Cluster struct {
-	TeamsFolderID int64
-	ProjectID     string
-}
+var _ envconfig.Decoder = (*Clusters)(nil)
 
 func (c *Clusters) EnvDecode(value string) error {
 	*c = make(Clusters)
