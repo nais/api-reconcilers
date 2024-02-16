@@ -107,10 +107,10 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	log.Infof("created service account %s", googleServiceAccount.Email)
 
 	// ❌ TODO: re-enable whenever github team state is fixed
-	//err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
-	//if err != nil {
-	//	return fmt.Errorf("set service account policy: %w", err)
-	//}
+	err = r.setServiceAccountPolicy(ctx, googleServiceAccount, naisTeam.Slug, client)
+	if err != nil {
+		return fmt.Errorf("set service account policy: %w", err)
+	}
 	log.Infof("set service account policy for %s", googleServiceAccount.Email)
 
 	err = r.createBucketIfNotExists(ctx, bucketName, labels)
@@ -536,50 +536,38 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	return
 }
 
-//
-//func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-//	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
-//	if err != nil {
-//		return fmt.Errorf("get service account policy members: %w", err)
-//	}
-//
-//	req := iam.SetIamPolicyRequest{
-//		Policy: &iam.Policy{
-//			Bindings: []*iam.Binding{
-//				{
-//					Members: members,
-//					Role:    "roles/iam.workloadIdentityUser",
-//				},
-//			},
-//		},
-//	}
-//
-//	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
-//	return err
-//}
+func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
+	if err != nil {
+		return fmt.Errorf("get service account policy members: %w", err)
+	}
 
-//func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
-//	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client.Reconcilers(), teamSlug)
-//	if err != nil {
-//		return nil,
-//			fmt.Errorf("get team repositories: %w", err)
-//	}
-//
-//	members := make([]string, 0)
-//	for _, githubRepo := range repos {
-//		if githubRepo.Archived {
-//			continue
-//		}
-//
-//		// TODO: this should only be for authorized repositories, get from api
-//		for _, perm := range githubRepo.Permissions {
-//			if perm.Name == "push" && perm.Granted {
-//				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
-//				members = append(members, member)
-//				break
-//			}
-//		}
-//	}
-//
-//	return members, nil
-//}
+	req := iam.SetIamPolicyRequest{
+		Policy: &iam.Policy{
+			Bindings: []*iam.Binding{
+				{
+					Members: members,
+					Role:    "roles/iam.workloadIdentityUser",
+				},
+			},
+		},
+	}
+
+	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
+	return err
+}
+
+func (r *cdnReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
+	resp, err := client.Teams().ListAuthorizedRepositories(ctx, &protoapi.ListAuthorizedRepositoriesRequest{TeamSlug: teamSlug})
+	if err != nil {
+		return nil,
+			fmt.Errorf("get team repositories: %w", err)
+	}
+
+	members := make([]string, 0)
+	for _, repo := range resp.GithubRepositories {
+		members = append(members, "principalSet://iam.googleapis.com/"+r.workloadIdentityPoolName+"/attribute.repository/"+repo)
+	}
+
+	return members, nil
+}
