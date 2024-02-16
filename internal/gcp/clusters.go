@@ -1,12 +1,10 @@
 package gcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
-
-	"github.com/sethvargo/go-envconfig"
 )
 
 type (
@@ -17,11 +15,10 @@ type (
 	}
 )
 
-var _ envconfig.Decoder = (*Clusters)(nil)
+var _ json.Unmarshaler = (*Clusters)(nil)
 
-func (c *Clusters) EnvDecode(value string) error {
-	*c = make(Clusters)
-	if value == "" {
+func (c *Clusters) UnmarshalJSON(value []byte) error {
+	if len(value) == 0 {
 		return nil
 	}
 	clustersWithStringID := make(map[string]struct {
@@ -29,7 +26,8 @@ func (c *Clusters) EnvDecode(value string) error {
 		ProjectID     string `json:"project_id"`
 	})
 
-	err := json.NewDecoder(strings.NewReader(value)).Decode(&clustersWithStringID)
+	*c = make(Clusters)
+	err := json.NewDecoder(bytes.NewReader(value)).Decode(&clustersWithStringID)
 	if err != nil {
 		return fmt.Errorf("parse GCP cluster info: %w", err)
 	}
