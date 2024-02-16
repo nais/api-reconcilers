@@ -35,7 +35,7 @@ type azureGroupReconciler struct {
 	mainCtx context.Context
 	domain  string
 
-	lock              sync.RWMutex
+	lock              sync.Mutex
 	lastUpdated       time.Time
 	staticAzureClient bool
 	lockedAzureClient azureclient.Client
@@ -54,6 +54,7 @@ type OptFunc func(*azureGroupReconciler)
 func WithAzureClient(client azureclient.Client) OptFunc {
 	return func(r *azureGroupReconciler) {
 		r.lockedAzureClient = client
+		r.staticAzureClient = true
 	}
 }
 
@@ -66,10 +67,6 @@ func New(ctx context.Context, domain, azureGroupPrefix string, opts ...OptFunc) 
 
 	for _, opt := range opts {
 		opt(r)
-	}
-
-	if r.azureClient() != nil {
-		r.staticAzureClient = true
 	}
 
 	return r
@@ -109,12 +106,15 @@ func (r *azureGroupReconciler) Name() string {
 }
 
 func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	log.Debug("updating client")
 	if err := r.updateClient(ctx, client); err != nil {
 		return err
 	}
+	azureClient := r.azureClient()
+	log.Debug("client updated")
 
 	prefixedName := r.azureGroupPrefix + naisTeam.Slug
-	azureGroup, created, err := r.azureClient().GetOrCreateGroup(ctx, naisTeam, prefixedName)
+	azureGroup, created, err := azureClient.GetOrCreateGroup(ctx, naisTeam, prefixedName)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 		}
 	}
 
-	if err := r.connectUsers(ctx, client, naisTeam.Slug, azureGroup, log); err != nil {
+	if err := r.connectUsers(ctx, client, azureClient, naisTeam.Slug, azureGroup, log); err != nil {
 		return fmt.Errorf("add members to group: %w", err)
 	}
 
@@ -173,13 +173,13 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 	return nil
 }
 
-func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, azureGroup *azureclient.Group, log logrus.FieldLogger) error {
+func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclient.APIClient, azureClient azureclient.Client, teamSlug string, azureGroup *azureclient.Group, log logrus.FieldLogger) error {
 	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), teamSlug)
 	if err != nil {
 		return err
 	}
 
-	members, err := r.azureClient().ListGroupMembers(ctx, azureGroup)
+	members, err := azureClient.ListGroupMembers(ctx, azureGroup)
 	if err != nil {
 		return fmt.Errorf("list existing members in Azure group %q: %s", azureGroup.MailNickname, err)
 	}
@@ -188,7 +188,7 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 	for _, member := range membersToRemove {
 		remoteEmail := strings.ToLower(member.Mail)
 		log := log.WithField("remote_user_email", remoteEmail)
-		if err := r.azureClient().RemoveMemberFromGroup(ctx, azureGroup, member); err != nil {
+		if err := azureClient.RemoveMemberFromGroup(ctx, azureGroup, member); err != nil {
 			log.WithError(err).Errorf("remove member from group in Azure")
 			continue
 		}
@@ -208,13 +208,13 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 	for _, user := range membersToAdd {
 		log := log.WithField("remote_user_email", user.Email)
 
-		member, err := r.azureClient().GetUser(ctx, user.Email)
+		member, err := azureClient.GetUser(ctx, user.Email)
 		if err != nil {
 			log.WithError(err).Warnf("lookup user in Azure")
 			continue
 		}
 
-		if err := r.azureClient().AddMemberToGroup(ctx, azureGroup, member); err != nil {
+		if err := azureClient.AddMemberToGroup(ctx, azureGroup, member); err != nil {
 			log.WithError(err).Warnf("add member to group in Azure")
 			continue
 		}
@@ -234,15 +234,11 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 }
 
 func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclient.APIClient) error {
-	r.lock.RLock()
-	if (r.azureClient() != nil && time.Since(r.lastUpdated) < 1*time.Minute) || r.staticAzureClient {
-		r.lock.RUnlock()
-		return nil
-	}
-	r.lock.RUnlock()
-
 	r.lock.Lock()
 	defer r.lock.Unlock()
+	if (r.lockedAzureClient != nil && time.Since(r.lastUpdated) < 1*time.Minute) || r.staticAzureClient {
+		return nil
+	}
 
 	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
 		ReconcilerName: r.Name(),
@@ -298,8 +294,8 @@ func (r *azureGroupReconciler) updateClient(ctx context.Context, client *apiclie
 }
 
 func (r *azureGroupReconciler) azureClient() azureclient.Client {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
 	return r.lockedAzureClient
 }
 
