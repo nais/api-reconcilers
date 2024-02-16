@@ -10,7 +10,7 @@ func TestDecodeJSONToClusters(t *testing.T) {
 	clusters := make(gcp.Clusters)
 
 	t.Run("empty string", func(t *testing.T) {
-		err := clusters.Decode("")
+		err := clusters.EnvDecode("")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -21,7 +21,7 @@ func TestDecodeJSONToClusters(t *testing.T) {
 	})
 
 	t.Run("empty JSON object", func(t *testing.T) {
-		err := clusters.Decode("{}")
+		err := clusters.EnvDecode("{}")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -32,7 +32,7 @@ func TestDecodeJSONToClusters(t *testing.T) {
 	})
 
 	t.Run("JSON with clusters", func(t *testing.T) {
-		err := clusters.Decode(`{
+		err := clusters.EnvDecode(`{
 			"env1": {"teams_folder_id": "123", "project_id": "some-id-123"},
 			"env2": {"teams_folder_id": "456", "project_id": "some-id-456"}
 		}`)

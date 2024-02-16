@@ -14,7 +14,7 @@ type Cluster struct {
 	ProjectID     string
 }
 
-func (c *Clusters) Decode(value string) error {
+func (c *Clusters) EnvDecode(value string) error {
 	*c = make(Clusters)
 	if value == "" {
 		return nil
