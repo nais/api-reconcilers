@@ -10,8 +10,10 @@ logLevel: info
 logFormat: json
 googleManagementProjectID: # mapped in fasit
 tenantDomain: # mapped in fasit
-tenantName: # mapped in fasit
 reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar"
+fasit:
+  tenant:
+    name: # mapped in fasit
 
 azure:
   groupNamePrefix:
@@ -34,11 +36,10 @@ gcp:
   workloadIdentityPoolName: # mapped in fasit
 
 dependencyTrack:
-  endpoint: # mapped in fasit
+  endpoint: http://dependencytrack-backend:8080
   username: teams
   password: # mapped in fasit
 
 naisAPI:
   insecure: "true"
   target: nais-api:3001
-

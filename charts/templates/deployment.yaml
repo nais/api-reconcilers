@@ -56,7 +56,7 @@ spec:
             - name: TENANT_DOMAIN
               value: {{ .Values.tenantDomain }}
             - name: TENANT_NAME
-              value: {{ .Values.tenantName }}
+              value: {{ .Values.fasit.tenant.name }}
             - name: RECONCILERS_TO_ENABLE
               value: {{ .Values.reconcilersToEnable | quote }}
             - name: GOOGLE_MANAGEMENT_PROJECT_ID
