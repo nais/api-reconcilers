@@ -91,7 +91,7 @@ jobs:
         run: |-
           chart="${{ steps.package_chart.outputs.archive }}"
           echo "Pushing: $chart"
-          helm push "$chart" oci://${{ env.IMAGE_REPOSITORY }}
+          helm push "$chart" ${{ env.IMAGE_REPOSITORY }}
   rollout:
     runs-on: fasit-deploy
     permissions:
@@ -102,5 +102,5 @@ jobs:
       - uses: nais/fasit-deploy@v2
         if: github.ref == 'refs/heads/main'
         with:
-          chart: oci://${{ env.IMAGE_REPOSITORY }}/nais-io/nais/feature/${{ env.NAME }}
+          chart: ${{ env.IMAGE_REPOSITORY }}/${{ env.NAME }}
           version: ${{ needs.build_push.outputs.chart_version }}
