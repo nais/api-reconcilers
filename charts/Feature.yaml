@@ -68,7 +68,7 @@ values:
   gcp.billingAccount:
     displayName: Billing account
     computed:
-      template: '"{{ .Env.billing_account | quote }}"'
+      template: '{{ .Env.billing_account | quote }}'
 
   gcp.clusters:
     displayName: Cluster information
