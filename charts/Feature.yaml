@@ -20,13 +20,13 @@ values:
     displayName: Google management project ID
     computed:
       template: |
-        {{ .Env.project_id }}
+        {{ .Env.project_id | quote }}
 
   tenantDomain:
     displayName: Tenant domain
     computed:
       template: |
-        {{ .Env.tenant_domain }}
+        {{ .Env.tenant_domain | quote }}
 
   reconcilersToEnable:
     displayName: Reconcilers to enable
@@ -44,31 +44,31 @@ values:
     description: The endpoint for the token service that provisions teams-backend with GitHub installation tokens for the correct tenant organization.
     computed:
       template: |
-        {{ .Env.teams_github_auth_endpoint }}
+        {{ .Env.teams_github_auth_endpoint | quote }}
 
   gitHub.organization:
     displayName: GitHub organization
     description: The organization slug where the github reconciler will manage teams
     computed:
       template: |
-        {{ .Env.teams_github_org }}
+        {{ .Env.teams_github_org | quote }}
 
   naisDeploy.provisionKey:
     displayName: NAIS deploy provision key
     computed:
       template: |
-        {{ .Env.hookd_provision_key }}
+        {{ .Env.hookd_provision_key | quote }}
 
   google.serviceAccountEmail:
     displayName: Google service account email
     computed:
       template: |
-        {{ .Env.teams_google_service_account_email }}
+        {{ .Env.teams_google_service_account_email | quote }}
 
   gcp.billingAccount:
     displayName: Billing account
     computed:
-      template: '"{{ .Env.billing_account }}"'
+      template: '"{{ .Env.billing_account | quote }}"'
 
   gcp.clusters:
     displayName: Cluster information
@@ -88,7 +88,7 @@ values:
   gcp.workloadIdentityPoolName:
     displayName: Google workload identity pool name
     computed:
-      template: '"{{ .Env.nais_identity_pool_name }}"'
+      template: '{{ .Env.nais_identity_pool_name | quote }}'
 
   dependencytrack.password:
     displayName: DependencyTrack password
