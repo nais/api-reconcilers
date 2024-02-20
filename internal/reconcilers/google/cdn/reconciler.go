@@ -129,6 +129,18 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("team %s has no google group email", naisTeam.Slug)
 	}
 
+	// if no authorized repositories, return early
+	resp, err := client.Teams().ListAuthorizedRepositories(ctx, &protoapi.ListAuthorizedRepositoriesRequest{
+		TeamSlug: naisTeam.Slug,
+	})
+	if err != nil {
+		return fmt.Errorf("get authorized team repositories: %w", err)
+	}
+	if len(resp.GithubRepositories) == 0 {
+		log.Infof("no authorized repositories for team %s, skipping cdn setup", naisTeam.Slug)
+		return nil
+	}
+
 	teamEmail := *naisTeam.GoogleGroupEmail
 
 	bucketName := r.bucketName(naisTeam)
