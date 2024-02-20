@@ -34,22 +34,21 @@ const (
 	managedByLabelValue   = "api-reconcilers"
 	reconcilerName        = "google:gcp:cdn"
 	urlMapName            = "nais-cdn"
-	auditActionDeletedCdn = "cdn:provision-resources"
-	auditActionCreatedCdn = "cdn:delete-resources"
+	auditActionDeletedCdn = "cdn:delete-resources"
+	auditActionCreatedCdn = "cdn:provision-resources"
 )
 
-type services struct {
-	backendBuckets                 *cloudcompute.BackendBucketsClient
-	cloudResourceManagerOperations *cloudresourcemanager.OperationsService
-	cloudResourceManagerProjects   *cloudresourcemanager.ProjectsService
-	iam                            *iam.Service
-	storage                        *storage.Client
-	urlMap                         *compute.UrlMapsService
+type Services struct {
+	BackendBuckets               *cloudcompute.BackendBucketsClient
+	CloudResourceManagerProjects *cloudresourcemanager.ProjectsService
+	Iam                          *iam.Service
+	Storage                      *storage.Client
+	UrlMap                       *compute.UrlMapsService
 }
 type cdnReconciler struct {
 	cacheReconcilerRoleID     string
 	googleManagementProjectID string
-	services                  *services
+	services                  *Services
 	tenantName                string
 	workloadIdentityPoolName  string
 }
@@ -58,7 +57,39 @@ func (r *cdnReconciler) Name() string {
 	return reconcilerName
 }
 
-func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantName string, workloadIdentityPoolName string) (*cdnReconciler, error) {
+type OverrideFunc func(reconciler *cdnReconciler)
+
+func WithGcpServices(gcpServices *Services) OverrideFunc {
+	return func(r *cdnReconciler) {
+		r.services = gcpServices
+	}
+}
+
+func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (*cdnReconciler, error) {
+	roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", googleManagementProjectID)
+	reconciler := &cdnReconciler{
+		cacheReconcilerRoleID:     roleID,
+		googleManagementProjectID: googleManagementProjectID,
+		tenantName:                tenantName,
+		workloadIdentityPoolName:  workloadIdentityPoolName,
+	}
+
+	for _, override := range testOverrides {
+		override(reconciler)
+	}
+
+	if reconciler.services == nil {
+		s, err := gcpServices(ctx, googleManagementProjectID, tenantDomain)
+		if err != nil {
+			return nil, fmt.Errorf("get gcp services: %w", err)
+		}
+		reconciler.services = s
+	}
+
+	return reconciler, nil
+}
+
+func gcpServices(ctx context.Context, googleManagementProjectID, tenantDomain string) (*Services, error) {
 	builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
 	if err != nil {
 		return nil, err
@@ -97,21 +128,12 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 		return nil, fmt.Errorf("retrieve backend buckets client: %w", err)
 	}
 
-	roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", googleManagementProjectID)
-
-	return &cdnReconciler{
-		cacheReconcilerRoleID:     roleID,
-		googleManagementProjectID: googleManagementProjectID,
-		tenantName:                tenantName,
-		services: &services{
-			iam:                            iamService,
-			backendBuckets:                 backendBucketsClient,
-			cloudResourceManagerOperations: cloudResourceManagerService.Operations,
-			cloudResourceManagerProjects:   cloudResourceManagerService.Projects,
-			storage:                        storageClient,
-			urlMap:                         computeService.UrlMaps,
-		},
-		workloadIdentityPoolName: workloadIdentityPoolName,
+	return &Services{
+		Iam:                          iamService,
+		BackendBuckets:               backendBucketsClient,
+		CloudResourceManagerProjects: cloudResourceManagerService.Projects,
+		Storage:                      storageClient,
+		UrlMap:                       computeService.UrlMaps,
 	}, nil
 }
 
@@ -201,7 +223,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	bucketName := r.bucketName(naisTeam)
 
 	// get backendbucket
-	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+	backendBucket, err := r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
@@ -210,7 +232,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	}
 
 	// remove entry from urlmap
-	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
+	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
 		return fmt.Errorf("get urlmap: %w", err)
 	}
@@ -228,7 +250,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		})
 	}
 
-	_, err = r.services.urlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+	_, err = r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
 	if err != nil {
 		return fmt.Errorf("update urlMap: %w", err)
 	}
@@ -237,7 +259,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 
 	// delete backendbucket
 	if backendBucket != nil {
-		_, err = r.services.backendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
+		_, err = r.services.BackendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
 			BackendBucket: bucketName,
 			Project:       r.googleManagementProjectID,
 		})
@@ -248,13 +270,13 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	}
 
 	// remove bucket
-	_, err = r.services.storage.Bucket(bucketName).Attrs(ctx)
+	_, err = r.services.Storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
 		return fmt.Errorf("get bucket: %w", err)
 	}
 
 	if err == nil {
-		err = r.services.storage.Bucket(bucketName).Delete(ctx)
+		err = r.services.Storage.Bucket(bucketName).Delete(ctx)
 		if err != nil {
 			return fmt.Errorf("delete bucket: %w", err)
 		}
@@ -263,14 +285,14 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 
 	// get iam policy for project
 	managementProjectName := "projects/" + r.googleManagementProjectID
-	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	projectPolicy, err := r.services.CloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
 	// get existing service account
 	serviceAccountName, _ := r.serviceAccountNameAndAccountID(naisTeam.Slug)
-	serviceAccount, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
+	serviceAccount, err := r.services.Iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("get service account: %w", err)
 	}
@@ -287,7 +309,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		}
 	}
 
-	_, err = r.services.cloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+	_, err = r.services.CloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: projectPolicy,
 	}).Context(ctx).Do()
 	if err != nil {
@@ -296,7 +318,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	log.Infof("removed cache invalidation IAM policy for %q", naisTeam.Slug)
 
 	// delete service account
-	_, err = r.services.iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
+	_, err = r.services.Iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("delete service account: %w", err)
 	}
@@ -323,7 +345,7 @@ func (r *cdnReconciler) bucketName(naisTeam *protoapi.Team) string {
 }
 
 func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName string, teamSlug string, log logrus.FieldLogger) error {
-	_, err := r.services.storage.Bucket(bucketName).Attrs(ctx)
+	_, err := r.services.Storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
 		return fmt.Errorf("get bucket: %w", err)
 	}
@@ -347,7 +369,7 @@ func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName 
 			},
 		}
 
-		err = r.services.storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, attrs)
+		err = r.services.Storage.Bucket(bucketName).Create(ctx, r.googleManagementProjectID, attrs)
 		if err != nil {
 			return err
 		}
@@ -359,7 +381,7 @@ func (r *cdnReconciler) createBucketIfNotExists(ctx context.Context, bucketName 
 }
 
 func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, email string, googleServiceAccount *iam.ServiceAccount) error {
-	policy, err := r.services.storage.Bucket(bucketName).IAM().Policy(ctx)
+	policy, err := r.services.Storage.Bucket(bucketName).IAM().Policy(ctx)
 	if err != nil {
 		return fmt.Errorf("get bucket policy: %w", err)
 	}
@@ -367,7 +389,7 @@ func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, 
 	policy.Add(fmt.Sprintf("group:%s", email), "roles/storage.objectAdmin")
 	policy.Add(fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email), "roles/storage.objectAdmin")
 
-	err = r.services.storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
+	err = r.services.Storage.Bucket(bucketName).IAM().SetPolicy(ctx, policy)
 	if err != nil {
 		return fmt.Errorf("add object viewer role to allUsers: %w", err)
 	}
@@ -376,9 +398,17 @@ func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, 
 
 // ensureUrlMapPathRule ensures that the backend bucket exists for at least one path rule in the given urlMap
 func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket, log logrus.FieldLogger) error {
-	urlMap, err := r.services.urlMap.Get(r.googleManagementProjectID, urlMapName).Do()
+	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
 		return fmt.Errorf("get urlmap: %w", err)
+	}
+
+	if len(urlMap.PathMatchers) == 0 {
+		return fmt.Errorf("url map didn't contain any path matchers; ensure that terraform has run")
+	}
+
+	if backendBucket.SelfLink == nil {
+		return fmt.Errorf("backend bucket self link was nil; ensure that the bucket was created successfully")
 	}
 
 	updatedUrlMap := false
@@ -401,7 +431,7 @@ func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBuc
 	}
 
 	if updatedUrlMap {
-		_, err := r.services.urlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+		_, err := r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
 		if err != nil {
 			return fmt.Errorf("update urlMap: %w", err)
 		}
@@ -413,7 +443,7 @@ func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBuc
 
 func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *protoapi.Team, bucketName string, log logrus.FieldLogger) (*computepb.BackendBucket, error) {
 	needsBackendBucket := false
-	backendBucket, err := r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+	backendBucket, err := r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
@@ -467,7 +497,7 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		Project: r.googleManagementProjectID,
 	}
 
-	backendBucketInsertion, err := r.services.backendBuckets.Insert(ctx, req)
+	backendBucketInsertion, err := r.services.BackendBuckets.Insert(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("insert backend bucket: %w", err)
 	}
@@ -477,7 +507,7 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		return nil, fmt.Errorf("wait for insert backend bucket operation: %w", err)
 	}
 
-	backendBucket, err = r.services.backendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+	backendBucket, err = r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
 		Project:       r.googleManagementProjectID,
 	})
@@ -492,7 +522,7 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamEmail string, googleServiceAccount *iam.ServiceAccount, log logrus.FieldLogger) error {
 	// grant teams access to cache invalidation
 	managementProjectName := "projects/" + r.googleManagementProjectID
-	projectPolicy, err := r.services.cloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	projectPolicy, err := r.services.CloudResourceManagerProjects.GetIamPolicy(managementProjectName, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
@@ -506,7 +536,7 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamE
 
 	if updated {
 		projectPolicy.Bindings = newBindings
-		_, err = r.services.cloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+		_, err = r.services.CloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
 			Policy: projectPolicy,
 		}).Context(ctx).Do()
 		if err != nil {
@@ -522,12 +552,12 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamE
 func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug string, log logrus.FieldLogger) (*iam.ServiceAccount, error) {
 	serviceAccountName, accountID := r.serviceAccountNameAndAccountID(teamSlug)
 
-	existing, err := r.services.iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
+	existing, err := r.services.Iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
 	if err == nil {
 		return existing, nil
 	}
 
-	created, err := r.services.iam.Projects.ServiceAccounts.Create("projects/"+r.googleManagementProjectID, &iam.CreateServiceAccountRequest{
+	created, err := r.services.Iam.Projects.ServiceAccounts.Create("projects/"+r.googleManagementProjectID, &iam.CreateServiceAccountRequest{
 		AccountId: accountID,
 		ServiceAccount: &iam.ServiceAccount{
 			Description: fmt.Sprintf("service account for uploading to cdn buckets and cache invalidation for %s", teamSlug),
@@ -571,6 +601,6 @@ func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAcco
 		},
 	}
 
-	_, err = r.services.iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
+	_, err = r.services.Iam.Projects.ServiceAccounts.SetIamPolicy(serviceAccount.Name, &req).Context(ctx).Do()
 	return err
 }
