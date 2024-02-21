@@ -228,7 +228,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("get backend bucket, %w", err)
 	}
 
 	// remove entry from urlmap

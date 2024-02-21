@@ -432,5 +432,163 @@ func TestReconcile(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	// TODO
+	email := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", teamSlug, managementProjectID)
+	expectedServiceAccount := &iam.ServiceAccount{
+		Email:       email,
+		Name:        fmt.Sprintf("projects/%s/serviceAccounts/%s", managementProjectID, email),
+		Description: fmt.Sprintf("service account for uploading to cdn buckets and cache invalidation for %s", teamSlug),
+		DisplayName: fmt.Sprintf("CDN uploader for %s", teamSlug),
+	}
+	t.Run("Deletion calls the right endpoints in the right order", func(t *testing.T) {
+		log := logrus.StandardLogger()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.ReconcilerName == "google:gcp:cdn" && req.Action == "cdn:delete-resources"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+
+		mocks := mocks{
+			backendbucket: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// look for existing backend bucket
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&computepb.BackendBucket{
+						Name:     ptr.To("some-backend-bucket"),
+						SelfLink: ptr.To("self/link/some-backend-bucket"),
+					}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// delete backend bucket
+				func(w http.ResponseWriter, r *http.Request) {
+					var req computepb.BackendBucket
+					_ = json.NewDecoder(r.Body).Decode(&req)
+
+					if err := json.NewEncoder(w).Encode(&computepb.Operation{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+			}),
+
+			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// get service account
+				func(w http.ResponseWriter, _ *http.Request) {
+					if err := json.NewEncoder(w).Encode(expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// delete service account call
+				func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+					if err := json.NewEncoder(w).Encode(&iam.ServiceAccount{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+			}),
+			storage: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// get the bucket attrs for the bucket that should get deleted
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&storageold.Bucket{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// create bucket
+				func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				},
+			}),
+
+			project: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// get iam policy for project
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&cloudresourcemanager.Policy{
+						Bindings: []*cloudresourcemanager.Binding{
+							{
+								Members: []string{"group:slug@example.com", "serviceAccount:slug@management-project-123.iam.gserviceaccount.com"},
+								Role:    "projects/management-project-123/roles/cdnCacheInvalidator",
+							},
+						},
+					}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// set iam policy for project
+				func(w http.ResponseWriter, r *http.Request) {
+					expected := `{"policy":{"bindings":[{"role":"projects/management-project-123/roles/cdnCacheInvalidator"}]}}`
+
+					body, err := io.ReadAll(r.Body)
+					defer r.Body.Close()
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if strings.TrimSpace(string(body)) != expected {
+						t.Errorf("expected %q, got %q", expected, string(body))
+					}
+
+					w.Write(body)
+				},
+			}),
+			urlMap: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// get url map
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&compute.UrlMap{
+						PathMatchers: []*compute.PathMatcher{
+							{
+								DefaultService: "some-default-service",
+								PathRules: []*compute.PathRule{
+									{
+										Paths:   []string{"/slug/*"},
+										Service: "self/link/some-backend-bucket",
+									}, {
+										Paths:   []string{"/second-slug/*"},
+										Service: "self/link/some-other-backend-bucket",
+									},
+								},
+							},
+						},
+					}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// patch url map
+				func(w http.ResponseWriter, r *http.Request) {
+					expected := `{"pathMatchers":[{"defaultService":"some-default-service","pathRules":[{"paths":["/second-slug/*"],"service":"self/link/some-other-backend-bucket"}]}]}`
+					body, err := io.ReadAll(r.Body)
+					defer r.Body.Close()
+					if err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+					if strings.TrimSpace(string(body)) != expected {
+						t.Errorf("expected %q, got %q", expected, string(body))
+					}
+
+					w.Write(body)
+				},
+			}),
+		}
+		reconcilers, err := google_cdn_reconciler.New(
+			ctx,
+			managementProjectID,
+			tenantDomain,
+			tenantName,
+			workloadIdentityPoolName,
+			google_cdn_reconciler.WithGcpServices(mocks.start(t, ctx)),
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		err = reconcilers.Delete(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
