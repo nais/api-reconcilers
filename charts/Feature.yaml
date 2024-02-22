@@ -90,7 +90,7 @@ values:
     computed:
       template: '{{ .Env.nais_identity_pool_name | quote }}'
 
-  dependencytrack.password:
+  dependencyTrack.password:
     displayName: DependencyTrack password
     computed:
       template: "{{ .Env.teams_dependencytrack_password | quote }}"
