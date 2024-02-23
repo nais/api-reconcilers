@@ -10,7 +10,7 @@ logLevel: info
 logFormat: json
 googleManagementProjectID: # mapped in fasit
 tenantDomain: # mapped in fasit
-reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar"
+reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn"
 fasit:
   tenant:
     name: # mapped in fasit
