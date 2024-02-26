@@ -200,21 +200,24 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
 
-	err = r.ensureUrlMapPathRule(naisTeam, backendBucket, log)
+	updated, err := r.ensureUrlMapPathRule(naisTeam, backendBucket, log)
 	if err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
 	}
 
 	log.Infof("reconciled cdn for %q", naisTeam.Slug)
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionCreatedCdn,
-		naisTeam.Slug,
-		"Provisioned CDN resources for team %q", naisTeam.Slug,
-	)
+	if updated {
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionCreatedCdn,
+			naisTeam.Slug,
+			"Provisioned CDN resources for team %q", naisTeam.Slug,
+		)
+	}
+
 	return nil
 }
 
@@ -397,18 +400,18 @@ func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, 
 }
 
 // ensureUrlMapPathRule ensures that the backend bucket exists for at least one path rule in the given urlMap
-func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket, log logrus.FieldLogger) error {
+func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket, log logrus.FieldLogger) (bool, error) {
 	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
-		return fmt.Errorf("get urlmap: %w", err)
+		return false, fmt.Errorf("get urlmap: %w", err)
 	}
 
 	if len(urlMap.PathMatchers) == 0 {
-		return fmt.Errorf("url map didn't contain any path matchers; ensure that terraform has run")
+		return false, fmt.Errorf("url map didn't contain any path matchers; ensure that terraform has run")
 	}
 
 	if backendBucket.SelfLink == nil {
-		return fmt.Errorf("backend bucket self link was nil; ensure that the bucket was created successfully")
+		return false, fmt.Errorf("backend bucket self link was nil; ensure that the bucket was created successfully")
 	}
 
 	updatedUrlMap := false
@@ -433,12 +436,13 @@ func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBuc
 	if updatedUrlMap {
 		_, err := r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
 		if err != nil {
-			return fmt.Errorf("update urlMap: %w", err)
+			return false, fmt.Errorf("update urlMap: %w", err)
 		}
 
 		log.Infof("added path rule for %q to url map %q", naisTeam.Slug, urlMapName)
 	}
-	return nil
+
+	return updatedUrlMap, nil
 }
 
 func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *protoapi.Team, bucketName string, log logrus.FieldLogger) (*computepb.BackendBucket, error) {
