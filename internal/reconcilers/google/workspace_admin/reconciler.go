@@ -41,7 +41,7 @@ func WithAdminDirectoryService(service *admin_directory_v1.Service) OptFunc {
 	}
 }
 
-func New(ctx context.Context, googleManagementProjectID, tenantDomain string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, subjectEmail, tenantDomain string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleWorkspaceAdminReconciler{
 		tenantDomain: tenantDomain,
 	}
@@ -51,22 +51,17 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain string, op
 	}
 
 	if r.adminDirectoryService == nil {
-		builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
-		if err != nil {
-			return nil, err
-		}
-
-		ts, err := builder.Admin(ctx)
+		ts, err := google_token_source.WorkspaceAdminTokenSource(ctx, serviceAccountEmail, subjectEmail)
 		if err != nil {
 			return nil, fmt.Errorf("get delegated token source: %w", err)
 		}
 
-		srv, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts))
+		service, err := admin_directory_v1.NewService(ctx, option.WithTokenSource(ts))
 		if err != nil {
 			return nil, fmt.Errorf("retrieve directory client: %w", err)
 		}
 
-		r.adminDirectoryService = srv
+		r.adminDirectoryService = service
 	}
 
 	return r, nil

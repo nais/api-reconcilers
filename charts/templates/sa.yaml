@@ -5,4 +5,4 @@ metadata:
   labels:
     {{- include "api-reconcilers.labels" . | nindent 4 }}
   annotations:
-    iam.gke.io/gcp-service-account: {{ .Values.google.serviceAccountEmail }}
+    iam.gke.io/gcp-service-account: {{ .Values.serviceAccount.email }}

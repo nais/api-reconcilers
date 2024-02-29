@@ -37,7 +37,7 @@ type naisNamespaceReconciler struct {
 	tenantDomain              string
 }
 
-func New(ctx context.Context, tenantDomain, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, tenantDomain, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &naisNamespaceReconciler{
 		googleManagementProjectID: googleManagementProjectID,
 		tenantDomain:              tenantDomain,
@@ -48,17 +48,12 @@ func New(ctx context.Context, tenantDomain, googleManagementProjectID string, op
 	}
 
 	if r.pubsubClient == nil {
-		builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
-		if err != nil {
-			return nil, err
-		}
-
-		tokenSource, err := builder.GCP(ctx)
+		ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
 		if err != nil {
 			return nil, fmt.Errorf("create token source: %w", err)
 		}
 
-		pubsubClient, err := pubsub.NewClient(ctx, googleManagementProjectID, option.WithTokenSource(tokenSource))
+		pubsubClient, err := pubsub.NewClient(ctx, googleManagementProjectID, option.WithTokenSource(ts))
 		if err != nil {
 			return nil, fmt.Errorf("retrieve pubsub client: %w", err)
 		}

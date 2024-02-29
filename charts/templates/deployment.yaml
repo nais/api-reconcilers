@@ -83,11 +83,18 @@ spec:
               value: {{ .Values.gcp.cnrmRole | quote }}
             - name: GCP_WORKLOAD_IDENTITY_POOL_NAME
               value: {{ .Values.gcp.workloadIdentityPoolName | quote }}
+            - name: GCP_SERVICE_ACCOUNT_EMAIL
+              value: {{ .Values.serviceAccount.email | quote }}
             # DependencyTrack
             - name: DEPENDENCYTRACK_ENDPOINT
               value: {{ .Values.dependencyTrack.endpoint | quote }}
             - name: DEPENDENCYTRACK_USERNAME
               value: {{ .Values.dependencyTrack.username | quote }}
+            # Google
+            - name: GOOGLE_ADMIN_SERVICE_ACCOUNT_EMAIL
+              value: {{ .Values.google.adminServiceAccountEmail | default (printf "nais-admin@%s.iam.gserviceaccount.com" .Values.googleManagementProjectID) | quote }}
+            - name: GOOGLE_ADMIN_USER_EMAIL
+              value: {{ .Values.google.adminUserEmail | default (printf "nais-admin@%s" .Values.tenantDomain) | quote }}
 
           ports:
             - name: http

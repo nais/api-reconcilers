@@ -148,12 +148,12 @@ func (m *mocks) start(t *testing.T, ctx context.Context) (*artifactregistry.Clie
 
 func TestReconcile(t *testing.T) {
 	const (
-		tenantDomain             = "example.com"
 		managementProjectID      = "management-project-123"
 		workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
 		abortReconcilerCode      = 418
 		groupEmail               = "team@example.com"
 		teamSlug                 = "team"
+		serviceAccountEmail      = "sa@example.com"
 	)
 
 	abortTestErr := fmt.Errorf("abort test")
@@ -209,7 +209,7 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactRegistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactRegistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -309,7 +309,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -382,7 +382,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -470,7 +470,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -539,7 +539,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -554,11 +554,11 @@ func TestDelete(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		tenantDomain             = "example.com"
 		managementProjectID      = "management-project-123"
 		workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
 		repositoryName           = "some-repo-name-123"
 		teamSlug                 = "my-team"
+		serviceAccountEmail      = "sa@example.com"
 	)
 
 	log, hook := logrustest.NewNullLogger()
@@ -578,7 +578,7 @@ func TestDelete(t *testing.T) {
 		}
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -621,7 +621,7 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -654,7 +654,7 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -702,7 +702,7 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -754,7 +754,7 @@ func TestDelete(t *testing.T) {
 		}
 		garClient, iamService := mockedClients.start(t, ctx)
 
-		reconciler, err := google_gar_reconciler.New(ctx, managementProjectID, tenantDomain, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

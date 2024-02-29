@@ -57,7 +57,7 @@ func WithIAMService(service *iam.Service) OptFunc {
 	}
 }
 
-func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadIdentityPoolName string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, workloadIdentityPoolName string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &garReconciler{
 		googleManagementProjectID: googleManagementProjectID,
 		workloadIdentityPoolName:  workloadIdentityPoolName,
@@ -68,12 +68,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, workloadI
 	}
 
 	if r.iamService == nil || r.artifactRegistry == nil {
-		builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
-		if err != nil {
-			return nil, err
-		}
-
-		ts, err := builder.GCP(ctx)
+		ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
 		if err != nil {
 			return nil, fmt.Errorf("get delegated token source: %w", err)
 		}

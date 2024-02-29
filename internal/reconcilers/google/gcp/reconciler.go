@@ -71,7 +71,7 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
@@ -85,7 +85,7 @@ func New(ctx context.Context, clusters gcp.Clusters, googleManagementProjectID, 
 	}
 
 	if r.gcpServices == nil {
-		gcpServices, err := createGcpServices(ctx, googleManagementProjectID, tenantDomain)
+		gcpServices, err := createGcpServices(ctx, serviceAccountEmail)
 		if err != nil {
 			return nil, err
 		}
@@ -544,12 +544,8 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 }
 
 // createGcpServices Creates the GCP services used by the reconciler
-func createGcpServices(ctx context.Context, googleManagementProjectID, tenantDomain string) (*GcpServices, error) {
-	builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
-	if err != nil {
-		return nil, err
-	}
-	ts, err := builder.GCP(ctx)
+func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpServices, error) {
+	ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
 	if err != nil {
 		return nil, fmt.Errorf("get delegated token source: %w", err)
 	}

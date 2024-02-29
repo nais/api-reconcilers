@@ -35,6 +35,7 @@ func TestReconcile(t *testing.T) {
 		cnrmEmail                 = "nais-sa-cnrm@team-project-123.iam.gserviceaccount.com"
 		slackChannel              = "#team-channel"
 		googleGroupEmail          = "group-email@example.com"
+		serviceAccountEmail       = "sa@example.com"
 	)
 
 	log, _ := test.NewNullLogger()
@@ -46,7 +47,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -66,7 +67,7 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -97,7 +98,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.ListTeamEnvironmentsResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
+		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(noopPubsub()))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -157,7 +158,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
+		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -229,7 +230,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := nais_namespace_reconciler.New(ctx, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
+		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
