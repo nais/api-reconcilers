@@ -15,8 +15,8 @@ require (
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api v0.0.0-20240216111118-1bfd6df55bf4
-	github.com/nais/dependencytrack v0.0.0-20240212045319-10e523c017ff
+	github.com/nais/api v0.0.0-20240306082322-a8207dc3426e
+	github.com/nais/dependencytrack v0.0.0-20240301095153-b46382e6a8be
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sethvargo/go-envconfig v1.0.0
 	github.com/shurcooL/githubv4 v0.0.0-20240120211514-18a1ae0e79dc
@@ -35,7 +35,7 @@ require (
 	google.golang.org/api v0.163.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240205150955-31a09d347014
 	google.golang.org/grpc v1.61.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	k8s.io/utils v0.0.0-20240102154912-e7106e64919e
 )
 
@@ -70,7 +70,7 @@ require (
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.4 // indirect
 	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/jwx/v2 v2.0.19 // indirect
+	github.com/lestrrat-go/jwx/v2 v2.0.20 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
