@@ -25,11 +25,11 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		org                       = "org"
-		teamSlug                  = "slug"
-		teamPurpose               = "purpose"
-		authEndpoint              = "https://auth"
-		googleManagementProjectID = "some-project-id"
+		org                = "org"
+		teamSlug           = "slug"
+		teamPurpose        = "purpose"
+		authEndpoint       = "https://auth"
+		serviceAccoutEmail = "sa@example.com"
 	)
 
 	log, _ := test.NewNullLogger()
@@ -160,7 +160,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccoutEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -189,7 +189,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccoutEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -252,7 +252,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccoutEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -325,7 +325,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccoutEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -341,18 +341,18 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 	log, _ := test.NewNullLogger()
 
 	const (
-		org                       = "my-organization"
-		teamSlug                  = "myteam"
-		teamName                  = "myteam"
-		teamPurpose               = "some purpose"
-		createLogin               = "should-create"
-		createEmail               = "should-create@example.com"
-		keepLogin                 = "should-keep"
-		keepEmail                 = "should-keep@example.com"
-		removeLogin               = "should-remove"
-		removeEmail               = "should-remove@example.com"
-		authEndpoint              = "https://auth"
-		googleManagementProjectID = "some-project-id"
+		org                 = "my-organization"
+		teamSlug            = "myteam"
+		teamName            = "myteam"
+		teamPurpose         = "some purpose"
+		createLogin         = "should-create"
+		createEmail         = "should-create@example.com"
+		keepLogin           = "should-keep"
+		keepEmail           = "should-keep@example.com"
+		removeLogin         = "should-remove"
+		removeEmail         = "should-remove@example.com"
+		authEndpoint        = "https://auth"
+		serviceAccountEmail = "sa@example.com"
 	)
 
 	httpOk := &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}
@@ -371,7 +371,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -548,7 +548,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once().
 			Return(nil)
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -584,7 +584,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -599,10 +599,10 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		org                       = "my-organization"
-		teamSlug                  = "myteam"
-		authEndpoint              = "https://auth"
-		googleManagementProjectID = "some-project-id"
+		org                 = "my-organization"
+		teamSlug            = "myteam"
+		authEndpoint        = "https://auth"
+		serviceAccountEmail = "sa@example.com"
 	)
 
 	log, hook := test.NewNullLogger()
@@ -622,7 +622,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -656,7 +656,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -691,7 +691,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -736,7 +736,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, googleManagementProjectID, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
+		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

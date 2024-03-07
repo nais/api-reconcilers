@@ -99,12 +99,12 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 
 	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
 
-	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GoogleManagementProjectID)
+	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GCP.ServiceAccountEmail)
 	if err != nil {
 		return err
 	}
 
-	googleWorkspaceAdminReconciler, err := google_workspace_admin_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain)
+	googleWorkspaceAdminReconciler, err := google_workspace_admin_reconciler.New(ctx, cfg.Google.AdminServiceAccountEmail, cfg.Google.AdminUserEmail, cfg.TenantDomain)
 	if err != nil {
 		return err
 	}
@@ -114,17 +114,17 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount)
 	if err != nil {
 		return err
 	}
 
-	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.GCP.WorkloadIdentityPoolName)
+	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		return err
 	}
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.TenantDomain, cfg.GoogleManagementProjectID)
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.GoogleManagementProjectID)
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,8 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
 	}
-	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GoogleManagementProjectID, cfg.TenantDomain, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
+
+	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		log.WithField("reconciler", "cdn").WithError(err).Errorf("error when creating reconciler")
 	}

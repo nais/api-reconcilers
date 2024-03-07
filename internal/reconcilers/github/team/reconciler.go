@@ -46,7 +46,7 @@ func WithGraphClient(graphClient GraphClient) OptFunc {
 	}
 }
 
-func New(ctx context.Context, org, authEndpoint, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, org, authEndpoint, serviceAccountEmail string, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &githubTeamReconciler{
 		org: org,
 	}
@@ -58,7 +58,7 @@ func New(ctx context.Context, org, authEndpoint, googleManagementProjectID strin
 	if r.teamsService == nil || r.graphClient == nil {
 		ts, err := impersonate.IDTokenSource(ctx, impersonate.IDTokenConfig{
 			Audience:        authEndpoint,
-			TargetPrincipal: fmt.Sprintf("console@%s.iam.gserviceaccount.com", googleManagementProjectID),
+			TargetPrincipal: serviceAccountEmail,
 		})
 		if err != nil {
 			return nil, err

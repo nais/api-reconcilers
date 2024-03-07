@@ -101,11 +101,9 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *google_cdn_reconciler.
 }
 
 const (
-	managementProjectID = "management-project-123"
-	tenantName          = "example"
-	tenantDomain        = "example.com"
-	abortReconcilerCode = 418
-
+	managementProjectID      = "management-project-123"
+	tenantName               = "example"
+	serviceAccountEmail      = "sa@example.com"
 	teamSlug                 = "slug"
 	googleGroupEmail         = "slug@example.com"
 	workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
@@ -135,7 +133,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_cdn_reconciler.New(ctx, managementProjectID, tenantDomain, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
+		reconcilers, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -155,7 +153,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.ListAuthorizedRepositoriesResponse{GithubRepositories: make([]string, 0)}, nil).
 			Once()
 
-		reconcilers, err := google_cdn_reconciler.New(ctx, managementProjectID, tenantDomain, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
+		reconcilers, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -419,7 +417,7 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 		services := mocks.start(t, ctx)
-		reconciler, err := google_cdn_reconciler.New(ctx, managementProjectID, tenantDomain, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(services))
+		reconciler, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -576,8 +574,8 @@ func TestDelete(t *testing.T) {
 		}
 		reconcilers, err := google_cdn_reconciler.New(
 			ctx,
+			serviceAccountEmail,
 			managementProjectID,
-			tenantDomain,
 			tenantName,
 			workloadIdentityPoolName,
 			google_cdn_reconciler.WithGcpServices(mocks.start(t, ctx)),

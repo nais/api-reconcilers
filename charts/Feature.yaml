@@ -59,11 +59,24 @@ values:
       template: |
         {{ .Env.hookd_provision_key | quote }}
 
-  google.serviceAccountEmail:
-    displayName: Google service account email
+  serviceAccount.email:
+    displayName: Email address of the GCP service account
+    description: The email address of the service account that is used when using the Google APIs
     computed:
       template: |
         {{ .Env.teams_google_service_account_email | quote }}
+
+  google.adminServiceAccountEmail:
+    displayName: Email address of the Google Workspace Admin service account
+    description: The email address of the service account that is used when using the Google Workspace Admin APIs
+    config:
+      type: string
+
+  google.adminUserEmail:
+    displayName: Email address of the admin user for Google Workspace
+    description: The email address of the user that is impersonated when using the Google Workspace Admin APIs
+    config:
+      type: string
 
   gcp.billingAccount:
     displayName: Billing account

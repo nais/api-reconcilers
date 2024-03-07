@@ -26,8 +26,12 @@ naisDeploy:
   endpoint: http://hookd/internal/api/v1/provision
   provisionKey: # mapped in fasit
 
+serviceAccount:
+  email: null
+
 google:
-  serviceAccountEmail: # mapped in fasit
+  adminServiceAccountEmail: null
+  adminUserEmail: null
 
 gcp:
   billingAccount: # mapped in fasit

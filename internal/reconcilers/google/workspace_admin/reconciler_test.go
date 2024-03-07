@@ -24,11 +24,12 @@ func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		gkeSecurityGroup          = "gke-security-groups@example.com"
-		teamSlug                  = "my-team"
-		teamPurpose               = "some purpose"
-		googleManagementProjectID = "project-id"
-		tenantDomain              = "example.com"
+		gkeSecurityGroup    = "gke-security-groups@example.com"
+		teamSlug            = "my-team"
+		teamPurpose         = "some purpose"
+		serviceAccountEmail = "sa@example.com"
+		subjectEmail        = "admin-user@example.com"
+		tenantDomain        = "example.com"
 	)
 
 	naisTeam := &protoapi.Team{
@@ -176,7 +177,7 @@ func TestReconcile(t *testing.T) {
 
 		service, _ := admin_directory_v1.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(ts.URL))
 
-		reconciler, err := google_workspace_admin_reconciler.New(ctx, googleManagementProjectID, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(service))
+		reconciler, err := google_workspace_admin_reconciler.New(ctx, serviceAccountEmail, subjectEmail, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(service))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -191,11 +192,12 @@ func Test_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		teamSlug                  = "my-team"
-		teamPurpose               = "some purpose"
-		googleManagementProjectID = "project-id"
-		tenantDomain              = "example.com"
-		googleGroupEmail          = "nais-team-my-team@example.com"
+		teamSlug            = "my-team"
+		teamPurpose         = "some purpose"
+		serviceAccountEmail = "sa@example.com"
+		subjectEmail        = "admin-user@example.com"
+		tenantDomain        = "example.com"
+		googleGroupEmail    = "nais-team-my-team@example.com"
 	)
 
 	t.Run("no group email in state", func(t *testing.T) {
@@ -215,7 +217,7 @@ func Test_Delete(t *testing.T) {
 		service, closer := getAdminDirectoryServiceAndClient(t, ctx, nil)
 		defer closer()
 
-		reconciler, err := google_workspace_admin_reconciler.New(ctx, googleManagementProjectID, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(service))
+		reconciler, err := google_workspace_admin_reconciler.New(ctx, serviceAccountEmail, subjectEmail, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(service))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -262,7 +264,7 @@ func Test_Delete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := google_workspace_admin_reconciler.New(ctx, googleManagementProjectID, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(googleAdminService))
+		reconciler, err := google_workspace_admin_reconciler.New(ctx, serviceAccountEmail, subjectEmail, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(googleAdminService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -301,7 +303,7 @@ func Test_Delete(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		reconciler, err := google_workspace_admin_reconciler.New(ctx, googleManagementProjectID, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(googleAdminService))
+		reconciler, err := google_workspace_admin_reconciler.New(ctx, serviceAccountEmail, subjectEmail, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(googleAdminService))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

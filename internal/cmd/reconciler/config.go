@@ -39,6 +39,9 @@ type Config struct {
 		// Example: `organizations/<org_id>/roles/CustomCNRMRole`, where `<org_id>` is a numeric ID.
 		CnrmRole string `env:"GCP_CNRM_ROLE"`
 
+		// ServiceAccountEmail The email address to impersonate when using Google APIs
+		ServiceAccountEmail string `env:"GCP_SERVICE_ACCOUNT_EMAIL"`
+
 		// WorkloadIdentityPoolName The name of the workload identity pool used in the management project.
 		//
 		// Example: projects/{project_number}/locations/global/workloadIdentityPools/{workload_identity_pool_id}
@@ -75,6 +78,14 @@ type Config struct {
 
 		// ProjectID The ID of the Pub/Sub project used to listen for events from the NAIS API. Defaults to GoogleManagementProjectID.
 		ProjectID string `env:"PUBSUB_PROJECT_ID,default=$GOOGLE_MANAGEMENT_PROJECT_ID"`
+	}
+
+	Google struct {
+		// AdminServiceAccountEmail The email address of the service account to impersonate when using Google Workspace Admin APIs
+		AdminServiceAccountEmail string `env:"GOOGLE_ADMIN_SERVICE_ACCOUNT_EMAIL"`
+
+		// AdminUserEmail The email address to impersonate during Google Admin Workspace operations.
+		AdminUserEmail string `env:"GOOGLE_ADMIN_USER_EMAIL"`
 	}
 
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.

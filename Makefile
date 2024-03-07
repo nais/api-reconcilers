@@ -1,6 +1,6 @@
 .PHONY: all
 
-all: generate test check fmt build
+all: generate test check fmt build helm-lint
 
 generate: generate-mocks
 
@@ -32,3 +32,6 @@ deadcode:
 
 fmt:
 	go run mvdan.cc/gofumpt@latest -w ./
+
+helm-lint:
+	helm lint --strict ./charts

@@ -65,7 +65,7 @@ func WithGcpServices(gcpServices *Services) OverrideFunc {
 	}
 }
 
-func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (*cdnReconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (*cdnReconciler, error) {
 	roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", googleManagementProjectID)
 	reconciler := &cdnReconciler{
 		cacheReconcilerRoleID:     roleID,
@@ -79,7 +79,7 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 	}
 
 	if reconciler.services == nil {
-		s, err := gcpServices(ctx, googleManagementProjectID, tenantDomain)
+		s, err := gcpServices(ctx, serviceAccountEmail)
 		if err != nil {
 			return nil, fmt.Errorf("get gcp services: %w", err)
 		}
@@ -89,12 +89,8 @@ func New(ctx context.Context, googleManagementProjectID, tenantDomain, tenantNam
 	return reconciler, nil
 }
 
-func gcpServices(ctx context.Context, googleManagementProjectID, tenantDomain string) (*Services, error) {
-	builder, err := google_token_source.New(googleManagementProjectID, tenantDomain)
-	if err != nil {
-		return nil, err
-	}
-	ts, err := builder.GCP(ctx)
+func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, error) {
+	ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
 	if err != nil {
 		return nil, fmt.Errorf("get delegated token source: %w", err)
 	}
