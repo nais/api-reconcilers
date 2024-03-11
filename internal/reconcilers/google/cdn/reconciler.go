@@ -466,9 +466,8 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		return backendBucket, nil
 	}
 
-	// TODO: for feature parity, these should be configurable for each team, to be received from somewhere.
-	const defaultTTL = int32(3600)
-	const defaultMaxTTL = int32(86400) // TODO: previously max(config, 86400),
+	const defaultTTL = int32(3600)     // 1 hour
+	const defaultMaxTTL = int32(86400) // 1 year
 
 	req := &computepb.InsertBackendBucketRequest{
 		BackendBucketResource: &computepb.BackendBucket{
