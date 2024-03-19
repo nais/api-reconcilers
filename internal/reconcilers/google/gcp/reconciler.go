@@ -661,7 +661,7 @@ func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, clie
 			return err
 		}
 	}
-	log.Infof("Attached teamProjectId %q as service teamProjectId to shared vpc in %q", teamProjectId, clusterProjectId)
+	log.Infof("Attached team project %q as service project to shared vpc in %q", teamProjectId, clusterProjectId)
 
 	reconcilers.AuditLogForTeam(
 		ctx,
@@ -669,7 +669,7 @@ func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, clie
 		r,
 		auditActionGoogleGcpProjectAttachSharedVpc,
 		naisTeam.Slug,
-		"Attached teamProjectId %q as service teamProjectId to shared vpc in %q", teamProjectId, clusterProjectId,
+		"Attached team project %q as service project to shared vpc in %q", teamProjectId, clusterProjectId,
 	)
 
 	return nil
