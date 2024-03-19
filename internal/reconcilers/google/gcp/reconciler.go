@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
+
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -41,6 +43,7 @@ const (
 	auditActionGoogleGcpProjectCreateProject            = "google:gcp:project:create-project"
 	auditActionGoogleGcpProjectEnableGoogleApis         = "google:gcp:project:enable-google-apis"
 	auditActionGoogleGcpProjectSetBillingInfo           = "google:gcp:project:set-billing-info"
+	auditActionGoogleGcpProjectAttachSharedVpc          = "google:gcp:project:attach-shared-vpc"
 )
 
 type GcpServices struct {
@@ -49,6 +52,7 @@ type GcpServices struct {
 	CloudResourceManagerProjectsService   *cloudresourcemanager.ProjectsService
 	ComputeGlobalOperationsService        *compute.GlobalOperationsService
 	FirewallService                       *compute.FirewallsService
+	ComputeProjectsService                *compute.ProjectsService
 	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
@@ -61,6 +65,7 @@ type googleGcpReconciler struct {
 	gcpServices    *GcpServices
 	tenantDomain   string
 	tenantName     string
+	flags          config.FeatureFlags
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -71,13 +76,14 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
 		cnrmRoleName:   cnrmRoleName,
 		tenantDomain:   tenantDomain,
 		tenantName:     tenantName,
+		flags:          flags,
 	}
 
 	for _, opt := range opts {
@@ -181,6 +187,12 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 
 		if err := r.deleteDefaultVPCNetworkRules(ctx, teamProject, log); err != nil {
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if r.flags.AttachSharedVpc {
+			if err := r.attachProjectToSharedVPC(ctx, client, naisTeam, teamProject.ProjectId, cluster.ProjectID, log); err != nil {
+				return fmt.Errorf("attach project %q as service project to shared VPC for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.SlackChannel, env.EnvironmentName, err)
+			}
 		}
 
 	}
@@ -585,6 +597,7 @@ func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpSer
 		CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
 		ComputeGlobalOperationsService:        computeService.GlobalOperations,
 		FirewallService:                       computeService.Firewalls,
+		ComputeProjectsService:                computeService.Projects,
 		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
 		ServiceUsageOperationsService:         serviceUsageService.Operations,
 		ServiceUsageService:                   serviceUsageService.Services,
@@ -624,6 +637,41 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 			}
 		}
 	}
+	return nil
+}
+
+func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, teamProjectId string, clusterProjectId string, log logrus.FieldLogger) error {
+	req := &compute.ProjectsEnableXpnResourceRequest{
+		XpnResource: &compute.XpnResourceId{
+			Id:   teamProjectId,
+			Type: "PROJECT",
+		},
+	}
+	operation, err := r.gcpServices.ComputeProjectsService.EnableXpnResource(clusterProjectId, req).Context(ctx).Do()
+	if err != nil {
+		if googleapi.IsNotModified(err) {
+			return nil
+		}
+		return err
+	}
+
+	for operation.Status != "DONE" {
+		operation, err = r.gcpServices.ComputeGlobalOperationsService.Wait(clusterProjectId, operation.Name).Context(ctx).Do()
+		if err != nil {
+			return err
+		}
+	}
+	log.Infof("Attached teamProjectId %q as service teamProjectId to shared vpc in %q", teamProjectId, clusterProjectId)
+
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionGoogleGcpProjectAttachSharedVpc,
+		naisTeam.Slug,
+		"Attached teamProjectId %q as service teamProjectId to shared vpc in %q", teamProjectId, clusterProjectId,
+	)
+
 	return nil
 }
 
