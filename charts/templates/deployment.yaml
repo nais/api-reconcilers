@@ -98,7 +98,7 @@ spec:
             # Feature flags
             {{- if .Values.featureFlags.attachSharedVpc }}
             - name: FEATURE_ATTACH_SHARED_VPC
-              value: {{ .Values.featureFlags.attachSharedVpc }}
+              value: {{ .Values.featureFlags.attachSharedVpc | quote }}
             {{- end }}
           ports:
             - name: http
