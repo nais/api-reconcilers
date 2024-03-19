@@ -163,6 +163,12 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:attach-shared-vpc" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
 
 		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{
 			// create project request
@@ -425,6 +431,36 @@ func TestReconcile(t *testing.T) {
 				resp, _ := op.MarshalJSON()
 				_, _ = w.Write(resp)
 			},
+
+			// attach team project to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + clusterProjectID + "/enableXpnResource"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
+
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + clusterProjectID + "/global/operations/operation-name-enable-xpn-resource/wait"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
+
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
 		})
 		defer srv.Close()
 
@@ -443,6 +479,7 @@ func TestReconcile(t *testing.T) {
 			ServiceUsageOperationsService:         serviceUsageService.Operations,
 			FirewallService:                       computeService.Firewalls,
 			ComputeGlobalOperationsService:        computeService.GlobalOperations,
+			ComputeProjectsService:                computeService.Projects,
 		}
 
 		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, google_gcp_reconciler.WithGcpServices(gcpServices))
