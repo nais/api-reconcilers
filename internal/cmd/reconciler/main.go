@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
+
 	"github.com/joho/godotenv"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -47,7 +49,7 @@ func Run(ctx context.Context) {
 		log.Infof("loaded .env file")
 	}
 
-	cfg, err := NewConfig(ctx, envconfig.OsLookuper())
+	cfg, err := config.NewConfig(ctx, envconfig.OsLookuper())
 	if err != nil {
 		log.WithError(err).Errorf("error when processing configuration")
 		os.Exit(exitCodeConfigError)
@@ -68,7 +70,7 @@ func Run(ctx context.Context) {
 	os.Exit(exitCodeSuccess)
 }
 
-func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
+func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error {
 	ctx, signalStop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer signalStop()
 
@@ -114,7 +116,7 @@ func run(ctx context.Context, cfg *Config, log logrus.FieldLogger) error {
 		return err
 	}
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount, cfg.FeatureFlags)
 	if err != nil {
 		return err
 	}

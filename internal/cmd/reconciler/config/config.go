@@ -1,4 +1,4 @@
-package reconciler
+package config
 
 import (
 	"context"
@@ -7,7 +7,15 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
+type FeatureFlags struct {
+	// AttachSharedVpc enabled the shared vpc feature
+	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
+}
+
 type Config struct {
+	// Flags to enable new features
+	FeatureFlags FeatureFlags
+
 	Azure struct {
 		// GroupNamePrefix will be prepended all groups created in Azure.
 		GroupNamePrefix string `env:"AZURE_GROUP_NAME_PREFIX,default=nais-team-"`

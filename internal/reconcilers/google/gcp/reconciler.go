@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
+
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -63,6 +65,7 @@ type googleGcpReconciler struct {
 	gcpServices    *GcpServices
 	tenantDomain   string
 	tenantName     string
+	flags          config.FeatureFlags
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -73,13 +76,14 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
 		cnrmRoleName:   cnrmRoleName,
 		tenantDomain:   tenantDomain,
 		tenantName:     tenantName,
+		flags:          flags,
 	}
 
 	for _, opt := range opts {
@@ -185,8 +189,10 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("delete default vpc firewall rules in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.attachProjectToSharedVPC(ctx, client, naisTeam, teamProject.ProjectId, cluster.ProjectID, log); err != nil {
-			return fmt.Errorf("attach project %q as service project to shared VPC for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.SlackChannel, env.EnvironmentName, err)
+		if r.flags.AttachSharedVpc {
+			if err := r.attachProjectToSharedVPC(ctx, client, naisTeam, teamProject.ProjectId, cluster.ProjectID, log); err != nil {
+				return fmt.Errorf("attach project %q as service project to shared VPC for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.SlackChannel, env.EnvironmentName, err)
+			}
 		}
 
 	}

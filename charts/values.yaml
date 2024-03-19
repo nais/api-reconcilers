@@ -47,3 +47,6 @@ dependencyTrack:
 naisAPI:
   insecure: "true"
   target: nais-api:3001
+
+featureFlags:
+  attachSharedVpc:

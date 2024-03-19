@@ -16,6 +16,11 @@ values:
     config:
       type: string
 
+  featureFlags.attachSharedVpc:
+    displayName: Attach Shared VPC
+    config:
+      type: bool
+
   googleManagementProjectID:
     displayName: Google management project ID
     computed:
