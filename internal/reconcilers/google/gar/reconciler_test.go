@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -176,6 +177,7 @@ func TestReconcile(t *testing.T) {
 			"team":       teamSlug,
 			"managed-by": "api-reconcilers",
 		},
+		CleanupPolicies: google_gar_reconciler.DefaultCleanupPolicies(),
 	}
 
 	ctx := context.Background()
@@ -399,9 +401,6 @@ func TestReconcile(t *testing.T) {
 				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
 					return &expectedRepository, nil
 				},
-				update: func(ctx context.Context, r *artifactregistrypb.UpdateRepositoryRequest) (*artifactregistrypb.Repository, error) {
-					return &expectedRepository, nil
-				},
 				setIamPolicy: func(ctx context.Context, r *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
 					if r.Resource != expectedRepository.Name {
 						t.Errorf("expected resource %q, got %q", expectedRepository.Name, r.Resource)
@@ -514,6 +513,74 @@ func TestReconcile(t *testing.T) {
 
 					if r.Repository.Labels["team"] != teamSlug {
 						t.Errorf("expected team label %q, got %q", teamSlug, r.Repository.Labels["team"])
+					}
+
+					return nil, abortTestErr
+				},
+			},
+			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				// get service account
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(expectedServiceAccount); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+				// set iam policy
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&iam.Policy{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+			}),
+		}
+
+		artifactregistryClient, iamService := mocks.start(t, ctx)
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.Reconcilers.EXPECT().
+			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
+			Return(&protoapi.GetReconcilerStateResponse{}, nil).
+			Once()
+
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(artifactregistryClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "abort test") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("gar repository exists, but has no cleanup policies", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug: teamSlug,
+		}
+
+		mocks := mocks{
+			artifactRegistry: &fakeArtifactRegistry{
+				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					repositoryWithoutCleanupPolicies := proto.Clone(&expectedRepository).(*artifactregistrypb.Repository)
+					repositoryWithoutCleanupPolicies.CleanupPolicies = nil
+
+					return repositoryWithoutCleanupPolicies, nil
+				},
+				update: func(ctx context.Context, r *artifactregistrypb.UpdateRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					if r.Repository.CleanupPolicies == nil {
+						t.Errorf("expected cleanup policies to be set, got nil")
+					}
+
+					if r.Repository.CleanupPolicyDryRun {
+						t.Errorf("expected cleanup policy dry run to be false, got true")
+					}
+
+					expectedPolicies := google_gar_reconciler.DefaultCleanupPolicies()
+					policyUpToDate := maps.EqualFunc(expectedPolicies, r.Repository.CleanupPolicies, func(a, b *artifactregistrypb.CleanupPolicy) bool {
+						return proto.Equal(a, b)
+					})
+
+					if !policyUpToDate {
+						t.Errorf("expected cleanup policies to be %v, got %v", expectedPolicies, r.Repository.CleanupPolicies)
 					}
 
 					return nil, abortTestErr

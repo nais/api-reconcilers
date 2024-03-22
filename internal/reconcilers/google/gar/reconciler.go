@@ -3,13 +3,13 @@ package google_gar_reconciler
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
-	"github.com/google/go-cmp/cmp"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"k8s.io/utils/ptr"
@@ -303,8 +304,12 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 		changes = append(changes, "description")
 	}
 
-	targetPolicies := defaultCleanupPolicies()
-	if !cmp.Equal(targetPolicies, repository.CleanupPolicies) || repository.CleanupPolicyDryRun == true {
+	targetPolicies := DefaultCleanupPolicies()
+	policyUpToDate := maps.EqualFunc(targetPolicies, repository.CleanupPolicies, func(a, b *artifactregistrypb.CleanupPolicy) bool {
+		return proto.Equal(a, b)
+	})
+
+	if !policyUpToDate || repository.CleanupPolicyDryRun == true {
 		repository.CleanupPolicyDryRun = false
 		repository.CleanupPolicies = targetPolicies
 		changes = append(changes, "cleanup_policies")
@@ -361,7 +366,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 // but keep the last 10 versions regardless of age.
 //
 // Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
-func defaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
+func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
 	var keepCount int32 = 10
 	var keepUntilAge = time.Hour * 24 * 60
 	var anyTagState = artifactregistrypb.CleanupPolicyCondition_ANY
