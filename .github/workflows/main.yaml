@@ -1,8 +1,5 @@
 name: Build and push image and chart
-on:
-  push:
-    branches:
-      - main
+on: push
 env:
   NAME: nais-api-reconcilers
   IMAGE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais
