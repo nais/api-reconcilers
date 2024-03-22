@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
-	"github.com/nais/api-reconcilers/internal/gcp"
-	"github.com/nais/api-reconcilers/internal/google_token_source"
-	"github.com/nais/api-reconcilers/internal/reconcilers"
-	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	str "github.com/nais/api-reconcilers/internal/strings"
+	"github.com/google/go-cmp/cmp"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -23,8 +20,15 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"k8s.io/utils/ptr"
+
+	"github.com/nais/api-reconcilers/internal/gcp"
+	"github.com/nais/api-reconcilers/internal/google_token_source"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	str "github.com/nais/api-reconcilers/internal/strings"
 )
 
 const (
@@ -299,6 +303,14 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 		changes = append(changes, "description")
 	}
 
+	targetPolicies := defaultCleanupPolicies()
+	if !cmp.Equal(targetPolicies, repository.CleanupPolicies) || repository.CleanupPolicyDryRun == true {
+		repository.CleanupPolicyDryRun = false
+		repository.CleanupPolicies = targetPolicies
+		changes = append(changes, "cleanup_policies")
+		changes = append(changes, "cleanup_policy_dry_run")
+	}
+
 	if len(changes) > 0 {
 		updateRequest := &artifactregistrypb.UpdateRepositoryRequest{
 			Repository: repository,
@@ -343,4 +355,36 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	emailAddress := accountID + "@" + projectID + ".iam.gserviceaccount.com"
 	serviceAccountName = "projects/" + projectID + "/serviceAccounts/" + emailAddress
 	return
+}
+
+// Remove all images that are more than 60 days old,
+// but keep the last 10 versions regardless of age.
+//
+// Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
+func defaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
+	var keepCount int32 = 10
+	var keepUntilAge = time.Hour * 24 * 60
+	var anyTagState = artifactregistrypb.CleanupPolicyCondition_ANY
+
+	return map[string]*artifactregistrypb.CleanupPolicy{
+		"delete_old_images": {
+			Id:     "delete_old_images",
+			Action: artifactregistrypb.CleanupPolicy_DELETE,
+			ConditionType: &artifactregistrypb.CleanupPolicy_Condition{
+				Condition: &artifactregistrypb.CleanupPolicyCondition{
+					TagState:  &anyTagState,
+					OlderThan: durationpb.New(keepUntilAge),
+				},
+			},
+		},
+		"keep_latest_versions": {
+			Id:     "keep_latest_versions",
+			Action: artifactregistrypb.CleanupPolicy_KEEP,
+			ConditionType: &artifactregistrypb.CleanupPolicy_MostRecentVersions{
+				MostRecentVersions: &artifactregistrypb.CleanupPolicyMostRecentVersions{
+					KeepCount: &keepCount,
+				},
+			},
+		},
+	}
 }
