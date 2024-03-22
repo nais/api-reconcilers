@@ -368,8 +368,8 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 // Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
 func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
 	var keepCount int32 = 10
-	var keepUntilAge = time.Hour * 24 * 60
-	var anyTagState = artifactregistrypb.CleanupPolicyCondition_ANY
+	keepUntilAge := time.Hour * 24 * 60
+	anyTagState := artifactregistrypb.CleanupPolicyCondition_ANY
 
 	return map[string]*artifactregistrypb.CleanupPolicy{
 		"delete_old_images": {
