@@ -112,3 +112,8 @@ values:
     displayName: DependencyTrack password
     computed:
       template: "{{ .Env.teams_dependencytrack_password | quote }}"
+
+  image.tag:
+    displayName: Image tag
+    config:
+      type: string
