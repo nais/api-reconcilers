@@ -309,7 +309,7 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 		return proto.Equal(a, b)
 	})
 
-	if !policyUpToDate || repository.CleanupPolicyDryRun == true {
+	if !policyUpToDate || repository.CleanupPolicyDryRun {
 		repository.CleanupPolicyDryRun = false
 		repository.CleanupPolicies = targetPolicies
 		changes = append(changes, "cleanup_policies")
