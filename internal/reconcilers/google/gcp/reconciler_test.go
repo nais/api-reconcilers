@@ -437,6 +437,23 @@ func TestReconcile(t *testing.T) {
 				_, _ = w.Write(resp)
 			},
 
+			// get team projects attached to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
+
+				if expected := "/projects/" + clusterProjectID + "/getXpnResources"; r.URL.Path != expected {
+					t.Errorf("expected path %q, got %q", expected, r.URL.Path)
+				}
+
+				getXpnResources := compute.ProjectsGetXpnResources{
+					Resources: []*compute.XpnResourceId{},
+				}
+				resp, _ := getXpnResources.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+
 			// attach team project to shared vpc
 			func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
