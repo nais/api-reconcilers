@@ -641,6 +641,17 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 }
 
 func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, teamProjectId string, clusterProjectId string, log logrus.FieldLogger) error {
+	getXpnResourcesResult, err := r.gcpServices.ComputeProjectsService.GetXpnResources(clusterProjectId).Context(ctx).Do()
+	if err != nil {
+		return err
+	}
+	for _, xpnResource := range getXpnResourcesResult.Resources {
+		if xpnResource.Id == teamProjectId {
+			log.Debugf("Team project %q is already attached to shared vpc in %q", teamProjectId, clusterProjectId)
+			return nil
+		}
+	}
+
 	req := &compute.ProjectsEnableXpnResourceRequest{
 		XpnResource: &compute.XpnResourceId{
 			Id:   teamProjectId,
