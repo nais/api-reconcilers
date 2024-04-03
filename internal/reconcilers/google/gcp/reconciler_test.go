@@ -440,7 +440,7 @@ func TestReconcile(t *testing.T) {
 			// get team projects attached to shared vpc
 			func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet {
-					t.Errorf("expected HTTP POST, got: %q", r.Method)
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
 				}
 
 				if expected := "/projects/" + clusterProjectID + "/getXpnResources"; r.URL.Path != expected {
