@@ -362,13 +362,14 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	return
 }
 
-// Remove all images that are more than 90 days old,
-// but keep the last 50 "versions" regardless of age.
+// Remove all images that are more than 90 days old, but keep the last 50 "versions" regardless of age.
+// These numbers are also referenced in our own documentation at: https://doc.nais.io/how-to-guides/github-action/; try to keep them in sync.
+//
+// Each "build and push" includes artifacts such as signatures and attestations that seemingly count as "versions".
+// Thus, an "image" actually consists of 5 artifacts at the worst (for images pushed through the nais/docker-build-push action)
 //
 // Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
 func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
-	// each "build and push" includes artifacts such as signatures and attestations that seemingly count as "versions"
-	// thus, an image consists of 5 artifacts at the worst (for images pushed through the nais/docker-build-push action)
 	var keepCount int32 = 50
 
 	keepUntilAge := time.Hour * 24 * 90
