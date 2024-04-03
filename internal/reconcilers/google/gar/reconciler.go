@@ -362,7 +362,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	return
 }
 
-// Remove all images that are more than 60 days old,
+// Remove all images that are more than 90 days old,
 // but keep the last 50 "versions" regardless of age.
 //
 // Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
@@ -371,7 +371,7 @@ func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
 	// thus, an image consists of 5 artifacts at the worst (for images pushed through the nais/docker-build-push action)
 	var keepCount int32 = 50
 
-	keepUntilAge := time.Hour * 24 * 60
+	keepUntilAge := time.Hour * 24 * 90
 	anyTagState := artifactregistrypb.CleanupPolicyCondition_ANY
 
 	return map[string]*artifactregistrypb.CleanupPolicy{
