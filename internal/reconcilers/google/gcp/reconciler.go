@@ -56,6 +56,7 @@ type GcpServices struct {
 	IamProjectsServiceAccountsService     *iam.ProjectsServiceAccountsService
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
+	ProjectsRolesService                  *iam.ProjectsRolesService
 }
 
 type googleGcpReconciler struct {
@@ -125,7 +126,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
-	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+	it := iterator.New[*protoapi.TeamEnvironment](ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
@@ -601,6 +602,7 @@ func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpSer
 		IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
 		ServiceUsageOperationsService:         serviceUsageService.Operations,
 		ServiceUsageService:                   serviceUsageService.Services,
+		ProjectsRolesService:                  iamService.Projects.Roles,
 	}, nil
 }
 
