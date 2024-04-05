@@ -100,6 +100,10 @@ spec:
             - name: FEATURE_ATTACH_SHARED_VPC
               value: {{ .Values.featureFlags.attachSharedVpc | quote }}
             {{- end }}
+            {{- if .Values.featureFlags.cnrmRoleInProject }}
+            - name: FEATURE_CNRM_ROLE_IN_PROJECT
+              value: {{ .Values.featureFlags.cnrmRoleInProject | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 3005
