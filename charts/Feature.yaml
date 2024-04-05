@@ -21,6 +21,11 @@ values:
     config:
       type: bool
 
+  featureFlags.cnrmRoleInProject:
+    displayName: CNRM Role in team project
+    config:
+      type: bool
+
   googleManagementProjectID:
     displayName: Google management project ID
     computed:

@@ -50,3 +50,4 @@ naisAPI:
 
 featureFlags:
   attachSharedVpc:
+  cnrmRoleInProject:
