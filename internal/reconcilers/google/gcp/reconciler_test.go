@@ -116,8 +116,10 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		expectedTeamProjectID := "slug-prod-ea99"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/CustomCNRMRole"
 		flags := config.FeatureFlags{
-			AttachSharedVpc: true,
+			AttachSharedVpc:   true,
+			CnrmRoleInProject: true,
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -159,6 +161,12 @@ func TestReconcile(t *testing.T) {
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
 				return req.Action == "google:gcp:project:create-cnrm-service-account" && req.ReconcilerName == "google:gcp:project"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
+				return req.Action == "google:gcp:project:create-cnrm-role" && req.ReconcilerName == "google:gcp:project"
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
@@ -301,6 +309,35 @@ func TestReconcile(t *testing.T) {
 				_, _ = w.Write(resp)
 			},
 
+			// get existing custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
+				w.WriteHeader(404)
+			},
+
+			// create custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
+
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if payload.Role.Name != expectedCnrmRoleName {
+					t.Errorf("expected role name %q, got %q", expectedCnrmRoleName, payload.Role.Name)
+				}
+
+				if expected := 35; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
+					t.Errorf("expected %d permissions, got %d", expected, len(payload.Role.IncludedPermissions))
+				}
+
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+
 			// set workload identity for service account
 			func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodPost {
@@ -348,8 +385,8 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("incorrect owner, expected: %q, got: %q", "group:slug@example.com", expectedBindings["roles/owner"])
 				}
 
-				if expectedBindings[cnrmRoleName] != "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com" {
-					t.Errorf("incorrect owner, expected: %q, got: %q", "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com", expectedBindings[cnrmRoleName])
+				if expectedBindings[expectedCnrmRoleName] != "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com" {
+					t.Errorf("incorrect owner, expected: %q, got: %q", "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com", expectedBindings[expectedCnrmRoleName])
 				}
 
 				policy := iam.Policy{}
@@ -502,6 +539,7 @@ func TestReconcile(t *testing.T) {
 			FirewallService:                       computeService.Firewalls,
 			ComputeGlobalOperationsService:        computeService.GlobalOperations,
 			ComputeProjectsService:                computeService.Projects,
+			ProjectsRolesService:                  iamService.Projects.Roles,
 		}
 
 		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, flags, google_gcp_reconciler.WithGcpServices(gcpServices))

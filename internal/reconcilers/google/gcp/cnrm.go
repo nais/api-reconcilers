@@ -3,13 +3,15 @@ package google_gcp_reconciler
 import (
 	"context"
 	"fmt"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
+	"github.com/nais/api/pkg/apiclient"
 	"google.golang.org/api/iam/v1"
 	"slices"
 )
 
 const CNRMRoleName = "CustomCNRMRole"
 
-func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId string) (*iam.Role, error) {
+func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apiclient.APIClient, teamSlug string, projectId string) (*iam.Role, error) {
 
 	parent := fmt.Sprintf("projects/%s", projectId)
 	name := fmt.Sprintf("projects/%s/roles/%s", projectId, CNRMRoleName)
@@ -64,14 +66,32 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId stri
 		req := &iam.CreateRoleRequest{
 			Role: role,
 		}
-		return r.gcpServices.ProjectsRolesService.Create(parent, req).Context(ctx).Do()
+		createdRole, err := r.gcpServices.ProjectsRolesService.Create(parent, req).Context(ctx).Do()
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionGoogleGcpProjectCreateCnrmRole,
+			teamSlug,
+			"Created CNRM Custom Role in team project %q", projectId,
+		)
+		return createdRole, err
 	}
 
 	slices.Sort(existingRole.IncludedPermissions)
 	slices.Sort(role.IncludedPermissions)
 
 	if !slices.Equal(existingRole.IncludedPermissions, role.IncludedPermissions) {
-		return r.gcpServices.ProjectsRolesService.Patch(name, role).Context(ctx).Do()
+		patchedRole, err := r.gcpServices.ProjectsRolesService.Patch(name, role).Context(ctx).Do()
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionGoogleGcpProjectPatchCnrmRole,
+			teamSlug,
+			"Updated CNRM Custom Role in team project %q", projectId,
+		)
+		return patchedRole, err
 	}
 
 	return existingRole, nil

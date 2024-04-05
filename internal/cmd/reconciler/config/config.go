@@ -10,6 +10,8 @@ import (
 type FeatureFlags struct {
 	// AttachSharedVpc enabled the shared vpc feature
 	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
+	// CnrmRoleInProject enables the CNRM role in project feature
+	CnrmRoleInProject bool `env:"FEATURE_CNRM_ROLE_IN_PROJECT"`
 }
 
 type Config struct {

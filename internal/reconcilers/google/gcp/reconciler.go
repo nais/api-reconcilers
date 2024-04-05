@@ -40,6 +40,8 @@ const (
 	auditActionGoogleGcpDeleteProject                   = "google:gcp:delete-project"
 	auditActionGoogleGcpProjectAssignPermissions        = "google:gcp:project:assign-permissions"
 	auditActionGoogleGcpProjectCreateCnrmServiceAccount = "google:gcp:project:create-cnrm-service-account"
+	auditActionGoogleGcpProjectCreateCnrmRole           = "google:gcp:project:create-cnrm-role"
+	auditActionGoogleGcpProjectPatchCnrmRole            = "google:gcp:project:patch-cnrm-role"
 	auditActionGoogleGcpProjectCreateProject            = "google:gcp:project:create-project"
 	auditActionGoogleGcpProjectEnableGoogleApis         = "google:gcp:project:enable-google-apis"
 	auditActionGoogleGcpProjectSetBillingInfo           = "google:gcp:project:set-billing-info"
@@ -178,7 +180,16 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.setProjectPermissions(ctx, client, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount); err != nil {
+		cnrmRoleName := r.cnrmRoleName
+		if r.flags.CnrmRoleInProject {
+			role, err := r.createCNRMRole(ctx, client, naisTeam.Slug, teamProject.ProjectId)
+			if err != nil {
+				return fmt.Errorf("create CNRM role for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
+			}
+			cnrmRoleName = role.Name
+		}
+
+		if err := r.setProjectPermissions(ctx, client, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRoleName); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -414,7 +425,7 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *ap
 
 // setProjectPermissions Make sure that the project has the necessary permissions, and don't remove permissions we don't
 // control
-func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client *apiclient.APIClient, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount) error {
+func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client *apiclient.APIClient, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount, cnrmRoleName string) error {
 	member := "serviceAccount:" + clusterProjectID + ".svc.id.goog[cnrm-system/cnrm-controller-manager-" + naisTeam.Slug + "]"
 	_, err := r.gcpServices.IamProjectsServiceAccountsService.SetIamPolicy(cnrmServiceAccount.Name, &iam.SetIamPolicyRequest{
 		Policy: &iam.Policy{
@@ -436,8 +447,8 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 	}
 
 	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
-		"roles/owner":  {"group:" + *naisTeam.GoogleGroupEmail},
-		r.cnrmRoleName: {"serviceAccount:" + cnrmServiceAccount.Email},
+		"roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
+		cnrmRoleName:  {"serviceAccount:" + cnrmServiceAccount.Email},
 	})
 
 	if !updated {
