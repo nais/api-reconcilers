@@ -3,16 +3,13 @@ package google_gar_reconciler
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
+	"time"
 
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
-	"github.com/nais/api-reconcilers/internal/gcp"
-	"github.com/nais/api-reconcilers/internal/google_token_source"
-	"github.com/nais/api-reconcilers/internal/reconcilers"
-	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
-	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
@@ -23,8 +20,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"k8s.io/utils/ptr"
+
+	"github.com/nais/api-reconcilers/internal/gcp"
+	"github.com/nais/api-reconcilers/internal/google_token_source"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
+	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	str "github.com/nais/api-reconcilers/internal/strings"
 )
 
 const (
@@ -299,6 +304,18 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 		changes = append(changes, "description")
 	}
 
+	targetPolicies := DefaultCleanupPolicies()
+	policyUpToDate := maps.EqualFunc(targetPolicies, repository.CleanupPolicies, func(a, b *artifactregistrypb.CleanupPolicy) bool {
+		return proto.Equal(a, b)
+	})
+
+	if !policyUpToDate || repository.CleanupPolicyDryRun {
+		repository.CleanupPolicyDryRun = false
+		repository.CleanupPolicies = targetPolicies
+		changes = append(changes, "cleanup_policies")
+		changes = append(changes, "cleanup_policy_dry_run")
+	}
+
 	if len(changes) > 0 {
 		updateRequest := &artifactregistrypb.UpdateRepositoryRequest{
 			Repository: repository,
@@ -343,4 +360,40 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	emailAddress := accountID + "@" + projectID + ".iam.gserviceaccount.com"
 	serviceAccountName = "projects/" + projectID + "/serviceAccounts/" + emailAddress
 	return
+}
+
+// Remove all images that are more than 90 days old, but keep the last 50 "versions" regardless of age.
+// These numbers are also referenced in our own documentation at: https://doc.nais.io/how-to-guides/github-action/; try to keep them in sync.
+//
+// Each "build and push" includes artifacts such as signatures and attestations that seemingly count as "versions".
+// Thus, an "image" actually consists of 5 artifacts at the worst (for images pushed through the nais/docker-build-push action)
+//
+// Documentation: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
+func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
+	var keepCount int32 = 50
+
+	keepUntilAge := time.Hour * 24 * 90
+	anyTagState := artifactregistrypb.CleanupPolicyCondition_ANY
+
+	return map[string]*artifactregistrypb.CleanupPolicy{
+		"delete_old_images": {
+			Id:     "delete_old_images",
+			Action: artifactregistrypb.CleanupPolicy_DELETE,
+			ConditionType: &artifactregistrypb.CleanupPolicy_Condition{
+				Condition: &artifactregistrypb.CleanupPolicyCondition{
+					TagState:  &anyTagState,
+					OlderThan: durationpb.New(keepUntilAge),
+				},
+			},
+		},
+		"keep_latest_versions": {
+			Id:     "keep_latest_versions",
+			Action: artifactregistrypb.CleanupPolicy_KEEP,
+			ConditionType: &artifactregistrypb.CleanupPolicy_MostRecentVersions{
+				MostRecentVersions: &artifactregistrypb.CleanupPolicyMostRecentVersions{
+					KeepCount: &keepCount,
+				},
+			},
+		},
+	}
 }
