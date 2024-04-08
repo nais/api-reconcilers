@@ -327,10 +327,6 @@ func TestReconcile(t *testing.T) {
 				payload := iam.CreateRoleRequest{}
 				_ = json.NewDecoder(r.Body).Decode(&payload)
 
-				if payload.Role.Name != expectedCnrmRoleName {
-					t.Errorf("expected role name %q, got %q", expectedCnrmRoleName, payload.Role.Name)
-				}
-
 				if payload.RoleId != expectedRoleId {
 					t.Errorf("expected role id %q, got %q", expectedRoleId, payload.RoleId)
 				}
@@ -338,6 +334,8 @@ func TestReconcile(t *testing.T) {
 				if expected := 35; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
 					t.Errorf("expected %d permissions, got %d", expected, len(payload.Role.IncludedPermissions))
 				}
+
+				payload.Role.Name = expectedCnrmRoleName
 
 				resp, _ := payload.Role.MarshalJSON()
 				_, _ = w.Write(resp)

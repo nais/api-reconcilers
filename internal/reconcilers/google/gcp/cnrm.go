@@ -19,7 +19,6 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apicli
 
 	// Create a new role
 	role := &iam.Role{
-		Name:        name,
 		Title:       "NAIS Custom CNRM Role",
 		Description: "Custom role for namespaced CNRM users to allow creation of GCP resources",
 		Stage:       "GA",
