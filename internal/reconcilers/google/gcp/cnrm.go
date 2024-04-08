@@ -10,11 +10,11 @@ import (
 	"google.golang.org/api/iam/v1"
 )
 
-const CNRMRoleName = "CustomCNRMRole"
+const CNRMRoleId = "CustomCNRMRole"
 
 func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apiclient.APIClient, teamSlug string, projectId string) (*iam.Role, error) {
 	parent := fmt.Sprintf("projects/%s", projectId)
-	name := fmt.Sprintf("projects/%s/roles/%s", projectId, CNRMRoleName)
+	name := fmt.Sprintf("projects/%s/roles/%s", projectId, CNRMRoleId)
 	existingRole, _ := r.gcpServices.ProjectsRolesService.Get(name).Context(ctx).Do()
 
 	// Create a new role
@@ -65,7 +65,7 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apicli
 	if existingRole == nil {
 		req := &iam.CreateRoleRequest{
 			Role:   role,
-			RoleId: CNRMRoleName,
+			RoleId: CNRMRoleId,
 		}
 		createdRole, err := r.gcpServices.ProjectsRolesService.Create(parent, req).Context(ctx).Do()
 		reconcilers.AuditLogForTeam(
