@@ -64,7 +64,8 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apicli
 
 	if existingRole == nil {
 		req := &iam.CreateRoleRequest{
-			Role: role,
+			Role:   role,
+			RoleId: CNRMRoleName,
 		}
 		createdRole, err := r.gcpServices.ProjectsRolesService.Create(parent, req).Context(ctx).Do()
 		reconcilers.AuditLogForTeam(

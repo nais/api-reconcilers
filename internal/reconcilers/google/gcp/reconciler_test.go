@@ -116,7 +116,8 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		expectedTeamProjectID := "slug-prod-ea99"
-		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/CustomCNRMRole"
+		expectedRoleId := "CustomCNRMRole"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedRoleId
 		flags := config.FeatureFlags{
 			AttachSharedVpc:   true,
 			CnrmRoleInProject: true,
@@ -328,6 +329,10 @@ func TestReconcile(t *testing.T) {
 
 				if payload.Role.Name != expectedCnrmRoleName {
 					t.Errorf("expected role name %q, got %q", expectedCnrmRoleName, payload.Role.Name)
+				}
+
+				if payload.RoleId != expectedRoleId {
+					t.Errorf("expected role id %q, got %q", expectedRoleId, payload.RoleId)
 				}
 
 				if expected := 35; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
