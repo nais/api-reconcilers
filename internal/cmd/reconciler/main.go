@@ -131,6 +131,11 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		return err
 	}
 
+	grafanaReconciler, err := grafana_reconciler.New(ctx, cfg.Grafana.Endpoint, cfg.Grafana.ServiceAccountToken)
+	if err != nil {
+		return err
+	}
+
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
@@ -150,6 +155,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
+	reconcilerManager.AddReconciler(grafanaReconciler)
 
 	if dependencyTrackReconciler != nil {
 		reconcilerManager.AddReconciler(dependencyTrackReconciler)

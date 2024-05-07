@@ -20,3 +20,6 @@ packages:
     interfaces:
       TeamsService:
       GraphClient:
+  github.com/nais/api-reconcilers/internal/reconcilers/grafana:
+    interfaces:
+      Client:

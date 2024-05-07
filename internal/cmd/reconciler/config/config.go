@@ -66,6 +66,14 @@ type Config struct {
 		Organization string `env:"GITHUB_ORG,default=navikt-dev"`
 	}
 
+	Grafana struct {
+		// Endpoint URL to the Grafana API.
+		Endpoint string `env:"GRAFANA_ENDPOINT"`
+
+		// ServiceAccountToken The token used to authenticate with the Grafana API.
+		ServiceAccountToken string `env:"GRAFANA_SERVICE_ACCOUNT_TOKEN"`
+	}
+
 	GRPC struct {
 		// Target The target address for the gRPC server.
 		Target string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
