@@ -7,13 +7,14 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"github.com/google/uuid"
-	"github.com/nais/api-reconcilers/internal/google_token_source"
-	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
+
+	"github.com/nais/api-reconcilers/internal/google_token_source"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
 )
 
 const (
@@ -54,11 +55,9 @@ func New(ctx context.Context, serviceAccountEmail, tenantDomain, googleManagemen
 		}
 
 		pubsubClient, err := pubsub.NewClient(ctx, googleManagementProjectID, option.WithTokenSource(ts))
-		if err != nil {
-			return nil, fmt.Errorf("retrieve pubsub client: %w", err)
+		if err == nil {
+			r.pubsubClient = pubsubClient
 		}
-
-		r.pubsubClient = pubsubClient
 	}
 
 	return r, nil
