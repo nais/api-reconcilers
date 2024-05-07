@@ -23,3 +23,31 @@ packages:
   github.com/nais/api-reconcilers/internal/reconcilers/grafana:
     interfaces:
       Client:
+  github.com/grafana/grafana-openapi-client-go/client/users:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/users"
+          outpkg: grafana_mock_users
+          inpackage: false
+  github.com/grafana/grafana-openapi-client-go/client/teams:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/teams"
+          outpkg: grafana_mock_teams
+          inpackage: false
+  github.com/grafana/grafana-openapi-client-go/client/service_accounts:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/service_accounts"
+          outpkg: grafana_mock_service_accounts
+          inpackage: false
+  github.com/grafana/grafana-openapi-client-go/client/access_control:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/access_control"
+          outpkg: grafana_mock_access_control
+          inpackage: false
