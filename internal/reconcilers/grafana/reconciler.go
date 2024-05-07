@@ -2,6 +2,8 @@ package grafana_reconciler
 
 import (
 	"context"
+	"fmt"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
 
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
@@ -46,12 +48,20 @@ func (r *grafanaReconciler) Configuration() *protoapi.NewReconciler {
 	return &protoapi.NewReconciler{
 		Name:        r.Name(),
 		DisplayName: "Grafana",
-		Description: "Create and reconsilate Grafana service accounts and permissions for teams.",
+		Description: "Create and reconcile Grafana service accounts and permissions for teams.",
 		MemberAware: true,
 	}
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+
+	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), naisTeam.Slug)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Team members: %v", naisTeamMembers)
+
 	return nil
 }
 

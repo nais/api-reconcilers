@@ -110,7 +110,7 @@ type Config struct {
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 
 	// ListenAddress The host:port combination used by the http server.
-	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3005"`
+	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
 
 	// LogFormat Customize the log format. Can be "text" or "json".
 	LogFormat string `env:"LOG_FORMAT,default=json"`
