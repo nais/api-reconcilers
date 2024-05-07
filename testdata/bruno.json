@@ -5,14 +5,14 @@
     {
       "type": "http",
       "name": "Add Team Member",
-      "seq": 3,
+      "seq": 2,
       "request": {
         "url": "http://localhost:3000/api/teams/1/members",
         "method": "POST",
         "headers": [],
         "body": {
           "mode": "json",
-          "json": "{\n  \"userID\": 2\n}",
+          "json": "{\n  \"userID\": 2,\n  \"permission\": \"Member\"\n}",
           "formUrlEncoded": [],
           "multipartForm": []
         },
@@ -36,7 +36,7 @@
     {
       "type": "http",
       "name": "Create Team",
-      "seq": 2,
+      "seq": 1,
       "request": {
         "url": "http://localhost:3000/api/teams",
         "method": "POST",
@@ -72,7 +72,7 @@
     {
       "type": "http",
       "name": "Lookup user",
-      "seq": 4,
+      "seq": 3,
       "request": {
         "url": "http://localhost:3000/api/users/lookup?loginOrEmail=kimt",
         "method": "GET",
@@ -108,7 +108,7 @@
     {
       "type": "http",
       "name": "Remove member from team",
-      "seq": 5,
+      "seq": 4,
       "request": {
         "url": "http://localhost:3000/api/teams/1/members/2",
         "method": "DELETE",
@@ -138,7 +138,7 @@
     {
       "type": "http",
       "name": "Assign user role in team",
-      "seq": 6,
+      "seq": 5,
       "request": {
         "url": "http://localhost:3000/api/access-control/teams/1/users/2",
         "method": "POST",
@@ -169,7 +169,7 @@
     {
       "type": "http",
       "name": "Create service account",
-      "seq": 7,
+      "seq": 6,
       "request": {
         "url": "http://localhost:3000/api/serviceaccounts",
         "method": "POST",
@@ -200,14 +200,75 @@
     {
       "type": "http",
       "name": "Add service account role assignment",
-      "seq": 8,
+      "seq": 7,
       "request": {
-        "url": "http://localhost:3000/api/access-control/serviceaccounts/3/teams/1",
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/teams/1",
         "method": "POST",
         "headers": [],
         "body": {
           "mode": "json",
           "json": "{\n  \"permission\": \"Edit\"\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Delete service account",
+      "seq": 9,
+      "request": {
+        "url": "http://localhost:3000/api/serviceaccounts/3",
+        "method": "DELETE",
+        "headers": [],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Remove service account user role assignment",
+      "seq": 10,
+      "request": {
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/users/1",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"permission\": \"\"\n}",
           "formUrlEncoded": [],
           "multipartForm": []
         },
