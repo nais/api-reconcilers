@@ -1,324 +1,157 @@
 {
-  "name": "Grafana@localhost",
-  "version": "1",
-  "items": [
+  "info": {
+    "name": "Grafana@localhost",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
     {
-      "type": "http",
       "name": "Add Team Member",
-      "seq": 2,
+      "event": [],
       "request": {
+        "method": "POST",
+        "header": [],
         "url": "http://localhost:3000/api/teams/1/members",
-        "method": "POST",
-        "headers": [],
         "body": {
-          "mode": "json",
-          "json": "{\n  \"userID\": 2,\n  \"permission\": \"Member\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "inherit",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"userID\": 2,\n  \"permission\": \"Member\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "http",
       "name": "Add service account role assignment",
-      "seq": 7,
+      "event": [],
       "request": {
+        "method": "POST",
+        "header": [],
         "url": "http://localhost:3000/api/access-control/serviceaccounts/4/teams/1",
-        "method": "POST",
-        "headers": [],
         "body": {
-          "mode": "json",
-          "json": "{\n  \"permission\": \"Edit\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"Edit\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "http",
       "name": "Assign user role in team",
-      "seq": 5,
+      "event": [],
       "request": {
+        "method": "POST",
+        "header": [],
         "url": "http://localhost:3000/api/access-control/teams/1/users/2",
-        "method": "POST",
-        "headers": [],
         "body": {
-          "mode": "json",
-          "json": "{\n  \"permission\": \"Admin\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"Admin\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "http",
       "name": "Create Team",
-      "seq": 1,
+      "event": [],
       "request": {
+        "method": "POST",
+        "header": [],
         "url": "http://localhost:3000/api/teams",
-        "method": "POST",
-        "headers": [],
         "body": {
-          "mode": "json",
-          "json": "{\n  \"name\": \"kimfoo\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "inherit",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"kimfoo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "http",
       "name": "Create service account",
-      "seq": 6,
+      "event": [],
       "request": {
+        "method": "POST",
+        "header": [],
         "url": "http://localhost:3000/api/serviceaccounts",
-        "method": "POST",
-        "headers": [],
         "body": {
-          "mode": "json",
-          "json": "{\n  \"name\": \"team-kimfoo\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"team-kimfoo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "http",
       "name": "Delete service account",
-      "seq": 9,
+      "event": [],
       "request": {
-        "url": "http://localhost:3000/api/serviceaccounts/3",
         "method": "DELETE",
-        "headers": [],
-        "body": {
-          "mode": "none",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
-          }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        "header": [],
+        "url": "http://localhost:3000/api/serviceaccounts/3"
       }
     },
     {
-      "type": "http",
       "name": "Delete team",
-      "seq": 11,
+      "event": [],
       "request": {
-        "url": "http://localhost:3000/api/teams/1",
         "method": "DELETE",
-        "headers": [],
-        "body": {
-          "mode": "none",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
-          }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        "header": [],
+        "url": "http://localhost:3000/api/teams/1"
       }
     },
     {
-      "type": "http",
       "name": "Lookup user",
-      "seq": 3,
+      "event": [],
       "request": {
-        "url": "http://localhost:3000/api/users/lookup?loginOrEmail=kimt",
         "method": "GET",
-        "headers": [],
-        "body": {
-          "mode": "none",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
-          }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": [
-          {
-            "name": "loginOrEmail",
-            "value": "kimt",
-            "enabled": true
-          }
-        ]
+        "header": [],
+        "url": "http://localhost:3000/api/users/lookup?loginOrEmail=kimt"
       }
     },
     {
-      "type": "http",
       "name": "Remove member from team",
-      "seq": 4,
+      "event": [],
       "request": {
-        "url": "http://localhost:3000/api/teams/1/members/2",
         "method": "DELETE",
-        "headers": [],
-        "body": {
-          "mode": "none",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
-          }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        "header": [],
+        "url": "http://localhost:3000/api/teams/1/members/2"
       }
     },
     {
-      "type": "http",
       "name": "Remove service account user role assignment",
-      "seq": 10,
+      "event": [],
       "request": {
-        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/users/1",
         "method": "POST",
-        "headers": [],
+        "header": [],
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/users/1",
         "body": {
-          "mode": "json",
-          "json": "{\n  \"permission\": \"\"\n}",
-          "formUrlEncoded": [],
-          "multipartForm": []
-        },
-        "auth": {
-          "mode": "none",
-          "basic": {
-            "username": "",
-            "password": ""
-          },
-          "bearer": {
-            "token": ""
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
           }
-        },
-        "script": {},
-        "vars": {},
-        "assertions": [],
-        "tests": "",
-        "query": []
+        }
       }
     },
     {
-      "type": "json",
       "name": "bruno",
-      "seq": 1
+      "event": []
     }
   ],
-  "environments": []
+  "variable": []
 }
