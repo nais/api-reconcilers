@@ -12,6 +12,11 @@ See the [nais/api README](https://github.com/nais/api?tab=readme-ov-file#local-d
 
 Given that a lot of the reconcilers are using external services, most of these requires authentication and access to these services.
 So ensure that you configure and provide a proper environment for the reconcilers to run.
+You may use the example configuration file to skip the boring process of figuring it out:
+
+```shell
+cp .env.example .env
+```
 
 To run the reconciler locally, you can use the following command:
 
