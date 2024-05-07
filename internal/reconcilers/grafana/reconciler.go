@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/grafana/grafana-openapi-client-go/client"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/protoapi"
