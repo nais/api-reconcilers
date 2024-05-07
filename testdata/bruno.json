@@ -288,6 +288,36 @@
         "tests": "",
         "query": []
       }
+    },
+    {
+      "type": "http",
+      "name": "Delete team",
+      "seq": 11,
+      "request": {
+        "url": "http://localhost:3000/api/teams/1",
+        "method": "DELETE",
+        "headers": [],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
     }
   ],
   "environments": []
