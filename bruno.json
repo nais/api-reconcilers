@@ -1,0 +1,233 @@
+{
+  "name": "Grafana@localhost",
+  "version": "1",
+  "items": [
+    {
+      "type": "http",
+      "name": "Add Team Member",
+      "seq": 3,
+      "request": {
+        "url": "http://localhost:3000/api/teams/1/members",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"userID\": 2\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "inherit",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Create Team",
+      "seq": 2,
+      "request": {
+        "url": "http://localhost:3000/api/teams",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"name\": \"kimfoo\"\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "inherit",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "json",
+      "name": "bruno",
+      "seq": 1
+    },
+    {
+      "type": "http",
+      "name": "Lookup user",
+      "seq": 4,
+      "request": {
+        "url": "http://localhost:3000/api/users/lookup?loginOrEmail=kimt",
+        "method": "GET",
+        "headers": [],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": [
+          {
+            "name": "loginOrEmail",
+            "value": "kimt",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "http",
+      "name": "Remove member from team",
+      "seq": 5,
+      "request": {
+        "url": "http://localhost:3000/api/teams/1/members/2",
+        "method": "DELETE",
+        "headers": [],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Assign user role in team",
+      "seq": 6,
+      "request": {
+        "url": "http://localhost:3000/api/access-control/teams/1/users/2",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"permission\": \"Admin\"\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Create service account",
+      "seq": 7,
+      "request": {
+        "url": "http://localhost:3000/api/serviceaccounts",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"name\": \"team-kimfoo\"\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    },
+    {
+      "type": "http",
+      "name": "Add service account role assignment",
+      "seq": 8,
+      "request": {
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/3/teams/1",
+        "method": "POST",
+        "headers": [],
+        "body": {
+          "mode": "json",
+          "json": "{\n  \"permission\": \"Edit\"\n}",
+          "formUrlEncoded": [],
+          "multipartForm": []
+        },
+        "auth": {
+          "mode": "none",
+          "basic": {
+            "username": "",
+            "password": ""
+          },
+          "bearer": {
+            "token": ""
+          }
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "query": []
+      }
+    }
+  ],
+  "environments": []
+}
