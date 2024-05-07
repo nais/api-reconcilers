@@ -3,6 +3,7 @@ package grafana_reconciler
 import (
 	"context"
 	"fmt"
+
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 
 	"github.com/nais/api/pkg/apiclient"
@@ -54,11 +55,26 @@ func (r *grafanaReconciler) Configuration() *protoapi.NewReconciler {
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-
 	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), naisTeam.Slug)
 	if err != nil {
 		return err
 	}
+
+	// Check if team exists in Grafana, otherwise create it. Keep the ID.
+
+	// Check if all users exist in Grafana, otherwise create them and set a random password. Keep the user IDs.
+
+	// Make sure memberships are exactly equal in Grafana and local dataset.
+	// Remove users that don't exist. Make sure the permission is set to "Editor".
+	// This also means to remove the Grafana "admin" user from team memberships.
+	// The admin user can be assumed to hold the id `1`.
+
+	// Check if the service account exists in Grafana, otherwise create it.
+	// The service account name should be "team-<team>".
+
+	// Add the team to the service account with "Edit" permissions.
+	// Make sure the team is the only team or user connected with the service account.
+	// This means also to remove the Grafana "admin" user from service account membership.
 
 	fmt.Printf("Team members: %v", naisTeamMembers)
 
