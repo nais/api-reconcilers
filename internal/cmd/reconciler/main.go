@@ -8,9 +8,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-openapi/strfmt"
+
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
 
 	"github.com/joho/godotenv"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/sethvargo/go-envconfig"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	grafana_client "github.com/grafana/grafana-openapi-client-go/client"
+
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
@@ -20,15 +32,9 @@ import (
 	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
-	"github.com/nais/api/pkg/apiclient"
-	"github.com/sethvargo/go-envconfig"
-	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -131,7 +137,13 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		return err
 	}
 
-	grafanaReconciler, err := grafana_reconciler.New(ctx, cfg.Grafana.Endpoint, cfg.Grafana.ServiceAccountToken)
+	grafanaClient := grafana_client.NewHTTPClient(strfmt.Default)
+	grafanaReconciler, err := grafana_reconciler.New(
+		grafanaClient.Users,
+		grafanaClient.Teams,
+		grafanaClient.AccessControl,
+		grafanaClient.ServiceAccounts,
+	)
 	if err != nil {
 		return err
 	}
