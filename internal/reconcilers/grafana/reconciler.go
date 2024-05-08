@@ -3,6 +3,7 @@ package grafana_reconciler
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 
@@ -14,6 +15,7 @@ import (
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
 	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
+	"github.com/grafana/grafana-openapi-client-go/models"
 )
 
 const (
@@ -54,7 +56,50 @@ func (r *grafanaReconciler) Configuration() *protoapi.NewReconciler {
 	}
 }
 
+func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
+	params := &grafana_teams.SearchTeamsParams{
+		Query: &teamName,
+	}
+
+	searchResp, err := r.teams.SearchTeams(params)
+	if err != nil {
+		return 0, err
+	}
+
+	// TODO: Handle paging
+	for _, team := range searchResp.Payload.Teams {
+		if team.Name == teamName {
+			return team.ID, nil
+		}
+	}
+
+	createResp, err := r.teams.CreateTeam(&models.CreateTeamCommand{
+		Name: teamName,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	// TODO: Remove admin/creator from team
+
+	return createResp.Payload.TeamID, nil
+}
+
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	teamName := "team-" + naisTeam.Slug
+
+	teamID, err := r.getOrCreateTeamID(teamName)
+	if err != nil {
+		return err
+	}
+
+	members, err := r.teams.GetTeamMembers(strconv.Itoa(int(teamID)))
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Team members: %v", members)
+
 	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), naisTeam.Slug)
 	if err != nil {
 		return err

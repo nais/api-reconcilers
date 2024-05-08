@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -137,7 +138,18 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		return err
 	}
 
-	grafanaClient := grafana_client.NewHTTPClient(strfmt.Default)
+	grafanaURL, err := url.Parse(cfg.Grafana.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	grafanaClient := grafana_client.NewHTTPClientWithConfig(strfmt.Default, &grafana_client.TransportConfig{
+		Host:      grafanaURL.Host,
+		Schemes:   []string{grafanaURL.Scheme},
+		BasePath:  grafanaURL.Path,
+		BasicAuth: url.UserPassword(cfg.Grafana.Username, cfg.Grafana.Password),
+	})
+
 	grafanaReconciler, err := grafana_reconciler.New(
 		grafanaClient.Users,
 		grafanaClient.Teams,

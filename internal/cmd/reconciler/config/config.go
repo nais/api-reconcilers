@@ -68,10 +68,13 @@ type Config struct {
 
 	Grafana struct {
 		// Endpoint URL to the Grafana API.
-		Endpoint string `env:"GRAFANA_ENDPOINT"`
+		Endpoint string `env:"GRAFANA_ENDPOINT,default=http://localhost:3300/api"`
 
-		// ServiceAccountToken The token used to authenticate with the Grafana API.
-		ServiceAccountToken string `env:"GRAFANA_SERVICE_ACCOUNT_TOKEN"`
+		// Username The username to use when authenticating with Grafana.
+		Username string `env:"GRAFANA_USERNAME,default=admin"`
+
+		// Password The password to use when authenticating with Grafana.
+		Password string `env:"GRAFANA_PASSWORD,default=admin"`
 	}
 
 	GRPC struct {
