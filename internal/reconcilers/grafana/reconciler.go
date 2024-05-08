@@ -2,6 +2,9 @@ package grafana_reconciler
 
 import (
 	"context"
+	"strconv"
+
+	"golang.org/x/exp/maps"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 
@@ -68,7 +71,7 @@ func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
 		return 0, err
 	}
 
-	// TODO: Handle paging
+	// TODO: Handle paging?
 	for _, team := range searchResp.Payload.Teams {
 		if team.Name == teamName {
 			return team.ID, nil
@@ -105,6 +108,72 @@ func (r *grafanaReconciler) getOrCreateUser(user *protoapi.User) (int64, error) 
 	return newUser.GetPayload().ID, nil
 }
 
+func (r *grafanaReconciler) syncTeamMembers(teamID int64, naisTeamMembers []*protoapi.TeamMember, grafanaUserIDMap map[string]int64) error {
+	teamIDString := strconv.Itoa(int(teamID))
+	grafanaExistingMembers, err := r.teams.GetTeamMembers(teamIDString)
+	if err != nil {
+		return err
+	}
+
+	existingMembers := make(map[string]int64)
+	for _, member := range grafanaExistingMembers.GetPayload() {
+		existingMembers[member.Email] = member.UserID
+	}
+
+	membersToRemove := make([]int64, 0)
+	for email, userID := range existingMembers {
+		if !grafanaMemberExistsInTeamMembers(naisTeamMembers, email) {
+			membersToRemove = append(membersToRemove, userID)
+		}
+	}
+
+	grafanaMemberEmails := maps.Keys(existingMembers)
+
+	membersToAdd := make([]string, 0)
+	for _, user := range naisTeamMembers {
+		email := user.GetUser().GetEmail()
+		if !teamMemberExistsInGrafanaMembers(grafanaMemberEmails, email) {
+			membersToAdd = append(membersToAdd, email)
+		}
+	}
+
+	for _, userID := range membersToRemove {
+		_, err = r.teams.RemoveTeamMember(userID, teamIDString)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, email := range membersToAdd {
+		_, err = r.teams.AddTeamMember(teamIDString, &models.AddTeamMemberCommand{
+			UserID: grafanaUserIDMap[email],
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func grafanaMemberExistsInTeamMembers(naisTeamMembers []*protoapi.TeamMember, email string) bool {
+	for _, user := range naisTeamMembers {
+		if email == user.GetUser().Email {
+			return true
+		}
+	}
+	return false
+}
+
+func teamMemberExistsInGrafanaMembers(grafanaTeamMemberEmails []string, email string) bool {
+	for _, grafanaEmail := range grafanaTeamMemberEmails {
+		if email == grafanaEmail {
+			return true
+		}
+	}
+	return false
+}
+
 // FIXME
 func create_secure_password() string {
 	return "password"
@@ -133,6 +202,11 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 			return err
 		}
 		userIDs[user.Email] = userID
+	}
+
+	err = r.syncTeamMembers(teamID, naisTeamMembers, userIDs)
+	if err != nil {
+		return err
 	}
 
 	_ = teamID
