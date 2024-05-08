@@ -232,19 +232,44 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, teamN
 
 // Ensure that only our team has permissions granted to the service account.
 func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, teamID int64, serviceAccountID int64) error {
-	_, err := r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
-		Body: &models.SetPermissionsCommand{
-			Permissions: []*models.SetResourcePermissionCommand{
-				{
-					Permission: "Edit",
-					TeamID:     teamID,
-				},
-			},
-		},
-		Resource:   "serviceaccounts",
+	const resourceName = "serviceaccounts"
+
+	existingPermissions, err := r.rbac.GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+		Resource:   resourceName,
 		ResourceID: strconv.Itoa(int(serviceAccountID)),
 		Context:    ctx,
 	})
+	if err != nil {
+		return err
+	}
+
+	// Revoke all existing permissions that doesn't match the nais team.
+	// Also applies to any users that were manually added.
+	permissions := make([]*models.SetResourcePermissionCommand, 0)
+	for _, perm := range existingPermissions.GetPayload() {
+		if perm.TeamID != 0 && perm.TeamID != teamID {
+			permissions = append(permissions, &models.SetResourcePermissionCommand{TeamID: perm.TeamID})
+		} else if perm.UserID != 0 {
+			permissions = append(permissions, &models.SetResourcePermissionCommand{UserID: perm.UserID})
+		}
+	}
+
+	// Make sure our nais team has editor permissions.
+	permissions = append(permissions, &models.SetResourcePermissionCommand{
+		Permission: "Edit",
+		TeamID:     teamID,
+	})
+
+	// Apply the changes.
+	_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+		Body: &models.SetPermissionsCommand{
+			Permissions: permissions,
+		},
+		Resource:   resourceName,
+		ResourceID: strconv.Itoa(int(serviceAccountID)),
+		Context:    ctx,
+	})
+
 	return err
 }
 
