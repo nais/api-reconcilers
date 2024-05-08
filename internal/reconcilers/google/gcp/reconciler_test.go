@@ -35,7 +35,7 @@ const (
 	tenantDomain     = "example.com"
 	cnrmRoleName     = "organizations/123/roles/name"
 	billingAccount   = "billingAccounts/123"
-	numberOfAPIs     = 13
+	numberOfAPIs     = 14
 
 	teamSlug         = "slug"
 	googleGroupEmail = "slug@example.com"
