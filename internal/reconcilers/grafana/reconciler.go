@@ -2,6 +2,8 @@ package grafana_reconciler
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"strconv"
 
 	"golang.org/x/exp/maps"
@@ -98,7 +100,7 @@ func (r *grafanaReconciler) getOrCreateUser(user *protoapi.User) (int64, error) 
 		Email:    user.GetEmail(),
 		Login:    user.GetEmail(),
 		Name:     user.GetName(),
-		Password: models.Password(create_secure_password()),
+		Password: models.Password(createSecurePassword()),
 	})
 
 	if err != nil {
@@ -221,11 +223,6 @@ func (r *grafanaReconciler) setServiceAccountMembers(teamID int64, serviceAccoun
 	return err
 }
 
-// FIXME
-func create_secure_password() string {
-	return "password"
-}
-
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 
 	// Check if team exists in Grafana, otherwise create it. Keep the ID.
@@ -274,4 +271,14 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 
 func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	return nil
+}
+
+// Generate a random password with 256 bits of entropy.
+func createSecurePassword() string {
+	randomData := make([]byte, 32)
+	_, err := rand.Read(randomData)
+	if err != nil {
+		panic("not enough entropy")
+	}
+	return base64.StdEncoding.EncodeToString(randomData)
 }
