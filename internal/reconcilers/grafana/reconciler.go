@@ -40,7 +40,7 @@ func New(
 	rbac grafana_accesscontrol.ClientService,
 	serviceAccounts grafana_serviceaccounts.ClientService,
 	adminUsers grafana_admin_users.ClientService,
-) (*grafanaReconciler, error) {
+) (reconcilers.Reconciler, error) {
 	return &grafanaReconciler{
 		users:           users,
 		teams:           teams,
@@ -63,9 +63,10 @@ func (r *grafanaReconciler) Configuration() *protoapi.NewReconciler {
 	}
 }
 
-func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
+func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string) (int64, error) {
 	params := &grafana_teams.SearchTeamsParams{
-		Query: &teamName,
+		Query:   &teamName,
+		Context: ctx,
 	}
 
 	searchResp, err := r.teams.SearchTeams(params)
@@ -73,16 +74,19 @@ func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
 		return 0, err
 	}
 
-	// TODO: Handle paging?
 	for _, team := range searchResp.Payload.Teams {
 		if team.Name == teamName {
 			return team.ID, nil
 		}
 	}
 
-	createResp, err := r.teams.CreateTeam(&models.CreateTeamCommand{
-		Name: teamName,
+	createResp, err := r.teams.CreateTeamWithParams(&grafana_teams.CreateTeamParams{
+		Body: &models.CreateTeamCommand{
+			Name: teamName,
+		},
+		Context: ctx,
 	})
+
 	if err != nil {
 		return 0, err
 	}
@@ -90,17 +94,23 @@ func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
 	return createResp.Payload.TeamID, nil
 }
 
-func (r *grafanaReconciler) getOrCreateUser(user *protoapi.User) (int64, error) {
-	existingUser, err := r.users.GetUserByLoginOrEmail(user.GetEmail())
+func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, user *protoapi.User) (int64, error) {
+	existingUser, err := r.users.GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+		LoginOrEmail: user.GetEmail(),
+		Context:      ctx,
+	})
 	if err == nil {
 		return existingUser.GetPayload().ID, nil
 	}
 
-	newUser, err := r.adminUsers.AdminCreateUser(&models.AdminCreateUserForm{
-		Email:    user.GetEmail(),
-		Login:    user.GetEmail(),
-		Name:     user.GetName(),
-		Password: models.Password(createSecurePassword()),
+	newUser, err := r.adminUsers.AdminCreateUserWithParams(&grafana_admin_users.AdminCreateUserParams{
+		Body: &models.AdminCreateUserForm{
+			Email:    user.GetEmail(),
+			Login:    user.GetEmail(),
+			Name:     user.GetName(),
+			Password: models.Password(createSecurePassword()),
+		},
+		Context: ctx,
 	})
 
 	if err != nil {
@@ -110,9 +120,13 @@ func (r *grafanaReconciler) getOrCreateUser(user *protoapi.User) (int64, error) 
 	return newUser.GetPayload().ID, nil
 }
 
-func (r *grafanaReconciler) syncTeamMembers(teamID int64, naisTeamMembers []*protoapi.TeamMember, grafanaUserIDMap map[string]int64) error {
+// Make sure the Grafana team contains exactly the set of users from the nais team.
+func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, naisTeamMembers []*protoapi.TeamMember, grafanaUserIDMap map[string]int64) error {
 	teamIDString := strconv.Itoa(int(teamID))
-	grafanaExistingMembers, err := r.teams.GetTeamMembers(teamIDString)
+	grafanaExistingMembers, err := r.teams.GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+		TeamID:  teamIDString,
+		Context: ctx,
+	})
 	if err != nil {
 		return err
 	}
@@ -140,15 +154,23 @@ func (r *grafanaReconciler) syncTeamMembers(teamID int64, naisTeamMembers []*pro
 	}
 
 	for _, userID := range membersToRemove {
-		_, err = r.teams.RemoveTeamMember(userID, teamIDString)
+		_, err = r.teams.RemoveTeamMemberWithParams(&grafana_teams.RemoveTeamMemberParams{
+			TeamID:  teamIDString,
+			UserID:  userID,
+			Context: ctx,
+		})
 		if err != nil {
 			return err
 		}
 	}
 
 	for _, email := range membersToAdd {
-		_, err = r.teams.AddTeamMember(teamIDString, &models.AddTeamMemberCommand{
-			UserID: grafanaUserIDMap[email],
+		_, err = r.teams.AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+			Body: &models.AddTeamMemberCommand{
+				UserID: grafanaUserIDMap[email],
+			},
+			TeamID:  teamIDString,
+			Context: ctx,
 		})
 		if err != nil {
 			return err
@@ -176,16 +198,17 @@ func teamMemberExistsInGrafanaMembers(grafanaTeamMemberEmails []string, email st
 	return false
 }
 
-func (r *grafanaReconciler) getOrCreateServiceAccount(teamName string) (int64, error) {
+// Create a service account if it doesn't exist, or return the ID of the existing one.
+func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, teamName string) (int64, error) {
 	params := &grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
-		Query: &teamName,
+		Query:   &teamName,
+		Context: ctx,
 	}
 	searchResp, err := r.serviceAccounts.SearchOrgServiceAccountsWithPaging(params)
 	if err != nil {
 		return 0, err
 	}
 
-	// TODO: Handle paging?
 	for _, serviceAccount := range searchResp.Payload.ServiceAccounts {
 		if serviceAccount.Name == teamName {
 			return serviceAccount.ID, nil
@@ -195,8 +218,8 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(teamName string) (int64, e
 	createParams := &grafana_serviceaccounts.CreateServiceAccountParams{
 		Body: &models.CreateServiceAccountForm{
 			Name: teamName,
-			//Role: "Edit",
 		},
+		Context: ctx,
 	}
 
 	serviceAccountOk, err := r.serviceAccounts.CreateServiceAccount(createParams)
@@ -207,7 +230,8 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(teamName string) (int64, e
 	return serviceAccountOk.GetPayload().ID, err
 }
 
-func (r *grafanaReconciler) setServiceAccountMembers(teamID int64, serviceAccountID int64) error {
+// Ensure that only our team has permissions granted to the service account.
+func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, teamID int64, serviceAccountID int64) error {
 	_, err := r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
 		Body: &models.SetPermissionsCommand{
 			Permissions: []*models.SetResourcePermissionCommand{
@@ -219,14 +243,14 @@ func (r *grafanaReconciler) setServiceAccountMembers(teamID int64, serviceAccoun
 		},
 		Resource:   "serviceaccounts",
 		ResourceID: strconv.Itoa(int(serviceAccountID)),
+		Context:    ctx,
 	})
 	return err
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-
 	// Check if team exists in Grafana, otherwise create it. Keep the ID.
-	teamID, err := r.getOrCreateTeamID(naisTeam.GetSlug())
+	teamID, err := r.getOrCreateTeam(ctx, naisTeam.GetSlug())
 	if err != nil {
 		return err
 	}
@@ -237,10 +261,11 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return err
 	}
 
+	// Make a map of email addresses to user ids.
 	userIDs := make(map[string]int64)
 	for _, member := range naisTeamMembers {
 		user := member.GetUser()
-		userID, err := r.getOrCreateUser(user)
+		userID, err := r.getOrCreateUser(ctx, user)
 		if err != nil {
 			return err
 		}
@@ -251,14 +276,14 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 	// Remove users that don't exist. Make sure the permission is set to "Editor".
 	// This also means to remove the Grafana "admin" user from team memberships.
 	// The admin user can be assumed to hold the id `1`.
-	err = r.syncTeamMembers(teamID, naisTeamMembers, userIDs)
+	err = r.syncTeamMembers(ctx, teamID, naisTeamMembers, userIDs)
 	if err != nil {
 		return err
 	}
 
 	// Check if the service account exists in Grafana, otherwise create it.
 	// The service account name should be "team-<team>".
-	serviceAccountId, err := r.getOrCreateServiceAccount("team-" + naisTeam.GetSlug())
+	serviceAccountId, err := r.getOrCreateServiceAccount(ctx, "team-"+naisTeam.GetSlug())
 	if err != nil {
 		return err
 	}
@@ -266,10 +291,29 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 	// Add the team to the service account with "Edit" permissions.
 	// Make sure the team is the only team or user connected with the service account.
 	// This means also to remove the Grafana "admin" user from service account membership.
-	return r.setServiceAccountMembers(teamID, serviceAccountId)
+	return r.setServiceAccountMembers(ctx, teamID, serviceAccountId)
 }
 
+// We trust Grafana to clean up any dangling references to our deleted team.
 func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	teamName := naisTeam.GetSlug()
+	params := &grafana_teams.SearchTeamsParams{
+		Query:   &teamName,
+		Context: ctx,
+	}
+
+	searchResp, err := r.teams.SearchTeams(params)
+	if err != nil {
+		return err
+	}
+
+	for _, team := range searchResp.Payload.Teams {
+		if team.Name == teamName {
+			_, err = r.teams.DeleteTeamByID(strconv.Itoa(int(team.ID)))
+			return err
+		}
+	}
+
 	return nil
 }
 
