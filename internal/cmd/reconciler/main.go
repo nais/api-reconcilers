@@ -155,6 +155,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		grafanaClient.Teams,
 		grafanaClient.AccessControl,
 		grafanaClient.ServiceAccounts,
+		grafanaClient.AdminUsers,
 	)
 	if err != nil {
 		return err

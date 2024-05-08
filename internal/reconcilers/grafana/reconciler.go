@@ -2,8 +2,6 @@ package grafana_reconciler
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
+	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
 	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
@@ -27,6 +26,7 @@ type grafanaReconciler struct {
 	teams           grafana_teams.ClientService
 	rbac            grafana_accesscontrol.ClientService
 	serviceAccounts grafana_serviceaccounts.ClientService
+	adminUsers      grafana_admin_users.ClientService
 }
 
 func New(
@@ -34,12 +34,14 @@ func New(
 	teams grafana_teams.ClientService,
 	rbac grafana_accesscontrol.ClientService,
 	serviceAccounts grafana_serviceaccounts.ClientService,
+	adminUsers grafana_admin_users.ClientService,
 ) (*grafanaReconciler, error) {
 	return &grafanaReconciler{
 		users:           users,
 		teams:           teams,
 		rbac:            rbac,
 		serviceAccounts: serviceAccounts,
+		adminUsers:      adminUsers,
 	}, nil
 }
 
@@ -80,39 +82,72 @@ func (r *grafanaReconciler) getOrCreateTeamID(teamName string) (int64, error) {
 		return 0, err
 	}
 
-	// TODO: Remove admin/creator from team
-
 	return createResp.Payload.TeamID, nil
+}
+
+func (r *grafanaReconciler) getOrCreateUser(user *protoapi.User) (int64, error) {
+	existingUser, err := r.users.GetUserByLoginOrEmail(user.GetEmail())
+	if err == nil {
+		return existingUser.GetPayload().ID, nil
+	}
+
+	newUser, err := r.adminUsers.AdminCreateUser(&models.AdminCreateUserForm{
+		Email:    user.GetEmail(),
+		Login:    user.GetEmail(),
+		Name:     user.GetName(),
+		Password: models.Password(create_secure_password()),
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return newUser.GetPayload().ID, nil
+}
+
+// FIXME
+func create_secure_password() string {
+	return "password"
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	teamName := "team-" + naisTeam.Slug
 
+	// Check if team exists in Grafana, otherwise create it. Keep the ID.
 	teamID, err := r.getOrCreateTeamID(teamName)
 	if err != nil {
 		return err
 	}
 
-	members, err := r.teams.GetTeamMembers(strconv.Itoa(int(teamID)))
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("Team members: %v", members)
-
+	// Check if all users exist in Grafana, otherwise create them and set a random password. Keep the user IDs.
 	naisTeamMembers, err := reconcilers.GetTeamMembers(ctx, client.Teams(), naisTeam.Slug)
 	if err != nil {
 		return err
 	}
 
-	// Check if team exists in Grafana, otherwise create it. Keep the ID.
+	userIDs := make(map[string]int64)
+	for _, member := range naisTeamMembers {
+		user := member.GetUser()
+		userID, err := r.getOrCreateUser(user)
+		if err != nil {
+			return err
+		}
+		userIDs[user.Email] = userID
+	}
 
-	// Check if all users exist in Grafana, otherwise create them and set a random password. Keep the user IDs.
+	_ = teamID
+	/*
+		members, err := r.teams.GetTeamMembers(strconv.Itoa(int(teamID)))
+		if err != nil {
+			return err
+		}
+	*/
 
 	// Make sure memberships are exactly equal in Grafana and local dataset.
 	// Remove users that don't exist. Make sure the permission is set to "Editor".
 	// This also means to remove the Grafana "admin" user from team memberships.
 	// The admin user can be assumed to hold the id `1`.
+	// TODO: Remove admin/creator from team
 
 	// Check if the service account exists in Grafana, otherwise create it.
 	// The service account name should be "team-<team>".
@@ -120,8 +155,6 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 	// Add the team to the service account with "Edit" permissions.
 	// Make sure the team is the only team or user connected with the service account.
 	// This means also to remove the Grafana "admin" user from service account membership.
-
-	fmt.Printf("Team members: %v", naisTeamMembers)
 
 	return nil
 }
