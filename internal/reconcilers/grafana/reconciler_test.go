@@ -2,9 +2,10 @@ package grafana_reconciler_test
 
 import (
 	"context"
-	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 	"strconv"
 	"testing"
+
+	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
@@ -37,13 +38,27 @@ func TestReconcile(t *testing.T) {
 		serviceAccountID   = 1
 	)
 
+	members := []*protoapi.TeamMember{
+		{
+			User: &protoapi.User{
+				Email: "user1@nav.no",
+				Name:  "User 1",
+			},
+		},
+		{
+			User: &protoapi.User{
+				Email: "user2@nav.no",
+				Name:  "User 2",
+			},
+		},
+	}
+
 	teamName := teamSlug
 	serviceAccountName := "team-" + teamSlug
 
 	log, _ := test.NewNullLogger()
 
-	t.Run("Create team", func(t *testing.T) {
-		// Create team
+	t.Run("No data, create the first team", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:    teamSlug,
 			Purpose: teamPurpose,
@@ -68,13 +83,45 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "grafana:add-team-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Twice()
 
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamMembersResponse{}, nil).
+			Return(&protoapi.ListTeamMembersResponse{
+				Nodes: members,
+			}, nil).
 			Once()
 
 		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService.EXPECT().
+			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+				LoginOrEmail: members[0].User.Email,
+				Context:      ctx,
+			}).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{
+				Payload: &models.UserProfileDTO{
+					ID: 1,
+				},
+			}, nil).
+			Once()
+
+		usersService.EXPECT().
+			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+				LoginOrEmail: members[1].User.Email,
+				Context:      ctx,
+			}).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{
+				Payload: &models.UserProfileDTO{
+					ID: 2,
+				},
+			}, nil).
+			Once()
+
 		teamsService := grafana_mock_teams.NewMockClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
@@ -99,6 +146,26 @@ func TestReconcile(t *testing.T) {
 					TeamID: teamID,
 				},
 			}, nil).
+			Once()
+		teamsService.EXPECT().
+			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+				Body: &models.AddTeamMemberCommand{
+					UserID: 1,
+				},
+				TeamID:  teamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).
+			Once()
+		teamsService.EXPECT().
+			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+				Body: &models.AddTeamMemberCommand{
+					UserID: 2,
+				},
+				TeamID:  teamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).
 			Once()
 		teamsService.EXPECT().
 			GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
@@ -176,7 +243,6 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("Reconcile team members", func(t *testing.T) {
-		// Create team
 		naisTeam := &protoapi.Team{
 			Slug:    teamSlug,
 			Purpose: teamPurpose,
@@ -189,7 +255,6 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Twice()
-
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "grafana:assign-service-account-permissions"
@@ -197,19 +262,6 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
-		members := make([]*protoapi.TeamMember, 2)
-		members[0] = &protoapi.TeamMember{
-			User: &protoapi.User{
-				Email: "user1@nav.no",
-				Name:  "User 1",
-			},
-		}
-		members[1] = &protoapi.TeamMember{
-			User: &protoapi.User{
-				Email: "user2@nav.no",
-				Name:  "User 2",
-			},
-		}
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{
@@ -251,7 +303,8 @@ func TestReconcile(t *testing.T) {
 				TeamID:  teamIDAsString,
 				Context: ctx,
 			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).Times(1)
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).
+			Once()
 		teamsService.EXPECT().
 			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
 				Body: &models.AddTeamMemberCommand{
@@ -260,8 +313,8 @@ func TestReconcile(t *testing.T) {
 				TeamID:  teamIDAsString,
 				Context: ctx,
 			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).Times(1)
-
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).
+			Once()
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
