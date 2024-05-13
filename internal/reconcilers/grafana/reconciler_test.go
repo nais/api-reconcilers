@@ -2,14 +2,15 @@ package grafana_reconciler_test
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
-	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
-
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
+	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
+	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 	"github.com/grafana/grafana-openapi-client-go/models"
 	grafana_mock_access_control "github.com/nais/api-reconcilers/internal/mocks/grafana/access_control"
 	grafana_mock_admin_users "github.com/nais/api-reconcilers/internal/mocks/grafana/admin_users"
@@ -89,6 +90,12 @@ func TestReconcile(t *testing.T) {
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Twice()
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "grafana:create-user"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Twice()
 
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
@@ -103,11 +110,7 @@ func TestReconcile(t *testing.T) {
 				LoginOrEmail: members[0].User.Email,
 				Context:      ctx,
 			}).
-			Return(&grafana_users.GetUserByLoginOrEmailOK{
-				Payload: &models.UserProfileDTO{
-					ID: 1,
-				},
-			}, nil).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
 			Once()
 
 		usersService.EXPECT().
@@ -115,11 +118,7 @@ func TestReconcile(t *testing.T) {
 				LoginOrEmail: members[1].User.Email,
 				Context:      ctx,
 			}).
-			Return(&grafana_users.GetUserByLoginOrEmailOK{
-				Payload: &models.UserProfileDTO{
-					ID: 2,
-				},
-			}, nil).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
 			Once()
 
 		teamsService := grafana_mock_teams.NewMockClientService(t)
@@ -230,6 +229,26 @@ func TestReconcile(t *testing.T) {
 			Once()
 
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		adminUsersService.
+			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
+				return params.Body.Email == members[0].User.Email
+			})).
+			Return(&grafana_admin_users.AdminCreateUserOK{
+				Payload: &models.AdminCreateUserResponse{
+					ID: 1,
+				},
+			}, nil).
+			Once()
+		adminUsersService.
+			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
+				return params.Body.Email == members[1].User.Email
+			})).
+			Return(&grafana_admin_users.AdminCreateUserOK{
+				Payload: &models.AdminCreateUserResponse{
+					ID: 2,
+				},
+			}, nil).
+			Once()
 
 		reconciler, err := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
 		if err != nil {
