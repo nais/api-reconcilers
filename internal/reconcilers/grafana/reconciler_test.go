@@ -2,6 +2,7 @@ package grafana_reconciler_test
 
 import (
 	"context"
+	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 	"strconv"
 	"testing"
 
@@ -157,6 +158,179 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_serviceaccounts.CreateServiceAccountCreated{
 				Payload: &models.ServiceAccountDTO{
 					ID: serviceAccountID,
+				},
+			}, nil).
+			Once()
+
+		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+
+		reconciler, err := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("Reconcile team members", func(t *testing.T) {
+		// Create team
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: teamPurpose,
+		}
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "grafana:add-team-member"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Twice()
+
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "grafana:assign-service-account-permissions"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+
+		members := make([]*protoapi.TeamMember, 2)
+		members[0] = &protoapi.TeamMember{
+			User: &protoapi.User{
+				Email: "user1@nav.no",
+				Name:  "User 1",
+			},
+		}
+		members[1] = &protoapi.TeamMember{
+			User: &protoapi.User{
+				Email: "user2@nav.no",
+				Name:  "User 2",
+			},
+		}
+		mockServer.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{
+				Nodes: members,
+			}, nil).
+			Once()
+
+		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService.EXPECT().
+			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+				LoginOrEmail: members[0].User.Email,
+				Context:      ctx,
+			}).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{
+				Payload: &models.UserProfileDTO{
+					ID: 1,
+				},
+			}, nil).
+			Once()
+
+		usersService.EXPECT().
+			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+				LoginOrEmail: members[1].User.Email,
+				Context:      ctx,
+			}).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{
+				Payload: &models.UserProfileDTO{
+					ID: 2,
+				},
+			}, nil).
+			Once()
+
+		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService.EXPECT().
+			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+				Body: &models.AddTeamMemberCommand{
+					UserID: 1,
+				},
+				TeamID:  teamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).Times(1)
+		teamsService.EXPECT().
+			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+				Body: &models.AddTeamMemberCommand{
+					UserID: 2,
+				},
+				TeamID:  teamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.AddTeamMemberOK{}, nil).Times(1)
+
+		teamsService.EXPECT().
+			SearchTeams(&grafana_teams.SearchTeamsParams{
+				Query:   &teamName,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.SearchTeamsOK{
+				Payload: &models.SearchTeamQueryResult{
+					Teams: []*models.TeamDTO{
+						{
+							ID:   teamID,
+							Name: teamName,
+						},
+					},
+				},
+			}, nil).
+			Once()
+		teamsService.EXPECT().
+			GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+				TeamID:  teamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.GetTeamMembersOK{
+				Payload: []*models.TeamMemberDTO{},
+			}, nil).
+			Once()
+
+		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		rbacService.EXPECT().
+			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+				Resource:   resourceName,
+				ResourceID: strconv.Itoa(int(serviceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+				Payload: []*models.ResourcePermissionDTO{},
+			}, nil).
+			Once()
+		rbacService.EXPECT().
+			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+				Body: &models.SetPermissionsCommand{
+					Permissions: []*models.SetResourcePermissionCommand{
+						{
+							Permission: "Edit",
+							TeamID:     teamID,
+						},
+					},
+				},
+				Resource:   resourceName,
+				ResourceID: strconv.Itoa(int(serviceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
+			Once()
+
+		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+
+		serviceAccounts := make([]*models.ServiceAccountDTO, 0)
+		serviceAccounts = append(serviceAccounts, &models.ServiceAccountDTO{
+			ID:   serviceAccountID,
+			Name: serviceAccountName,
+		})
+		serviceAccountsService.EXPECT().
+			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
+				Query:   &serviceAccountName,
+				Context: ctx,
+			}).
+			Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
+				Payload: &models.SearchOrgServiceAccountsResult{
+					ServiceAccounts: serviceAccounts,
 				},
 			}, nil).
 			Once()
