@@ -48,3 +48,10 @@ packages:
           dir: "internal/mocks/grafana/access_control"
           outpkg: grafana_mock_access_control
           inpackage: false
+  github.com/grafana/grafana-openapi-client-go/client/admin_users:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/admin_users"
+          outpkg: grafana_mock_admin_users
+          inpackage: false
