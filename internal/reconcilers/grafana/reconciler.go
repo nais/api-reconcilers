@@ -116,12 +116,11 @@ func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, auditLog LogFun
 		},
 		Context: ctx,
 	})
-
 	if err != nil {
 		return 0, err
 	}
 
-	auditLog("create-user", "Created Grafana user")
+	auditLog("create-user", "Created Grafana user %s", user.GetEmail())
 
 	return newUser.GetPayload().ID, nil
 }
@@ -371,5 +370,6 @@ func createSecurePassword() string {
 	if err != nil {
 		panic("not enough entropy")
 	}
+
 	return base64.StdEncoding.EncodeToString(randomData)
 }
