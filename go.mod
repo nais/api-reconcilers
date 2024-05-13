@@ -12,6 +12,8 @@ require (
 	cloud.google.com/go/pubsub v1.36.1
 	cloud.google.com/go/storage v1.36.0
 	github.com/go-chi/chi/v5 v5.0.11
+	github.com/go-openapi/runtime v0.28.0
+	github.com/go-openapi/strfmt v0.23.0
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240430202104-3ad0f7e4ee52
@@ -31,6 +33,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.24.0
 	go.opentelemetry.io/otel/sdk v1.24.0
 	go.opentelemetry.io/otel/sdk/metric v1.23.1
+	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3
 	golang.org/x/oauth2 v0.17.0
 	golang.org/x/sync v0.6.0
 	google.golang.org/api v0.163.0
@@ -60,9 +63,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/loads v0.22.0 // indirect
-	github.com/go-openapi/runtime v0.28.0 // indirect
 	github.com/go-openapi/spec v0.21.0 // indirect
-	github.com/go-openapi/strfmt v0.23.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-openapi/validate v0.24.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
@@ -117,7 +118,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
-	golang.org/x/exp v0.0.0-20240205201215-2c58cdc269a3 // indirect
 	golang.org/x/mod v0.15.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
