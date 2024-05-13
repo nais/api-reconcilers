@@ -88,7 +88,6 @@ func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, auditLog LogFun
 		},
 		Context: ctx,
 	})
-
 	if err != nil {
 		return 0, err
 	}
@@ -211,6 +210,7 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, audit
 		Query:   &teamName,
 		Context: ctx,
 	}
+
 	searchResp, err := r.serviceAccounts.SearchOrgServiceAccountsWithPaging(params)
 	if err != nil {
 		return 0, err
