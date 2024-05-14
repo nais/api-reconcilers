@@ -250,8 +250,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
-		if err != nil {
+		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -384,8 +383,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
-		if err != nil {
+		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -515,8 +513,7 @@ func TestReconcile(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
-		if err != nil {
+		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
 		}
 	})
