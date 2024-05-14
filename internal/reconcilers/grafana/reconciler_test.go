@@ -54,6 +54,11 @@ func TestReconcile(t *testing.T) {
 		},
 	}
 
+	naisTeam := &protoapi.Team{
+		Slug:    teamSlug,
+		Purpose: teamPurpose,
+	}
+
 	teamName := teamSlug
 	serviceAccountName := "team-" + teamSlug
 
@@ -516,4 +521,45 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
+	t.Run("Delete team", func(t *testing.T) {
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		auditLogsService := mockServer.AuditLogs
+		auditLogsService.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "grafana:removed-team"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+
+		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService.EXPECT().
+			SearchTeams(&grafana_teams.SearchTeamsParams{
+				Query:   &teamName,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.SearchTeamsOK{
+				Payload: &models.SearchTeamQueryResult{
+					Teams: []*models.TeamDTO{
+						{
+							ID:   teamID,
+							Name: teamName,
+						},
+					},
+				},
+			}, nil).
+			Once()
+		teamsService.EXPECT().
+			DeleteTeamByID(teamIDAsString).
+			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
+			Once()
+
+		reconciler, err := grafana_reconciler.New(nil, teamsService, nil, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
