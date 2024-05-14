@@ -66,6 +66,13 @@ spec:
               value: {{ .Values.gitHub.authEndpoint }}
             - name: GITHUB_ORG
               value: {{ .Values.gitHub.organization }}
+            # Grafana
+            - name: GRAFANA_ENDPOINT
+              value: {{ .Values.grafana.endpoint }}
+            - name: GRAFANA_USERNAME
+              value: {{ .Values.grafana.username }}
+            - name: GRAFANA_PASSWORD
+              value: {{ .Values.grafana.password }}
             # Azure
             {{- if .Values.azure.groupNamePrefix }}
             - name: AZURE_GROUP_NAME_PREFIX

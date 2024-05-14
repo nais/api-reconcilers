@@ -113,6 +113,21 @@ values:
     computed:
       template: '{{ .Env.nais_identity_pool_name | quote }}'
 
+  grafana.endpoint:
+    displayName: Grafana API endpoint
+    config:
+      type: string
+
+  grafana.username:
+    displayName: Grafana admin username
+    config:
+      type: string
+
+  grafana.password:
+    displayName: Grafana admin password
+    computed:
+      template: "{{ .Env.grafana_admin_password }}"
+
   dependencyTrack.password:
     displayName: DependencyTrack password
     computed:

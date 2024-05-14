@@ -39,6 +39,10 @@ gcp:
   cnrmRole: # mapped in fasit
   workloadIdentityPoolName: # mapped in fasit
 
+grafana:
+  endpoint: http://grafana:3000/api
+  username: admin
+
 dependencyTrack:
   endpoint: http://dependencytrack-backend:8080
   username: teams
