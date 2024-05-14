@@ -261,7 +261,7 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("Reconcile team members", func(t *testing.T) {
+	t.Run("Delete team member", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:    teamSlug,
 			Purpose: teamPurpose,
@@ -270,10 +270,10 @@ func TestReconcile(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:add-team-member"
+				return r.Action == "grafana:remove-team-member"
 			})).
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Twice()
+			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
 				return r.Action == "grafana:assign-service-account-permissions"
@@ -284,7 +284,7 @@ func TestReconcile(t *testing.T) {
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{
-				Nodes: members,
+				Nodes: members[0:1],
 			}, nil).
 			Once()
 
@@ -301,38 +301,14 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		usersService.EXPECT().
-			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
-				LoginOrEmail: members[1].User.Email,
-				Context:      ctx,
-			}).
-			Return(&grafana_users.GetUserByLoginOrEmailOK{
-				Payload: &models.UserProfileDTO{
-					ID: 2,
-				},
-			}, nil).
-			Once()
-
 		teamsService := grafana_mock_teams.NewMockClientService(t)
 		teamsService.EXPECT().
-			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
-				Body: &models.AddTeamMemberCommand{
-					UserID: 1,
-				},
+			RemoveTeamMemberWithParams(&grafana_teams.RemoveTeamMemberParams{
+				UserID:  2,
 				TeamID:  teamIDAsString,
 				Context: ctx,
 			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).
-			Once()
-		teamsService.EXPECT().
-			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
-				Body: &models.AddTeamMemberCommand{
-					UserID: 2,
-				},
-				TeamID:  teamIDAsString,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).
+			Return(&grafana_teams.RemoveTeamMemberOK{}, nil).
 			Once()
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
@@ -356,7 +332,16 @@ func TestReconcile(t *testing.T) {
 				Context: ctx,
 			}).
 			Return(&grafana_teams.GetTeamMembersOK{
-				Payload: []*models.TeamMemberDTO{},
+				Payload: []*models.TeamMemberDTO{
+					{
+						UserID: 1,
+						Email:  members[0].User.Email,
+					},
+					{
+						UserID: 2,
+						Email:  members[1].User.Email,
+					},
+				},
 			}, nil).
 			Once()
 
