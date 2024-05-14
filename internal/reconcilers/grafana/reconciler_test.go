@@ -178,6 +178,16 @@ func TestReconcile(t *testing.T) {
 
 		rbacService := grafana_mock_access_control.NewMockClientService(t)
 		rbacService.EXPECT().
+			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+				Resource:   resourceName,
+				ResourceID: strconv.Itoa(int(serviceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+				Payload: []*models.ResourcePermissionDTO{},
+			}, nil).
+			Once()
+		rbacService.EXPECT().
 			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
 				Body: &models.SetPermissionsCommand{
 					Permissions: []*models.SetResourcePermissionCommand{
@@ -336,6 +346,16 @@ func TestReconcile(t *testing.T) {
 
 		rbacService := grafana_mock_access_control.NewMockClientService(t)
 		rbacService.EXPECT().
+			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+				Resource:   resourceName,
+				ResourceID: strconv.Itoa(int(serviceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+				Payload: []*models.ResourcePermissionDTO{},
+			}, nil).
+			Once()
+		rbacService.EXPECT().
 			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
 				Body: &models.SetPermissionsCommand{
 					Permissions: []*models.SetResourcePermissionCommand{
@@ -461,9 +481,28 @@ func TestReconcile(t *testing.T) {
 
 		rbacService := grafana_mock_access_control.NewMockClientService(t)
 		rbacService.EXPECT().
+			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+				Resource:   resourceName,
+				ResourceID: strconv.Itoa(int(serviceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+				Payload: []*models.ResourcePermissionDTO{
+					{
+						Permission: "Admin",
+						UserID:     666,
+					},
+				},
+			}, nil).
+			Once()
+		rbacService.EXPECT().
 			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
 				Body: &models.SetPermissionsCommand{
 					Permissions: []*models.SetResourcePermissionCommand{
+						{
+							Permission: "",
+							UserID:     666,
+						},
 						{
 							Permission: "Edit",
 							TeamID:     teamID,
