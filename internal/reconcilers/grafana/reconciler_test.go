@@ -65,11 +65,6 @@ func TestReconcile(t *testing.T) {
 	log, _ := test.NewNullLogger()
 
 	t.Run("No data, create the first team", func(t *testing.T) {
-		naisTeam := &protoapi.Team{
-			Slug:    teamSlug,
-			Purpose: teamPurpose,
-		}
-
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
@@ -389,11 +384,6 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("Test service account resource permissions", func(t *testing.T) {
-		naisTeam := &protoapi.Team{
-			Slug:    teamSlug,
-			Purpose: teamPurpose,
-		}
-
 		apiClient, mockServer := apiclient.NewMockClient(t)
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
