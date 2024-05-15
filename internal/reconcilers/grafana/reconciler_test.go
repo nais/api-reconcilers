@@ -250,10 +250,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
-		if err != nil {
-			t.Fatal(err)
-		}
+		reconciler := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -393,10 +390,7 @@ func TestReconcile(t *testing.T) {
 
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
 
-		reconciler, err := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
-		if err != nil {
-			t.Fatal(err)
-		}
+		reconciler := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -537,10 +531,7 @@ func TestReconcile(t *testing.T) {
 
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
 
-		reconciler, err := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
-		if err != nil {
-			t.Fatal(err)
-		}
+		reconciler := grafana_reconciler.New(usersService, teamsService, rbacService, serviceAccountsService, adminUsersService)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -579,10 +570,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		reconciler, err := grafana_reconciler.New(nil, teamsService, nil, nil, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
+		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
