@@ -126,7 +126,7 @@ values:
   grafana.password:
     displayName: Grafana admin password
     computed:
-      template: "{{ .Env.grafana_admin_password }}"
+      template: "{{ .Env.grafana_admin_password | quote }}"
 
   dependencyTrack.password:
     displayName: DependencyTrack password
