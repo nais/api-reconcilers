@@ -42,14 +42,14 @@ func New(
 	rbac grafana_accesscontrol.ClientService,
 	serviceAccounts grafana_serviceaccounts.ClientService,
 	adminUsers grafana_admin_users.ClientService,
-) (reconcilers.Reconciler, error) {
+) reconcilers.Reconciler {
 	return &grafanaReconciler{
 		users:           users,
 		teams:           teams,
 		rbac:            rbac,
 		serviceAccounts: serviceAccounts,
 		adminUsers:      adminUsers,
-	}, nil
+	}
 }
 
 func (r *grafanaReconciler) Name() string {

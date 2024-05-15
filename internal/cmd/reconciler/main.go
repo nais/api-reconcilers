@@ -150,16 +150,13 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		BasicAuth: url.UserPassword(cfg.Grafana.Username, cfg.Grafana.Password),
 	})
 
-	grafanaReconciler, err := grafana_reconciler.New(
+	grafanaReconciler := grafana_reconciler.New(
 		grafanaClient.Users,
 		grafanaClient.Teams,
 		grafanaClient.AccessControl,
 		grafanaClient.ServiceAccounts,
 		grafanaClient.AdminUsers,
 	)
-	if err != nil {
-		return err
-	}
 
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
