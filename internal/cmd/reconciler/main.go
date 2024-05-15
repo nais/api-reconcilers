@@ -3,14 +3,27 @@ package reconciler
 import (
 	"context"
 	"errors"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/go-openapi/strfmt"
+
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
 
 	"github.com/joho/godotenv"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/sethvargo/go-envconfig"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	grafana_client "github.com/grafana/grafana-openapi-client-go/client"
+
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
@@ -20,15 +33,9 @@ import (
 	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
+	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
-	"github.com/nais/api/pkg/apiclient"
-	"github.com/sethvargo/go-envconfig"
-	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -131,6 +138,26 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		return err
 	}
 
+	grafanaURL, err := url.Parse(cfg.Grafana.Endpoint)
+	if err != nil {
+		return err
+	}
+
+	grafanaClient := grafana_client.NewHTTPClientWithConfig(strfmt.Default, &grafana_client.TransportConfig{
+		Host:      grafanaURL.Host,
+		Schemes:   []string{grafanaURL.Scheme},
+		BasePath:  grafanaURL.Path,
+		BasicAuth: url.UserPassword(cfg.Grafana.Username, cfg.Grafana.Password),
+	})
+
+	grafanaReconciler := grafana_reconciler.New(
+		grafanaClient.Users,
+		grafanaClient.Teams,
+		grafanaClient.AccessControl,
+		grafanaClient.ServiceAccounts,
+		grafanaClient.AdminUsers,
+	)
+
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
@@ -150,6 +177,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
+	reconcilerManager.AddReconciler(grafanaReconciler)
 
 	if dependencyTrackReconciler != nil {
 		reconcilerManager.AddReconciler(dependencyTrackReconciler)

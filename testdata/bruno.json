@@ -1,0 +1,157 @@
+{
+  "info": {
+    "name": "Grafana@localhost",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Add Team Member",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/teams/1/members",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userID\": 2,\n  \"permission\": \"Member\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Add service account role assignment",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/teams/1",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"Edit\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Assign user role in team",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/access-control/teams/1/users/2",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"Admin\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Create Team",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/teams",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"kimfoo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Create service account",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/serviceaccounts",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"team-kimfoo\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Delete service account",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "http://localhost:3000/api/serviceaccounts/3"
+      }
+    },
+    {
+      "name": "Delete team",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "http://localhost:3000/api/teams/1"
+      }
+    },
+    {
+      "name": "Lookup user",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "http://localhost:3000/api/users/lookup?loginOrEmail=kimt"
+      }
+    },
+    {
+      "name": "Remove member from team",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": "http://localhost:3000/api/teams/1/members/2"
+      }
+    },
+    {
+      "name": "Remove service account user role assignment",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "http://localhost:3000/api/access-control/serviceaccounts/4/users/1",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"permission\": \"\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "bruno",
+      "event": []
+    }
+  ],
+  "variable": []
+}

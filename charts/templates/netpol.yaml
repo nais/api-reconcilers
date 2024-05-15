@@ -19,6 +19,13 @@ spec:
           kubernetes.io/metadata.name: nais-system
       podSelector:
         matchLabels:
+          app.kubernetes.io/name: grafana
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: nais-system
+      podSelector:
+        matchLabels:
           app.kubernetes.io/instance: hookd
           app.kubernetes.io/name: hookd
   - to:

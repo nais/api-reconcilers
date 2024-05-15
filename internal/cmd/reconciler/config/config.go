@@ -66,6 +66,17 @@ type Config struct {
 		Organization string `env:"GITHUB_ORG,default=navikt-dev"`
 	}
 
+	Grafana struct {
+		// Endpoint URL to the Grafana API.
+		Endpoint string `env:"GRAFANA_ENDPOINT,default=http://localhost:3300/api"`
+
+		// Username The username to use when authenticating with Grafana.
+		Username string `env:"GRAFANA_USERNAME,default=admin"`
+
+		// Password The password to use when authenticating with Grafana.
+		Password string `env:"GRAFANA_PASSWORD,default=admin"`
+	}
+
 	GRPC struct {
 		// Target The target address for the gRPC server.
 		Target string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
@@ -102,7 +113,7 @@ type Config struct {
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 
 	// ListenAddress The host:port combination used by the http server.
-	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3005"`
+	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
 
 	// LogFormat Customize the log format. Can be "text" or "json".
 	LogFormat string `env:"LOG_FORMAT,default=json"`
@@ -116,7 +127,8 @@ type Config struct {
 	// TenantName The name of the tenant.
 	TenantName string `env:"TENANT_NAME,default=example"`
 
-	// Reconcilers to enable when first registering the reconciler
+	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API
+	// If you later would like do enable/disable a reconciler, you can do so through the Console
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
 }
 
