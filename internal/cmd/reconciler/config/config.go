@@ -127,7 +127,8 @@ type Config struct {
 	// TenantName The name of the tenant.
 	TenantName string `env:"TENANT_NAME,default=example"`
 
-	// Reconcilers to enable when first registering the reconciler
+	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API
+	// If you later would like do enable/disable a reconciler, you can do so through the Console
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
 }
 
