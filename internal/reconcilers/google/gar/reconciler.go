@@ -28,7 +28,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	str "github.com/nais/api-reconcilers/internal/strings"
 )
 
@@ -199,7 +198,7 @@ func (r *garReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 }
 
 func (r *garReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
-	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client.Reconcilers())
+	members, err := r.getServiceAccountPolicyMembers(ctx, teamSlug, client)
 	if err != nil {
 		return err
 	}
@@ -264,24 +263,19 @@ func (r *garReconciler) getOrCreateOrUpdateGarRepository(ctx context.Context, te
 	return r.updateGarRepository(ctx, existing, teamSlug, description, log)
 }
 
-func (r *garReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client protoapi.ReconcilersClient) ([]string, error) {
-	repos, err := github_team_reconciler.GetTeamRepositories(ctx, client, teamSlug)
+func (r *garReconciler) getServiceAccountPolicyMembers(ctx context.Context, teamSlug string, client *apiclient.APIClient) ([]string, error) {
+	resp, err := client.Teams().ListAuthorizedRepositories(ctx, &protoapi.ListAuthorizedRepositoriesRequest{
+		TeamSlug: teamSlug,
+	})
 	if err != nil {
-		return nil, err
+		return []string{}, fmt.Errorf("get authorized team repositories: %w", err)
 	}
 
 	members := make([]string, 0)
-	for _, githubRepo := range repos {
-		if githubRepo.Archived {
-			continue
-		}
-		for _, perm := range githubRepo.Permissions {
-			if perm.Name == "push" && perm.Granted {
-				member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo.Name
-				members = append(members, member)
-				break
-			}
-		}
+	for _, githubRepo := range resp.GithubRepositories {
+		member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo
+		members = append(members, member)
+
 	}
 
 	return members, nil
