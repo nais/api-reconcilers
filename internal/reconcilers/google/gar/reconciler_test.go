@@ -52,6 +52,9 @@ type fakeArtifactRegistry struct {
 	setIamPolicy        func(context.Context, *iampb.SetIamPolicyRequest) (*iampb.Policy, error)
 	setIamPolicyCounter int
 
+	getIamPolicy        func(context.Context, *iampb.GetIamPolicyRequest) (*iampb.Policy, error)
+	getIamPolicyCounter int
+
 	artifactregistrypb.UnimplementedArtifactRegistryServer
 }
 
@@ -83,6 +86,11 @@ func (f *fakeArtifactRegistry) DeleteRepository(ctx context.Context, r *artifact
 func (f *fakeArtifactRegistry) SetIamPolicy(ctx context.Context, r *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
 	f.setIamPolicyCounter++
 	return f.setIamPolicy(ctx, r)
+}
+
+func (f *fakeArtifactRegistry) GetIamPolicy(ctx context.Context, r *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	f.getIamPolicyCounter++
+	return f.getIamPolicy(ctx, r)
 }
 
 func (f *fakeArtifactRegistry) assert(t *testing.T) {
@@ -407,6 +415,9 @@ func TestReconcile(t *testing.T) {
 
 					return &iampb.Policy{}, nil
 				},
+				getIamPolicy: func(ctx context.Context, r *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+					return &iampb.Policy{}, nil
+				},
 			},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get service account
@@ -433,6 +444,13 @@ func TestReconcile(t *testing.T) {
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "google:gar:create"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
 				return req.Slug == teamSlug && *req.GarRepository == garRepositoryParent+"/repositories/"+teamSlug

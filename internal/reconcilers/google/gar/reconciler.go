@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
@@ -37,6 +38,7 @@ const (
 	managedByLabelName  = "managed-by"
 	managedByLabelValue = "api-reconcilers"
 
+	auditActionCreateGarRepository = "google:gar:create"
 	auditActionDeleteGarRepository = "google:gar:delete"
 )
 
@@ -111,6 +113,8 @@ func (r *garReconciler) Name() string {
 }
 
 func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	log.Infof("started reconciling GAR for %q", naisTeam.Slug)
+
 	serviceAccount, err := r.getOrCreateServiceAccount(ctx, naisTeam.Slug)
 	if err != nil {
 		return err
@@ -125,14 +129,30 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return err
 	}
 
-	if err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, naisTeam.GoogleGroupEmail); err != nil {
+	updated, err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, naisTeam.GoogleGroupEmail)
+	if err != nil {
 		return err
 	}
 
-	client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+	if updated {
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionCreateGarRepository,
+			naisTeam.Slug,
+			"Created GAR repository %q", *naisTeam.GarRepository)
+	}
+
+	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
 		Slug:          naisTeam.Slug,
 		GarRepository: &garRepository.Name,
 	})
+	if err != nil {
+		return err
+	}
+
+	log.Infof("finished reconciling GAR for %q", naisTeam.Slug)
 
 	return nil
 }
@@ -325,7 +345,14 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 	return repository, nil
 }
 
-func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail *string) error {
+func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail *string) (bool, error) {
+	resp, err := r.artifactRegistry.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{
+		Resource: repository.Name,
+	})
+	if err != nil {
+		return false, err
+	}
+
 	bindings := []*iampb.Binding{
 		{
 			Role:    "roles/artifactregistry.writer",
@@ -340,13 +367,29 @@ func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *
 		})
 	}
 
-	_, err := r.artifactRegistry.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{
+	if IsIAMPolicyBindingEqual(bindings, resp.Bindings) {
+		return false, nil
+	}
+
+	_, err = r.artifactRegistry.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{
 		Resource: repository.Name,
 		Policy: &iampb.Policy{
 			Bindings: bindings,
 		},
 	})
-	return err
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func IsIAMPolicyBindingEqual(want, current []*iampb.Binding) bool {
+	compareBindingsFunc := func(a, b *iampb.Binding) bool {
+		return proto.Equal(a, b)
+	}
+
+	return slices.EqualFunc(want, current, compareBindingsFunc)
 }
 
 func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountName, accountID string) {
