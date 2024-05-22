@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	artifactregistry "cloud.google.com/go/artifactregistry/apiv1"
@@ -388,6 +389,13 @@ func IsIAMPolicyBindingEqual(want, current []*iampb.Binding) bool {
 	compareBindingsFunc := func(a, b *iampb.Binding) bool {
 		return proto.Equal(a, b)
 	}
+
+	sortBindingsByRole := func(i, j *iampb.Binding) int {
+		return strings.Compare(i.Role, j.Role)
+	}
+
+	slices.SortFunc(want, sortBindingsByRole)
+	slices.SortFunc(current, sortBindingsByRole)
 
 	return slices.EqualFunc(want, current, compareBindingsFunc)
 }

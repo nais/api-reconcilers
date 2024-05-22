@@ -397,20 +397,20 @@ func TestReconcile(t *testing.T) {
 						t.Errorf("expected 1 member, got %d", len(r.Policy.Bindings[1].Members))
 					}
 
-					if expected := "serviceAccount:" + expectedServiceAccount.Email; r.Policy.Bindings[0].Members[0] != expected {
-						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[0].Members[0])
-					}
-
-					if expected := "roles/artifactregistry.writer"; r.Policy.Bindings[0].Role != expected {
-						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[0].Role)
-					}
-
-					if expected := "group:" + groupEmail; r.Policy.Bindings[1].Members[0] != expected {
+					if expected := "serviceAccount:" + expectedServiceAccount.Email; r.Policy.Bindings[1].Members[0] != expected {
 						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[1].Members[0])
 					}
 
-					if expected := "roles/artifactregistry.repoAdmin"; r.Policy.Bindings[1].Role != expected {
+					if expected := "roles/artifactregistry.writer"; r.Policy.Bindings[1].Role != expected {
 						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[1].Role)
+					}
+
+					if expected := "group:" + groupEmail; r.Policy.Bindings[0].Members[0] != expected {
+						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[0].Members[0])
+					}
+
+					if expected := "roles/artifactregistry.repoAdmin"; r.Policy.Bindings[0].Role != expected {
+						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[0].Role)
 					}
 
 					return &iampb.Policy{}, nil
