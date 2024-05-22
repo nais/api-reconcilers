@@ -614,6 +614,88 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("Compare IAM bindings", func(t *testing.T) {
+		// Test cases
+		testCases := []struct {
+			name    string
+			want    []*iampb.Binding
+			current []*iampb.Binding
+			isEqual bool
+		}{
+			{
+				name: "no difference",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				current: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				isEqual: true,
+			},
+			{
+				name: "no current bindings",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				current: []*iampb.Binding{},
+				isEqual: false,
+			},
+			{
+				name: "same bindings, different order",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+				},
+				current: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				isEqual: true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				if isEqual := google_gar_reconciler.IsIAMPolicyBindingEqual(tc.want, tc.current); isEqual != tc.isEqual {
+					t.Errorf("want: %v, got: %v", tc.isEqual, isEqual)
+				}
+			})
+		}
+	})
 }
 
 func TestDelete(t *testing.T) {
