@@ -52,6 +52,9 @@ type fakeArtifactRegistry struct {
 	setIamPolicy        func(context.Context, *iampb.SetIamPolicyRequest) (*iampb.Policy, error)
 	setIamPolicyCounter int
 
+	getIamPolicy        func(context.Context, *iampb.GetIamPolicyRequest) (*iampb.Policy, error)
+	getIamPolicyCounter int
+
 	artifactregistrypb.UnimplementedArtifactRegistryServer
 }
 
@@ -83,6 +86,11 @@ func (f *fakeArtifactRegistry) DeleteRepository(ctx context.Context, r *artifact
 func (f *fakeArtifactRegistry) SetIamPolicy(ctx context.Context, r *iampb.SetIamPolicyRequest) (*iampb.Policy, error) {
 	f.setIamPolicyCounter++
 	return f.setIamPolicy(ctx, r)
+}
+
+func (f *fakeArtifactRegistry) GetIamPolicy(ctx context.Context, r *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
+	f.getIamPolicyCounter++
+	return f.getIamPolicy(ctx, r)
 }
 
 func (f *fakeArtifactRegistry) assert(t *testing.T) {
@@ -389,22 +397,25 @@ func TestReconcile(t *testing.T) {
 						t.Errorf("expected 1 member, got %d", len(r.Policy.Bindings[1].Members))
 					}
 
-					if expected := "serviceAccount:" + expectedServiceAccount.Email; r.Policy.Bindings[0].Members[0] != expected {
-						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[0].Members[0])
-					}
-
-					if expected := "roles/artifactregistry.writer"; r.Policy.Bindings[0].Role != expected {
-						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[0].Role)
-					}
-
-					if expected := "group:" + groupEmail; r.Policy.Bindings[1].Members[0] != expected {
+					if expected := "serviceAccount:" + expectedServiceAccount.Email; r.Policy.Bindings[1].Members[0] != expected {
 						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[1].Members[0])
 					}
 
-					if expected := "roles/artifactregistry.repoAdmin"; r.Policy.Bindings[1].Role != expected {
+					if expected := "roles/artifactregistry.writer"; r.Policy.Bindings[1].Role != expected {
 						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[1].Role)
 					}
 
+					if expected := "group:" + groupEmail; r.Policy.Bindings[0].Members[0] != expected {
+						t.Errorf("expected member %q, got %q", expected, r.Policy.Bindings[0].Members[0])
+					}
+
+					if expected := "roles/artifactregistry.repoAdmin"; r.Policy.Bindings[0].Role != expected {
+						t.Errorf("expected role %q, got %q", expected, r.Policy.Bindings[0].Role)
+					}
+
+					return &iampb.Policy{}, nil
+				},
+				getIamPolicy: func(ctx context.Context, r *iampb.GetIamPolicyRequest) (*iampb.Policy, error) {
 					return &iampb.Policy{}, nil
 				},
 			},
@@ -433,6 +444,13 @@ func TestReconcile(t *testing.T) {
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.AuditLogs.EXPECT().
+			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
+				return r.Action == "google:gar:create"
+			})).
+			Return(&protoapi.CreateAuditLogsResponse{}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
 				return req.Slug == teamSlug && *req.GarRepository == garRepositoryParent+"/repositories/"+teamSlug
@@ -594,6 +612,88 @@ func TestReconcile(t *testing.T) {
 
 		if err = reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "abort test") {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Compare IAM bindings", func(t *testing.T) {
+		// Test cases
+		testCases := []struct {
+			name    string
+			want    []*iampb.Binding
+			current []*iampb.Binding
+			isEqual bool
+		}{
+			{
+				name: "no difference",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				current: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				isEqual: true,
+			},
+			{
+				name: "no current bindings",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				current: []*iampb.Binding{},
+				isEqual: false,
+			},
+			{
+				name: "same bindings, different order",
+				want: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+				},
+				current: []*iampb.Binding{
+					{
+						Role:    "roles/artifactregistry.writer",
+						Members: []string{"serviceAccount:test"},
+					},
+					{
+						Role:    "roles/artifactregistry.repoAdmin",
+						Members: []string{"group:email"},
+					},
+				},
+				isEqual: true,
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				if isEqual := google_gar_reconciler.IsIAMPolicyBindingEqual(tc.want, tc.current); isEqual != tc.isEqual {
+					t.Errorf("want: %v, got: %v", tc.isEqual, isEqual)
+				}
+			})
 		}
 	})
 }
