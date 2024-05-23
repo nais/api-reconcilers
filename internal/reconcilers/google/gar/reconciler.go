@@ -296,7 +296,6 @@ func (r *garReconciler) getServiceAccountPolicyMembers(ctx context.Context, team
 	for _, githubRepo := range resp.GithubRepositories {
 		member := "principalSet://iam.googleapis.com/" + r.workloadIdentityPoolName + "/attribute.repository/" + githubRepo
 		members = append(members, member)
-
 	}
 
 	return members, nil
