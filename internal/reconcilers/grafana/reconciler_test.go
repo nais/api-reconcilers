@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
@@ -277,10 +278,17 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
+		uppercaseUser := &protoapi.TeamMember{
+			User: &protoapi.User{
+				Email: "Uppercase@email.com",
+				Name:  "Uppercase",
+			},
+		}
+
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{
-				Nodes: members[0:1],
+				Nodes: []*protoapi.TeamMember{members[0], uppercaseUser},
 			}, nil).
 			Once()
 
@@ -293,6 +301,17 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_users.GetUserByLoginOrEmailOK{
 				Payload: &models.UserProfileDTO{
 					ID: 1,
+				},
+			}, nil).
+			Once()
+		usersService.EXPECT().
+			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+				LoginOrEmail: uppercaseUser.User.Email,
+				Context:      ctx,
+			}).
+			Return(&grafana_users.GetUserByLoginOrEmailOK{
+				Payload: &models.UserProfileDTO{
+					ID: 10,
 				},
 			}, nil).
 			Once()
@@ -336,6 +355,10 @@ func TestReconcile(t *testing.T) {
 					{
 						UserID: 2,
 						Email:  members[1].User.Email,
+					},
+					{
+						UserID: 10,
+						Email:  strings.ToLower(uppercaseUser.User.Email),
 					},
 				},
 			}, nil).

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"strconv"
+	"strings"
 
 	"golang.org/x/exp/maps"
 
@@ -188,7 +189,7 @@ func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, auditLog LogFun
 
 func grafanaMemberExistsInTeamMembers(naisTeamMembers []*protoapi.TeamMember, email string) bool {
 	for _, user := range naisTeamMembers {
-		if email == user.GetUser().Email {
+		if strings.EqualFold(email, user.GetUser().Email) {
 			return true
 		}
 	}
@@ -197,7 +198,7 @@ func grafanaMemberExistsInTeamMembers(naisTeamMembers []*protoapi.TeamMember, em
 
 func teamMemberExistsInGrafanaMembers(grafanaTeamMemberEmails []string, email string) bool {
 	for _, grafanaEmail := range grafanaTeamMemberEmails {
-		if email == grafanaEmail {
+		if strings.EqualFold(email, grafanaEmail) {
 			return true
 		}
 	}
