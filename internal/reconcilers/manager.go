@@ -301,7 +301,11 @@ func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, nais
 
 	log.WithField("time", teamStart).Debugf("start team deletion process")
 	successfulDelete := true
-	for _, r := range reconcilers {
+
+	// Do delete in reverse order
+	reversed := slices.Clone(reconcilers)
+	slices.Reverse(reversed)
+	for _, r := range reversed {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
 		hasError := false
