@@ -59,14 +59,6 @@ func (r *githubTeamReconciler) loadState(ctx context.Context, client *apiclient.
 	return getState(ctx, client.Reconcilers(), teamSlug)
 }
 
-func GetTeamRepositories(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) ([]*GitHubRepository, error) {
-	st, err := getState(ctx, client, teamSlug)
-	if err != nil {
-		return nil, err
-	}
-	return st.Repositories, nil
-}
-
 func getState(ctx context.Context, client protoapi.ReconcilersClient, teamSlug string) (*GitHubState, error) {
 	st := GitHubState{}
 	resp, err := client.State(ctx, &protoapi.GetReconcilerStateRequest{
