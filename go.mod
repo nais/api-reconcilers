@@ -1,8 +1,6 @@
 module github.com/nais/api-reconcilers
 
-go 1.22
-
-toolchain go1.22.3
+go 1.22.4
 
 require (
 	cloud.google.com/go/artifactregistry v1.14.7
@@ -18,7 +16,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240430202104-3ad0f7e4ee52
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api v0.0.0-20240306082322-a8207dc3426e
+	github.com/nais/api v0.0.0-20240614093353-fe1f73775e6a
 	github.com/nais/dependencytrack v0.0.0-20240301095153-b46382e6a8be
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sethvargo/go-envconfig v1.0.0
