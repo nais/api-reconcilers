@@ -174,6 +174,13 @@ func TestReconcile(t *testing.T) {
 			ListAuthorizedRepositories(mock.Anything, &protoapi.ListAuthorizedRepositoriesRequest{TeamSlug: teamSlug}).
 			Return(&protoapi.ListAuthorizedRepositoriesResponse{GithubRepositories: []string{"some-org/some-repository"}}, nil).
 			Twice()
+		bucketName := "nais-cdn-example-slug-13f7"
+		mockServer.Teams.EXPECT().
+			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{
+				Slug:      teamSlug,
+				CdnBucket: &bucketName,
+			}).
+			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).Once()
 
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
