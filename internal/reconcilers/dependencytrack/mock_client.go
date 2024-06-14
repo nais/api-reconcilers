@@ -849,6 +849,67 @@ func (_c *MockClient_GenerateApiKey_Call) RunAndReturn(run func(context.Context,
 	return _c
 }
 
+// GetAnalysisTrail provides a mock function with given fields: ctx, projectUuid, componentUuid, vulnerabilityUuid
+func (_m *MockClient) GetAnalysisTrail(ctx context.Context, projectUuid string, componentUuid string, vulnerabilityUuid string) (*client.Analysis, error) {
+	ret := _m.Called(ctx, projectUuid, componentUuid, vulnerabilityUuid)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAnalysisTrail")
+	}
+
+	var r0 *client.Analysis
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) (*client.Analysis, error)); ok {
+		return rf(ctx, projectUuid, componentUuid, vulnerabilityUuid)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string) *client.Analysis); ok {
+		r0 = rf(ctx, projectUuid, componentUuid, vulnerabilityUuid)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.Analysis)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = rf(ctx, projectUuid, componentUuid, vulnerabilityUuid)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockClient_GetAnalysisTrail_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAnalysisTrail'
+type MockClient_GetAnalysisTrail_Call struct {
+	*mock.Call
+}
+
+// GetAnalysisTrail is a helper method to define mock.On call
+//   - ctx context.Context
+//   - projectUuid string
+//   - componentUuid string
+//   - vulnerabilityUuid string
+func (_e *MockClient_Expecter) GetAnalysisTrail(ctx interface{}, projectUuid interface{}, componentUuid interface{}, vulnerabilityUuid interface{}) *MockClient_GetAnalysisTrail_Call {
+	return &MockClient_GetAnalysisTrail_Call{Call: _e.mock.On("GetAnalysisTrail", ctx, projectUuid, componentUuid, vulnerabilityUuid)}
+}
+
+func (_c *MockClient_GetAnalysisTrail_Call) Run(run func(ctx context.Context, projectUuid string, componentUuid string, vulnerabilityUuid string)) *MockClient_GetAnalysisTrail_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockClient_GetAnalysisTrail_Call) Return(_a0 *client.Analysis, _a1 error) *MockClient_GetAnalysisTrail_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockClient_GetAnalysisTrail_Call) RunAndReturn(run func(context.Context, string, string, string) (*client.Analysis, error)) *MockClient_GetAnalysisTrail_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetConfigProperties provides a mock function with given fields: ctx
 func (_m *MockClient) GetConfigProperties(ctx context.Context) ([]client.ConfigProperty, error) {
 	ret := _m.Called(ctx)
@@ -1024,9 +1085,9 @@ func (_c *MockClient_GetEcosystems_Call) RunAndReturn(run func(context.Context) 
 	return _c
 }
 
-// GetFindings provides a mock function with given fields: ctx, projectUuid
-func (_m *MockClient) GetFindings(ctx context.Context, projectUuid string) ([]*client.Finding, error) {
-	ret := _m.Called(ctx, projectUuid)
+// GetFindings provides a mock function with given fields: ctx, projectUuid, suppressed
+func (_m *MockClient) GetFindings(ctx context.Context, projectUuid string, suppressed bool) ([]*client.Finding, error) {
+	ret := _m.Called(ctx, projectUuid, suppressed)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFindings")
@@ -1034,19 +1095,19 @@ func (_m *MockClient) GetFindings(ctx context.Context, projectUuid string) ([]*c
 
 	var r0 []*client.Finding
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*client.Finding, error)); ok {
-		return rf(ctx, projectUuid)
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) ([]*client.Finding, error)); ok {
+		return rf(ctx, projectUuid, suppressed)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string) []*client.Finding); ok {
-		r0 = rf(ctx, projectUuid)
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool) []*client.Finding); ok {
+		r0 = rf(ctx, projectUuid, suppressed)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*client.Finding)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = rf(ctx, projectUuid)
+	if rf, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = rf(ctx, projectUuid, suppressed)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1062,13 +1123,14 @@ type MockClient_GetFindings_Call struct {
 // GetFindings is a helper method to define mock.On call
 //   - ctx context.Context
 //   - projectUuid string
-func (_e *MockClient_Expecter) GetFindings(ctx interface{}, projectUuid interface{}) *MockClient_GetFindings_Call {
-	return &MockClient_GetFindings_Call{Call: _e.mock.On("GetFindings", ctx, projectUuid)}
+//   - suppressed bool
+func (_e *MockClient_Expecter) GetFindings(ctx interface{}, projectUuid interface{}, suppressed interface{}) *MockClient_GetFindings_Call {
+	return &MockClient_GetFindings_Call{Call: _e.mock.On("GetFindings", ctx, projectUuid, suppressed)}
 }
 
-func (_c *MockClient_GetFindings_Call) Run(run func(ctx context.Context, projectUuid string)) *MockClient_GetFindings_Call {
+func (_c *MockClient_GetFindings_Call) Run(run func(ctx context.Context, projectUuid string, suppressed bool)) *MockClient_GetFindings_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		run(args[0].(context.Context), args[1].(string), args[2].(bool))
 	})
 	return _c
 }
@@ -1078,7 +1140,7 @@ func (_c *MockClient_GetFindings_Call) Return(_a0 []*client.Finding, _a1 error) 
 	return _c
 }
 
-func (_c *MockClient_GetFindings_Call) RunAndReturn(run func(context.Context, string) ([]*client.Finding, error)) *MockClient_GetFindings_Call {
+func (_c *MockClient_GetFindings_Call) RunAndReturn(run func(context.Context, string, bool) ([]*client.Finding, error)) *MockClient_GetFindings_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1201,6 +1263,65 @@ func (_c *MockClient_GetProject_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
+// GetProjectById provides a mock function with given fields: ctx, uuid
+func (_m *MockClient) GetProjectById(ctx context.Context, uuid string) (*client.Project, error) {
+	ret := _m.Called(ctx, uuid)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetProjectById")
+	}
+
+	var r0 *client.Project
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*client.Project, error)); ok {
+		return rf(ctx, uuid)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) *client.Project); ok {
+		r0 = rf(ctx, uuid)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.Project)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, uuid)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockClient_GetProjectById_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetProjectById'
+type MockClient_GetProjectById_Call struct {
+	*mock.Call
+}
+
+// GetProjectById is a helper method to define mock.On call
+//   - ctx context.Context
+//   - uuid string
+func (_e *MockClient_Expecter) GetProjectById(ctx interface{}, uuid interface{}) *MockClient_GetProjectById_Call {
+	return &MockClient_GetProjectById_Call{Call: _e.mock.On("GetProjectById", ctx, uuid)}
+}
+
+func (_c *MockClient_GetProjectById_Call) Run(run func(ctx context.Context, uuid string)) *MockClient_GetProjectById_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockClient_GetProjectById_Call) Return(_a0 *client.Project, _a1 error) *MockClient_GetProjectById_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockClient_GetProjectById_Call) RunAndReturn(run func(context.Context, string) (*client.Project, error)) *MockClient_GetProjectById_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetProjectMetricsByDate provides a mock function with given fields: ctx, projectUuid, date
 func (_m *MockClient) GetProjectMetricsByDate(ctx context.Context, projectUuid string, date string) ([]*client.ProjectMetric, error) {
 	ret := _m.Called(ctx, projectUuid, date)
@@ -1315,6 +1436,66 @@ func (_c *MockClient_GetProjects_Call) Return(_a0 []*client.Project, _a1 error) 
 }
 
 func (_c *MockClient_GetProjects_Call) RunAndReturn(run func(context.Context) ([]*client.Project, error)) *MockClient_GetProjects_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetProjectsByPrefixedTag provides a mock function with given fields: ctx, prefix, tag
+func (_m *MockClient) GetProjectsByPrefixedTag(ctx context.Context, prefix client.TagPrefix, tag string) ([]*client.Project, error) {
+	ret := _m.Called(ctx, prefix, tag)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetProjectsByPrefixedTag")
+	}
+
+	var r0 []*client.Project
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, client.TagPrefix, string) ([]*client.Project, error)); ok {
+		return rf(ctx, prefix, tag)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, client.TagPrefix, string) []*client.Project); ok {
+		r0 = rf(ctx, prefix, tag)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*client.Project)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, client.TagPrefix, string) error); ok {
+		r1 = rf(ctx, prefix, tag)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockClient_GetProjectsByPrefixedTag_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetProjectsByPrefixedTag'
+type MockClient_GetProjectsByPrefixedTag_Call struct {
+	*mock.Call
+}
+
+// GetProjectsByPrefixedTag is a helper method to define mock.On call
+//   - ctx context.Context
+//   - prefix client.TagPrefix
+//   - tag string
+func (_e *MockClient_Expecter) GetProjectsByPrefixedTag(ctx interface{}, prefix interface{}, tag interface{}) *MockClient_GetProjectsByPrefixedTag_Call {
+	return &MockClient_GetProjectsByPrefixedTag_Call{Call: _e.mock.On("GetProjectsByPrefixedTag", ctx, prefix, tag)}
+}
+
+func (_c *MockClient_GetProjectsByPrefixedTag_Call) Run(run func(ctx context.Context, prefix client.TagPrefix, tag string)) *MockClient_GetProjectsByPrefixedTag_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(client.TagPrefix), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockClient_GetProjectsByPrefixedTag_Call) Return(_a0 []*client.Project, _a1 error) *MockClient_GetProjectsByPrefixedTag_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockClient_GetProjectsByPrefixedTag_Call) RunAndReturn(run func(context.Context, client.TagPrefix, string) ([]*client.Project, error)) *MockClient_GetProjectsByPrefixedTag_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1595,6 +1776,53 @@ func (_c *MockClient_PortfolioRefresh_Call) Return(_a0 error) *MockClient_Portfo
 }
 
 func (_c *MockClient_PortfolioRefresh_Call) RunAndReturn(run func(context.Context) error) *MockClient_PortfolioRefresh_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RecordAnalysis provides a mock function with given fields: ctx, analysis
+func (_m *MockClient) RecordAnalysis(ctx context.Context, analysis *client.AnalysisRequest) error {
+	ret := _m.Called(ctx, analysis)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordAnalysis")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *client.AnalysisRequest) error); ok {
+		r0 = rf(ctx, analysis)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockClient_RecordAnalysis_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordAnalysis'
+type MockClient_RecordAnalysis_Call struct {
+	*mock.Call
+}
+
+// RecordAnalysis is a helper method to define mock.On call
+//   - ctx context.Context
+//   - analysis *client.AnalysisRequest
+func (_e *MockClient_Expecter) RecordAnalysis(ctx interface{}, analysis interface{}) *MockClient_RecordAnalysis_Call {
+	return &MockClient_RecordAnalysis_Call{Call: _e.mock.On("RecordAnalysis", ctx, analysis)}
+}
+
+func (_c *MockClient_RecordAnalysis_Call) Run(run func(ctx context.Context, analysis *client.AnalysisRequest)) *MockClient_RecordAnalysis_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*client.AnalysisRequest))
+	})
+	return _c
+}
+
+func (_c *MockClient_RecordAnalysis_Call) Return(_a0 error) *MockClient_RecordAnalysis_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockClient_RecordAnalysis_Call) RunAndReturn(run func(context.Context, *client.AnalysisRequest) error) *MockClient_RecordAnalysis_Call {
 	_c.Call.Return(run)
 	return _c
 }
