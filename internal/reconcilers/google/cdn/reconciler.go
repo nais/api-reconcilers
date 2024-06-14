@@ -195,7 +195,6 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		Slug:      naisTeam.Slug,
 		CdnBucket: &bucketName,
 	})
-
 	if err != nil {
 		return fmt.Errorf("set cdn bucket for team %q: %w", naisTeam.Slug, err)
 	}
