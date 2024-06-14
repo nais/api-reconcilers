@@ -190,13 +190,14 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	if err != nil {
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
-	_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
-		Slug:            naisTeam.Slug,
-		EnvironmentName: env.EnvironmentName,
-		GcpProjectId:    &teamProject.ProjectId,
+
+	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+		Slug:      naisTeam.Slug,
+		CdnBucket: &bucketName,
 	})
+
 	if err != nil {
-		return fmt.Errorf("set GCP project ID for team %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		return fmt.Errorf("set cdn bucket for team %q: %w", naisTeam.Slug, err)
 	}
 
 	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount, log)
