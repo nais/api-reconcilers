@@ -191,6 +191,14 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("get or create backend bucket: %w", err)
 	}
 
+	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+		Slug:      naisTeam.Slug,
+		CdnBucket: &bucketName,
+	})
+	if err != nil {
+		return fmt.Errorf("set cdn bucket for team %q: %w", naisTeam.Slug, err)
+	}
+
 	err = r.setCacheInvalidationIamPolicy(ctx, teamEmail, googleServiceAccount, log)
 	if err != nil {
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
