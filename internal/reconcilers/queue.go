@@ -32,7 +32,7 @@ func NewQueue() (Queue, <-chan ReconcileRequest) {
 	}, ch
 }
 
-func (q *queue) Add(input ReconcileRequest) error {
+func (q *queue) Add(req ReconcileRequest) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -40,7 +40,7 @@ func (q *queue) Add(input ReconcileRequest) error {
 		return fmt.Errorf("team reconciler channel is closed")
 	}
 
-	q.queue <- input
+	q.queue <- req
 	return nil
 }
 
