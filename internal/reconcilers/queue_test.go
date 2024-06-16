@@ -9,7 +9,7 @@ import (
 )
 
 func Test_Queue(t *testing.T) {
-	input := reconcilers.Input{
+	input := reconcilers.ReconcileRequest{
 		TeamSlug:      "test-team",
 		CorrelationID: uuid.New().String(),
 	}
