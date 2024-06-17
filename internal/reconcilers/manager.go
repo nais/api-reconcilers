@@ -470,6 +470,10 @@ func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID)
 	m.log.WithField("num_teams", len(teams)).Debugf("fetched teams from API")
 
 	for _, team := range teams {
+		if team.IsDeleted() {
+			continue
+		}
+
 		err := m.syncQueue.Add(ReconcileRequest{
 			CorrelationID: correlationID.String(),
 			TeamSlug:      team.Slug,
