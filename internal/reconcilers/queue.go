@@ -11,6 +11,7 @@ type ReconcileRequest struct {
 	CorrelationID string
 	TraceID       string
 	TeamSlug      string
+	Delete        bool
 }
 
 type Queue interface {

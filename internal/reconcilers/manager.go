@@ -125,15 +125,18 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 			switch event {
 			case protoapi.EventTypes_EVENT_TEAM_DELETED,
 				protoapi.EventTypes_EVENT_TEAM_UPDATED:
-				input := ReconcileRequest{
-					CorrelationID: correlationID.String(),
-				}
 
 				var obj interface {
 					proto.Message
 					GetSlug() string
 				}
+
+				input := ReconcileRequest{
+					CorrelationID: correlationID.String(),
+				}
+
 				if event == protoapi.EventTypes_EVENT_TEAM_DELETED {
+					input.Delete = true
 					obj = &protoapi.EventTeamDeleted{}
 				} else {
 					obj = &protoapi.EventTeamUpdated{}
@@ -145,8 +148,7 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 				}
 
 				input.TeamSlug = obj.GetSlug()
-				err := m.syncQueue.Add(input)
-				if err != nil {
+				if err := m.syncQueue.Add(input); err != nil {
 					msg.Nack()
 					m.log.WithError(err).Error("error while adding team to queue")
 					return
@@ -255,9 +257,9 @@ func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) {
 	}
 
 	team := resp.Team
-	if team.CanBeDeleted {
+	if req.Delete {
 		m.deleteTeam(ctx, reconcilers, team, req)
-	} else if !team.IsDeleted() {
+	} else {
 		m.reconcileTeam(ctx, reconcilers, team, req)
 	}
 }
@@ -462,18 +464,14 @@ func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID)
 		return nil
 	}
 
-	teams, err := getTeams(ctx, m.apiclient.Teams())
+	teams, err := getTeamsToBeReconciled(ctx, m.apiclient.Teams())
 	if err != nil {
 		return err
 	}
 
-	m.log.WithField("num_teams", len(teams)).Debugf("fetched teams from API")
+	m.log.WithField("num_teams", len(teams)).Debugf("fetched teams to be reconciled from API")
 
 	for _, team := range teams {
-		if team.IsDeleted() {
-			continue
-		}
-
 		err := m.syncQueue.Add(ReconcileRequest{
 			CorrelationID: correlationID.String(),
 			TeamSlug:      team.Slug,
@@ -483,13 +481,42 @@ func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID)
 		}
 	}
 
+	teams, err = getTeamsToBeDeleted(ctx, m.apiclient.Teams())
+	if err != nil {
+		return err
+	}
+
+	m.log.WithField("num_teams", len(teams)).Debugf("fetched teams to be deleted from API")
+
+	for _, team := range teams {
+		err := m.syncQueue.Add(ReconcileRequest{
+			CorrelationID: correlationID.String(),
+			TeamSlug:      team.Slug,
+			Delete:        true,
+		})
+		if err != nil {
+			m.log.WithField("team", team.Slug).WithError(err).Errorf("error while adding team to queue")
+		}
+	}
+
 	return nil
 }
 
-// getTeams retrieves all teams from the NAIS API
-func getTeams(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
-	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamsResponse, error) {
-		return client.List(ctx, &protoapi.ListTeamsRequest{Limit: limit, Offset: offset})
+func getTeamsToBeReconciled(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.TeamsToBeReconciledResponse, error) {
+		return client.ToBeReconciled(ctx, &protoapi.TeamsToBeReconciledRequest{Limit: limit, Offset: offset})
+	})
+
+	teams := make([]*protoapi.Team, 0)
+	for it.Next() {
+		teams = append(teams, it.Value())
+	}
+	return teams, it.Err()
+}
+
+func getTeamsToBeDeleted(ctx context.Context, client protoapi.TeamsClient) ([]*protoapi.Team, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.TeamsToBeDeletedResponse, error) {
+		return client.ToBeDeleted(ctx, &protoapi.TeamsToBeDeletedRequest{Limit: limit, Offset: offset})
 	})
 
 	teams := make([]*protoapi.Team, 0)
