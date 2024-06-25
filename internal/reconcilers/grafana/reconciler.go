@@ -271,27 +271,30 @@ func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, auditL
 		}
 	}
 
-	// Make sure our nais team has editor permissions.
-	permissions = append(permissions, &models.SetResourcePermissionCommand{
-		Permission: "Edit",
-		TeamID:     teamID,
-	})
+	if len(permissions) > 0 || len(existingPermissions.GetPayload()) == 0 {
+		// Make sure our nais team has editor permissions.
+		permissions = append(permissions, &models.SetResourcePermissionCommand{
+			Permission: "Edit",
+			TeamID:     teamID,
+		})
 
-	// apply the changes.
-	_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
-		Body: &models.SetPermissionsCommand{
-			Permissions: permissions,
-		},
-		Resource:   resourceName,
-		ResourceID: strconv.Itoa(int(serviceAccountID)),
-		Context:    ctx,
-	})
+		// apply the changes.
+		_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+			Body: &models.SetPermissionsCommand{
+				Permissions: permissions,
+			},
+			Resource:   resourceName,
+			ResourceID: strconv.Itoa(int(serviceAccountID)),
+			Context:    ctx,
+		})
+		if err != nil {
+			return err
+		}
 
-	if err == nil {
 		auditLog("assign-service-account-permissions", "Assigned permissions to Grafana service account")
 	}
 
-	return err
+	return nil
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
