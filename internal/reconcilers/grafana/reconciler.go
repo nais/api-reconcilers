@@ -257,15 +257,15 @@ func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, auditL
 	// Also applies to any users that were manually added.
 	// Revoking is done by setting the permission to an empty string.
 	permissions := make([]*models.SetResourcePermissionCommand, 0)
-	for _, perm := range existingPermissions.GetPayload() {
-		if perm.TeamID != 0 && perm.TeamID != teamID {
+	for _, existing := range existingPermissions.GetPayload() {
+		if existing.TeamID != 0 && existing.TeamID != teamID {
 			permissions = append(permissions, &models.SetResourcePermissionCommand{
-				TeamID:     perm.TeamID,
+				TeamID:     existing.TeamID,
 				Permission: "",
 			})
-		} else if perm.UserID != 0 {
+		} else if existing.UserID != 0 {
 			permissions = append(permissions, &models.SetResourcePermissionCommand{
-				UserID:     perm.UserID,
+				UserID:     existing.UserID,
 				Permission: "",
 			})
 		}
