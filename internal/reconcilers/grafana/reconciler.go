@@ -257,41 +257,44 @@ func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, auditL
 	// Also applies to any users that were manually added.
 	// Revoking is done by setting the permission to an empty string.
 	permissions := make([]*models.SetResourcePermissionCommand, 0)
-	for _, perm := range existingPermissions.GetPayload() {
-		if perm.TeamID != 0 && perm.TeamID != teamID {
+	for _, existing := range existingPermissions.GetPayload() {
+		if existing.TeamID != 0 && existing.TeamID != teamID {
 			permissions = append(permissions, &models.SetResourcePermissionCommand{
-				TeamID:     perm.TeamID,
+				TeamID:     existing.TeamID,
 				Permission: "",
 			})
-		} else if perm.UserID != 0 {
+		} else if existing.UserID != 0 {
 			permissions = append(permissions, &models.SetResourcePermissionCommand{
-				UserID:     perm.UserID,
+				UserID:     existing.UserID,
 				Permission: "",
 			})
 		}
 	}
 
-	// Make sure our nais team has editor permissions.
-	permissions = append(permissions, &models.SetResourcePermissionCommand{
-		Permission: "Edit",
-		TeamID:     teamID,
-	})
+	if len(permissions) > 0 || len(existingPermissions.GetPayload()) == 0 {
+		// Make sure our nais team has editor permissions.
+		permissions = append(permissions, &models.SetResourcePermissionCommand{
+			Permission: "Edit",
+			TeamID:     teamID,
+		})
 
-	// apply the changes.
-	_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
-		Body: &models.SetPermissionsCommand{
-			Permissions: permissions,
-		},
-		Resource:   resourceName,
-		ResourceID: strconv.Itoa(int(serviceAccountID)),
-		Context:    ctx,
-	})
+		// apply the changes.
+		_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+			Body: &models.SetPermissionsCommand{
+				Permissions: permissions,
+			},
+			Resource:   resourceName,
+			ResourceID: strconv.Itoa(int(serviceAccountID)),
+			Context:    ctx,
+		})
+		if err != nil {
+			return err
+		}
 
-	if err == nil {
 		auditLog("assign-service-account-permissions", "Assigned permissions to Grafana service account")
 	}
 
-	return err
+	return nil
 }
 
 func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
