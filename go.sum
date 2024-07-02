@@ -210,6 +210,10 @@ github.com/nais/api v0.0.0-20240628141327-c193beb23a8c h1:KVAkgA4Q/UPmK9uNBw52t2
 github.com/nais/api v0.0.0-20240628141327-c193beb23a8c/go.mod h1:uvppNeqRtp+LElLlFS0Qh+O00OJ08ac+o/UaVMj/9cc=
 github.com/nais/api v0.0.0-20240701095637-9cac722281ee h1:l3fjq9Rp/LmzkfdUtVB/PDeIyJP22trXojVaFoGlNxY=
 github.com/nais/api v0.0.0-20240701095637-9cac722281ee/go.mod h1:uvppNeqRtp+LElLlFS0Qh+O00OJ08ac+o/UaVMj/9cc=
+github.com/nais/api v0.0.0-20240701131232-caa8442f03ef h1:GTyWZvbW80QORreDPRP5bB0dUx57d46QqyCxoewiHHM=
+github.com/nais/api v0.0.0-20240701131232-caa8442f03ef/go.mod h1:uvppNeqRtp+LElLlFS0Qh+O00OJ08ac+o/UaVMj/9cc=
+github.com/nais/api v0.0.0-20240702080604-ae6c0f51e69b h1:eLl227vMRDmjlQ+vhY2qg9Ku6YAt6a5qzHp64ZryLoY=
+github.com/nais/api v0.0.0-20240702080604-ae6c0f51e69b/go.mod h1:BBRdhHlB5TK0cAShs650TvA7PVh9LUU9V1qgxinZ4EU=
 github.com/nais/dependencytrack v0.0.0-20240610080458-c76185696c11 h1:2Cy7cjTM7PyiaUi3+aLsRSg6T0R6AqlduPNmT9LBMSY=
 github.com/nais/dependencytrack v0.0.0-20240610080458-c76185696c11/go.mod h1:BdPp1+tyE1hSMZigr7aGmhcTqaksf9Pxxbo4ZAi4On8=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=
