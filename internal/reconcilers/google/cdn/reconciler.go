@@ -227,53 +227,13 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 
 func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	// reverse order of creation
+
 	bucketName := r.bucketName(naisTeam)
 
-	// get backendbucket
-	backendBucket, err := r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
-		BackendBucket: bucketName,
-		Project:       r.googleManagementProjectID,
-	})
-	if err != nil {
-		return fmt.Errorf("get backend bucket, %w", err)
-	}
-
-	// remove entry from urlmap
-	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
-	if err != nil {
-		return fmt.Errorf("get urlmap: %w", err)
-	}
-
-	for _, pm := range urlMap.PathMatchers {
-		seen := make(map[string]bool)
-		for _, pr := range pm.PathRules {
-			if !seen[pr.Service] {
-				seen[pr.Service] = true
-			}
-		}
-
-		pm.PathRules = slices.DeleteFunc(pm.PathRules, func(rule *compute.PathRule) bool {
-			return rule.Service == *backendBucket.SelfLink
-		})
-	}
-
-	_, err = r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
-	if err != nil {
-		return fmt.Errorf("update urlMap: %w", err)
-	}
-
-	log.Infof("removed path rule for %q from url map %q", naisTeam.Slug, urlMapName)
-
 	// delete backendbucket
-	if backendBucket != nil {
-		_, err = r.services.BackendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
-			BackendBucket: bucketName,
-			Project:       r.googleManagementProjectID,
-		})
-		if err != nil {
-			return fmt.Errorf("delete backend bucket: %w", err)
-		}
-		log.Infof("deleted backend bucket %q", *backendBucket.Name)
+	shouldAudit, err := r.deleteBackendBucket(ctx, bucketName, naisTeam, log)
+	if err != nil {
+		return err
 	}
 
 	// remove bucket
@@ -313,6 +273,7 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
 				return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
 			})
+			shouldAudit = true
 		}
 	}
 
@@ -327,21 +288,81 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	// delete service account
 	_, err = r.services.Iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("delete service account: %w", err)
+		googleError, ok := err.(*googleapi.Error)
+		if !ok || googleError.Code != http.StatusNotFound {
+			return fmt.Errorf("delete service account: %w", err)
+		}
+	} else {
+		shouldAudit = true
 	}
 	log.Infof("deleted service account %q", serviceAccount.Email)
 
 	log.Infof("deleted cdn resources for team %q", naisTeam.Slug)
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionDeletedCdn,
-		naisTeam.Slug,
-		"Deleted CDN resources for %s", naisTeam.Slug,
-	)
+	if shouldAudit {
+		reconcilers.AuditLogForTeam(
+			ctx,
+			client,
+			r,
+			auditActionDeletedCdn,
+			naisTeam.Slug,
+			"Deleted CDN resources for %s", naisTeam.Slug,
+		)
+	}
 	return nil
+}
+
+func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName string, naisTeam *protoapi.Team, log logrus.FieldLogger) (shouldAudit bool, err error) {
+	// get backendbucket
+	backendBucket, err := r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	if err != nil {
+		googleError, ok := err.(*googleapi.Error)
+		if !ok || googleError.Code != http.StatusNotFound {
+			return false, fmt.Errorf("get backend bucket, %w", err)
+		}
+		return false, nil
+	}
+
+	// remove entry from urlmap
+	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
+	if err != nil {
+		return false, fmt.Errorf("get urlmap: %w", err)
+	}
+
+	for _, pm := range urlMap.PathMatchers {
+		seen := make(map[string]bool)
+		for _, pr := range pm.PathRules {
+			if !seen[pr.Service] {
+				seen[pr.Service] = true
+			}
+		}
+
+		pm.PathRules = slices.DeleteFunc(pm.PathRules, func(rule *compute.PathRule) bool {
+			return rule.Service == *backendBucket.SelfLink
+		})
+	}
+
+	_, err = r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
+	if err != nil {
+		return false, fmt.Errorf("update urlMap: %w", err)
+	}
+
+	log.Infof("removed path rule for %q from url map %q", naisTeam.Slug, urlMapName)
+
+	// delete backendbucket
+	_, err = r.services.BackendBuckets.Delete(ctx, &computepb.DeleteBackendBucketRequest{
+		BackendBucket: bucketName,
+		Project:       r.googleManagementProjectID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("delete backend bucket: %w", err)
+	}
+
+	log.Infof("deleted backend bucket %q", *backendBucket.Name)
+	return true, nil
 }
 
 // bucketName returns a globally unique bucket name for the given team

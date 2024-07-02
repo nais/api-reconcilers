@@ -114,28 +114,26 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GoogleGroupEmail == nil {
 		log.Warnf("missing group email in team, assume team has already been deleted")
-	} else if err := r.adminDirectoryService.Groups.Delete(*naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
+		return nil
+	}
+
+	if err := r.adminDirectoryService.Groups.Delete(*naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
+		googleError, ok := err.(*googleapi.Error)
+		if ok && googleError.Code == http.StatusNotFound {
+			// Group does not exist, assume it has already been deleted
+			return nil
+		}
 		return fmt.Errorf("delete Google directory group with email %q for team %q: %w", *naisTeam.GoogleGroupEmail, naisTeam.Slug, err)
 	}
 
-	_, err := client.Reconcilers().DeleteState(ctx, &protoapi.DeleteReconcilerStateRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       naisTeam.Slug,
-	})
-	if err != nil {
-		return err
-	}
-
-	if naisTeam.GoogleGroupEmail != nil {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionGoogleWorkspaceAdminDelete,
-			naisTeam.Slug,
-			"Delete Google directory group with email %q", *naisTeam.GoogleGroupEmail,
-		)
-	}
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionGoogleWorkspaceAdminDelete,
+		naisTeam.Slug,
+		"Delete Google directory group with email %q", *naisTeam.GoogleGroupEmail,
+	)
 
 	return nil
 }

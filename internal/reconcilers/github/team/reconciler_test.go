@@ -616,11 +616,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			DeleteState(mock.Anything, &protoapi.DeleteReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
@@ -709,10 +705,6 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			DeleteState(mock.Anything, &protoapi.DeleteReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.DeleteReconcilerStateResponse{}, nil).
-			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
 				return req.Action == "github:team:delete"

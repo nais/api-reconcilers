@@ -130,37 +130,35 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GithubTeamSlug == nil {
 		log.Warnf("missing slug in reconciler state, unable to delete GitHub team")
-	} else {
-		resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, *naisTeam.GithubTeamSlug)
-		if err != nil {
-			return fmt.Errorf("delete GitHub team %q for team %q: %w", *naisTeam.GithubTeamSlug, naisTeam.Slug, err)
-		}
+		return nil
+	}
+
+	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, *naisTeam.GithubTeamSlug)
+	if resp != nil {
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusNoContent {
-			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
+		if resp.StatusCode == http.StatusNotFound {
+			// If not found, we consider the team already deleted
+			return nil
 		}
 	}
-
-	_, err := client.Reconcilers().DeleteState(ctx, &protoapi.DeleteReconcilerStateRequest{
-		ReconcilerName: r.Name(),
-		TeamSlug:       naisTeam.Slug,
-	})
 	if err != nil {
-		return err
+		return fmt.Errorf("delete GitHub team %q for team %q: %w", *naisTeam.GithubTeamSlug, naisTeam.Slug, err)
 	}
 
-	if naisTeam.GithubTeamSlug != nil {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionDeleteGitHubTeam,
-			naisTeam.Slug,
-			"Deleted GitHub team with slug %q", *naisTeam.GithubTeamSlug,
-		)
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
 	}
+
+	reconcilers.AuditLogForTeam(
+		ctx,
+		client,
+		r,
+		auditActionDeleteGitHubTeam,
+		naisTeam.Slug,
+		"Deleted GitHub team with slug %q", *naisTeam.GithubTeamSlug,
+	)
 	return nil
 }
 

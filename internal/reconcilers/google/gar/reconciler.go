@@ -179,6 +179,10 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	}
 	operation, err := r.artifactRegistry.DeleteRepository(ctx, req)
 	if err != nil {
+		googleError, ok := err.(*googleapi.Error)
+		if ok && googleError.Code == http.StatusNotFound {
+			return nil
+		}
 		return fmt.Errorf("delete GAR repository for team %q: %w", naisTeam.Slug, err)
 	}
 
