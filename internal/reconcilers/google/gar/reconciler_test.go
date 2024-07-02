@@ -907,12 +907,6 @@ func TestDelete(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Teams.EXPECT().
-			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
-				return req.Slug == teamSlug && *req.GarRepository == ""
-			})).
-			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
-			Once()
 		mockServer.AuditLogs.EXPECT().
 			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
 				return req.ReconcilerName == "google:gcp:gar" && req.Action == "google:gar:delete"
