@@ -26,6 +26,8 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -319,11 +321,9 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		googleError, ok := err.(*googleapi.Error)
-		if !ok || googleError.Code != http.StatusNotFound {
-			return false, fmt.Errorf("get backend bucket, %w", err)
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			return false, nil
 		}
-		return false, nil
 	}
 
 	// remove entry from urlmap

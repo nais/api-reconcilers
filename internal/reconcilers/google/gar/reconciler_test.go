@@ -793,6 +793,9 @@ func TestDelete(t *testing.T) {
 				delete: func(ctx context.Context, req *artifactregistrypb.DeleteRepositoryRequest) (*longrunningpb.Operation, error) {
 					return nil, fmt.Errorf("some error")
 				},
+				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					return nil, nil
+				},
 			},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, _ *http.Request) {
@@ -841,6 +844,9 @@ func TestDelete(t *testing.T) {
 						},
 					}, nil
 				},
+				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					return nil, nil
+				},
 			},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				func(w http.ResponseWriter, _ *http.Request) {
@@ -856,6 +862,38 @@ func TestDelete(t *testing.T) {
 		}
 
 		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "wait for GAR repository deletion") {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("repository does not exist", func(t *testing.T) {
+		naisTeam := &protoapi.Team{
+			Slug:          teamSlug,
+			GarRepository: ptr.To(repositoryName),
+		}
+
+		apiClient, _ := apiclient.NewMockClient(t)
+
+		mockedClients := mocks{
+			artifactRegistry: &fakeArtifactRegistry{
+				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					return nil, status.Error(codes.NotFound, "not found")
+				},
+			},
+			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusNoContent)
+				},
+			}),
+		}
+		garClient, iamService := mockedClients.start(t, ctx)
+
+		reconciler, err := google_gar_reconciler.New(ctx, serviceAccountEmail, managementProjectID, workloadIdentityPoolName, google_gar_reconciler.WithGarClient(garClient), google_gar_reconciler.WithIAMService(iamService))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err = reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -892,6 +930,9 @@ func TestDelete(t *testing.T) {
 						Done:   true,
 						Result: &longrunningpb.Operation_Response{},
 					}, nil
+				},
+				get: func(ctx context.Context, r *artifactregistrypb.GetRepositoryRequest) (*artifactregistrypb.Repository, error) {
+					return nil, nil
 				},
 			},
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{

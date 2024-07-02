@@ -174,15 +174,19 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		log.WithError(err).Errorf("GAR service account %q does not exist, nothing to delete", serviceAccountName)
 	}
 
+	// Check if repository exists, if it doesn't, no need to delete it
+	_, err := r.artifactRegistry.GetRepository(ctx, &artifactregistrypb.GetRepositoryRequest{Name: *naisTeam.GarRepository})
+	if err != nil {
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			return nil
+		}
+	}
+
 	req := &artifactregistrypb.DeleteRepositoryRequest{
 		Name: *naisTeam.GarRepository,
 	}
 	operation, err := r.artifactRegistry.DeleteRepository(ctx, req)
 	if err != nil {
-		googleError, ok := err.(*googleapi.Error)
-		if ok && googleError.Code == http.StatusNotFound {
-			return nil
-		}
 		return fmt.Errorf("delete GAR repository for team %q: %w", naisTeam.Slug, err)
 	}
 
