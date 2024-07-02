@@ -204,8 +204,8 @@ github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3N
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
 github.com/moby/term v0.5.0 h1:xt8Q1nalod/v7BqbG21f8mQPqH+xAaC9C3N3wfWbVP0=
 github.com/moby/term v0.5.0/go.mod h1:8FzsFHVUBGZdbDsJw/ot+X+d5HLUbvklYLJ9uGfcI3Y=
-github.com/nais/api v0.0.0-20240702080604-ae6c0f51e69b h1:eLl227vMRDmjlQ+vhY2qg9Ku6YAt6a5qzHp64ZryLoY=
-github.com/nais/api v0.0.0-20240702080604-ae6c0f51e69b/go.mod h1:BBRdhHlB5TK0cAShs650TvA7PVh9LUU9V1qgxinZ4EU=
+github.com/nais/api v0.0.0-20240702084911-c0f9a3595889 h1:CDBinYp0rIeVc7VfVqBmiDAJr7+5l7GVchGvkgJg3xw=
+github.com/nais/api v0.0.0-20240702084911-c0f9a3595889/go.mod h1:BBRdhHlB5TK0cAShs650TvA7PVh9LUU9V1qgxinZ4EU=
 github.com/nais/dependencytrack v0.0.0-20240610080458-c76185696c11 h1:2Cy7cjTM7PyiaUi3+aLsRSg6T0R6AqlduPNmT9LBMSY=
 github.com/nais/dependencytrack v0.0.0-20240610080458-c76185696c11/go.mod h1:BdPp1+tyE1hSMZigr7aGmhcTqaksf9Pxxbo4ZAi4On8=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=

@@ -137,7 +137,6 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 				}
 
 				if event == protoapi.EventTypes_EVENT_TEAM_DELETED {
-					input.Delete = true
 					obj = &protoapi.EventTeamDeleted{}
 				} else {
 					obj = &protoapi.EventTeamUpdated{}
@@ -258,7 +257,7 @@ func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) {
 	}
 
 	team := resp.Team
-	if req.Delete {
+	if team.DeleteKeyConfirmedAt != nil {
 		m.deleteTeam(ctx, reconcilers, team, req)
 	} else {
 		m.reconcileTeam(ctx, reconcilers, team, req)
@@ -465,20 +464,16 @@ func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID)
 		return nil
 	}
 
-	if err := m.scheduleActiveTeams(ctx, correlationID); err != nil {
-		m.log.WithError(err).Error("error while scheduling active teams for reconciliation")
-	}
-
-	if err := m.scheduleDeletableTeams(ctx, correlationID); err != nil {
-		m.log.WithError(err).Error("error while scheduling teams for deletion")
+	if err := m.scheduleTeams(ctx, correlationID); err != nil {
+		m.log.WithError(err).Error("error while scheduling teams for reconciliation")
 	}
 
 	return nil
 }
 
-func (m *Manager) scheduleActiveTeams(ctx context.Context, correlationID uuid.UUID) error {
-	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListActiveTeamsResponse, error) {
-		return m.apiclient.Teams().ListActive(ctx, &protoapi.ListActiveTeamsRequest{Limit: limit, Offset: offset})
+func (m *Manager) scheduleTeams(ctx context.Context, correlationID uuid.UUID) error {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamsResponse, error) {
+		return m.apiclient.Teams().List(ctx, &protoapi.ListTeamsRequest{Limit: limit, Offset: offset})
 	})
 
 	num := 0
@@ -497,31 +492,6 @@ func (m *Manager) scheduleActiveTeams(ctx context.Context, correlationID uuid.UU
 	}
 
 	m.log.WithField("num_teams", num).Debugf("added teams to reconcile queue")
-	return nil
-}
-
-func (m *Manager) scheduleDeletableTeams(ctx context.Context, correlationID uuid.UUID) error {
-	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListDeletableTeamsResponse, error) {
-		return m.apiclient.Teams().ListDeletable(ctx, &protoapi.ListDeletableTeamsRequest{Limit: limit, Offset: offset})
-	})
-
-	num := 0
-	for it.Next() {
-		err := m.syncQueue.Add(ReconcileRequest{
-			CorrelationID: correlationID.String(),
-			TeamSlug:      it.Value().Slug,
-			Delete:        true,
-		})
-		if err != nil {
-			return fmt.Errorf("error while adding team to queue: %w", err)
-		}
-		num++
-	}
-	if err := it.Err(); err != nil {
-		return fmt.Errorf("error while fetching teams for deletion: %w", err)
-	}
-
-	m.log.WithField("num_teams", num).Debugf("added teams to delete queue")
 	return nil
 }
 
