@@ -171,7 +171,7 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 		if err == nil || errors.Is(err, context.Canceled) {
 			// Receive will return nil error when canceled
 			return
-		} else if err != nil {
+		} else {
 			m.log.WithError(err).Error("error while receiving pubsub message")
 		}
 

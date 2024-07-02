@@ -706,4 +706,18 @@ func Test_DeleteGroup(t *testing.T) {
 			t.Errorf("Expected error to contain %q, got %q", contains, err)
 		}
 	})
+
+	t.Run("404 is considered OK", func(t *testing.T) {
+		httpClient := test.NewTestHttpClient(
+			func(req *http.Request) *http.Response {
+				return test.Response("404 Not Found", "{}")
+			},
+		)
+
+		client := azureclient.New(httpClient)
+		err := client.DeleteGroup(ctx, grpID)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+	})
 }

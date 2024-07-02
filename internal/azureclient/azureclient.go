@@ -283,6 +283,10 @@ func (s *client) DeleteGroup(ctx context.Context, grpID uuid.UUID) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("remove azure group with ID: %q: %q: %q", grpID, resp.Status, string(body))
