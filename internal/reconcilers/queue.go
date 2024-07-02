@@ -7,33 +7,32 @@ import (
 
 const reconcilerQueueSize = 4096
 
-type Input struct {
+type ReconcileRequest struct {
 	CorrelationID string
 	TraceID       string
 	TeamSlug      string
-	Delete        bool
 }
 
 type Queue interface {
-	Add(Input) error
+	Add(ReconcileRequest) error
 	Close()
 }
 
 type queue struct {
-	queue  chan Input
+	queue  chan ReconcileRequest
 	closed bool
 	lock   sync.Mutex
 }
 
-func NewQueue() (Queue, <-chan Input) {
-	ch := make(chan Input, reconcilerQueueSize)
+func NewQueue() (Queue, <-chan ReconcileRequest) {
+	ch := make(chan ReconcileRequest, reconcilerQueueSize)
 	return &queue{
 		queue:  ch,
 		closed: false,
 	}, ch
 }
 
-func (q *queue) Add(input Input) error {
+func (q *queue) Add(req ReconcileRequest) error {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -41,7 +40,7 @@ func (q *queue) Add(input Input) error {
 		return fmt.Errorf("team reconciler channel is closed")
 	}
 
-	q.queue <- input
+	q.queue <- req
 	return nil
 }
 
