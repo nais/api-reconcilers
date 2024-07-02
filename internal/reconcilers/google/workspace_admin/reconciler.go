@@ -2,6 +2,7 @@ package google_workspace_admin_reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -118,7 +119,8 @@ func (r *googleWorkspaceAdminReconciler) Delete(ctx context.Context, client *api
 	}
 
 	if err := r.adminDirectoryService.Groups.Delete(*naisTeam.GoogleGroupEmail).Context(ctx).Do(); err != nil {
-		googleError, ok := err.(*googleapi.Error)
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
 		if ok && googleError.Code == http.StatusNotFound {
 			// Group does not exist, assume it has already been deleted
 			return nil
@@ -247,7 +249,9 @@ func (r *googleWorkspaceAdminReconciler) addToGKESecurityGroup(ctx context.Conte
 	}
 
 	if _, err := r.adminDirectoryService.Members.Insert(groupKey, member).Context(ctx).Do(); err != nil {
-		if googleError, ok := err.(*googleapi.Error); ok && googleError.Code == http.StatusConflict {
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
+		if ok && googleError.Code == http.StatusConflict {
 			return nil
 		}
 		return fmt.Errorf("add group %q to GKE security group %q: %s", member.Email, groupKey, err)

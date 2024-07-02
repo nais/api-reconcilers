@@ -26,8 +26,6 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -290,7 +288,8 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	// delete service account
 	_, err = r.services.Iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
 	if err != nil {
-		googleError, ok := err.(*googleapi.Error)
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
 		if !ok || googleError.Code != http.StatusNotFound {
 			return fmt.Errorf("delete service account: %w", err)
 		}
@@ -321,10 +320,12 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return false, nil
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
+		if !ok || googleError.Code != http.StatusNotFound {
+			return false, fmt.Errorf("get backend bucket, %w", err)
 		}
-		return false, fmt.Errorf("get backend bucket: %w", err)
+		return false, nil
 	}
 
 	// remove entry from urlmap

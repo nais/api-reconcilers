@@ -2,6 +2,7 @@ package google_gar_reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -165,7 +166,8 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 
 	serviceAccountName, _ := serviceAccountNameAndAccountID(naisTeam.Slug, r.googleManagementProjectID)
 	if _, err := r.iamService.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do(); err != nil {
-		googleError, ok := err.(*googleapi.Error)
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
 		if !ok || googleError.Code != http.StatusNotFound {
 			return fmt.Errorf("delete service account %q: %w", serviceAccountName, err)
 		}

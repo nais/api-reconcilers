@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -213,7 +214,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 }
 
 func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	var errors []error
+	var retErrors []error
 
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
@@ -238,7 +239,7 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 				GcpProjectId:    nil,
 			})
 			if err != nil {
-				errors = append(errors, err)
+				retErrors = append(retErrors, err)
 			}
 			continue
 		}
@@ -246,11 +247,12 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 		auditLogMessage := fmt.Sprintf("Delete GCP project: %q", projectID)
 		_, err := r.gcpServices.CloudResourceManagerProjectsService.Delete("projects/" + projectID).Context(ctx).Do()
 		if err != nil {
-			googleError, ok := err.(*googleapi.Error)
+			var googleError *googleapi.Error
+			ok := errors.As(err, &googleError)
 			if ok && (googleError.Code == 400 || googleError.Code == 404 || googleError.Code == 403) {
 				auditLogMessage = fmt.Sprintf("GCP project %q no longer exists, removing from state", projectID)
 			} else {
-				errors = append(errors, err)
+				retErrors = append(retErrors, err)
 				continue
 			}
 		}
@@ -262,11 +264,11 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 			GcpProjectId:    nil,
 		})
 		if err != nil {
-			errors = append(errors, err)
+			retErrors = append(retErrors, err)
 		}
 	}
 
-	for _, err := range errors {
+	for _, err := range retErrors {
 		log.WithError(err).Errorf("error during team deletion")
 	}
 
@@ -274,11 +276,11 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 		return fmt.Errorf("error during team deletion: %w", it.Err())
 	}
 
-	if len(errors) == 0 {
+	if len(retErrors) == 0 {
 		return nil
 	}
 
-	return fmt.Errorf("%d error(s) occurred during GCP project deletion", len(errors))
+	return fmt.Errorf("%d error(s) occurred during GCP project deletion", len(retErrors))
 }
 
 func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Context, client *apiclient.APIClient, project *cloudresourcemanager.Project) error {
@@ -379,7 +381,8 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *ap
 	}
 	operation, err := r.gcpServices.CloudResourceManagerProjectsService.Create(project).Do()
 	if err != nil {
-		googleError, ok := err.(*googleapi.Error)
+		var googleError *googleapi.Error
+		ok := errors.As(err, &googleError)
 		if !ok {
 			return nil, fmt.Errorf("create GCP project: %w", err)
 		}
