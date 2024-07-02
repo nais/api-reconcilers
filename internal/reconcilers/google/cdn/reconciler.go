@@ -261,42 +261,52 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 	serviceAccountName, _ := r.serviceAccountNameAndAccountID(naisTeam.Slug)
 	serviceAccount, err := r.services.Iam.Projects.ServiceAccounts.Get(serviceAccountName).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("get service account: %w", err)
-	}
-
-	// remove access to cache invalidation
-	for _, binding := range projectPolicy.Bindings {
-		if binding.Role == r.cacheReconcilerRoleID {
-			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
-				return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
-			})
-			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
-				return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
-			})
-			shouldAudit = true
-		}
-	}
-
-	_, err = r.services.CloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
-		Policy: projectPolicy,
-	}).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("assign GCP project IAM policy: %w", err)
-	}
-	log.Infof("removed cache invalidation IAM policy for %q", naisTeam.Slug)
-
-	// delete service account
-	_, err = r.services.Iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
-	if err != nil {
 		var googleError *googleapi.Error
 		ok := errors.As(err, &googleError)
 		if !ok || googleError.Code != http.StatusNotFound {
+			return fmt.Errorf("get service account: %w", err)
+		}
+	}
+
+	updateIAMPolicy := false
+	// remove access to cache invalidation
+	for _, binding := range projectPolicy.Bindings {
+		if binding.Role == r.cacheReconcilerRoleID {
+			numMembers := len(binding.Members)
+			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+				return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
+			})
+			if serviceAccount != nil {
+				binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+					return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
+				})
+			}
+			if len(binding.Members) != numMembers {
+				shouldAudit = true
+				updateIAMPolicy = true
+			}
+		}
+	}
+
+	if updateIAMPolicy {
+		_, err = r.services.CloudResourceManagerProjects.SetIamPolicy(managementProjectName, &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: projectPolicy,
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("assign GCP project IAM policy: %w", err)
+		}
+		log.Infof("removed cache invalidation IAM policy for %q", naisTeam.Slug)
+	}
+
+	// delete service account
+	if serviceAccount != nil {
+		_, err = r.services.Iam.Projects.ServiceAccounts.Delete(serviceAccountName).Context(ctx).Do()
+		if err != nil {
 			return fmt.Errorf("delete service account: %w", err)
 		}
-	} else {
 		shouldAudit = true
+		log.Infof("deleted service account %q", serviceAccount.Email)
 	}
-	log.Infof("deleted service account %q", serviceAccount.Email)
 
 	log.Infof("deleted cdn resources for team %q", naisTeam.Slug)
 
