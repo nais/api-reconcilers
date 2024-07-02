@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	"k8s.io/utils/ptr"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
@@ -202,10 +201,6 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		naisTeam.Slug,
 		"Delete GAR repository %q", *naisTeam.GarRepository,
 	)
-	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
-		Slug:          naisTeam.Slug,
-		GarRepository: ptr.To(""),
-	})
 	return err
 }
 
