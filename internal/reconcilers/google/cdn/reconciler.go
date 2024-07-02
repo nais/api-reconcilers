@@ -324,6 +324,7 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
 			return false, nil
 		}
+		return false, fmt.Errorf("get backend bucket: %w", err)
 	}
 
 	// remove entry from urlmap
