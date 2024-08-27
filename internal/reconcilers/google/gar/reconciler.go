@@ -423,6 +423,7 @@ func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
 
 	keepUntilAge := time.Hour * 24 * 90
 	anyTagState := artifactregistrypb.CleanupPolicyCondition_ANY
+	taggedTagState := artifactregistrypb.CleanupPolicyCondition_TAGGED
 
 	return map[string]*artifactregistrypb.CleanupPolicy{
 		"delete_old_images": {
@@ -441,6 +442,16 @@ func DefaultCleanupPolicies() map[string]*artifactregistrypb.CleanupPolicy {
 			ConditionType: &artifactregistrypb.CleanupPolicy_MostRecentVersions{
 				MostRecentVersions: &artifactregistrypb.CleanupPolicyMostRecentVersions{
 					KeepCount: &keepCount,
+				},
+			},
+		},
+		"keep_nais": {
+			Id:     "keep_nais",
+			Action: artifactregistrypb.CleanupPolicy_KEEP,
+			ConditionType: &artifactregistrypb.CleanupPolicy_Condition{
+				Condition: &artifactregistrypb.CleanupPolicyCondition{
+					TagState:    &taggedTagState,
+					TagPrefixes: []string{"keep-nais-"},
 				},
 			},
 		},
