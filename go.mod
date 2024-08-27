@@ -16,7 +16,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240826142251-d1c93bae4198
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api v0.0.0-20240816112634-c31122579cad
+	github.com/nais/api v0.0.0-20240702091139-fe19bb3460df
 	github.com/nais/dependencytrack v0.0.0-20240826042152-d9faa3523a2f
 	github.com/prometheus/client_golang v1.20.2
 	github.com/sethvargo/go-envconfig v1.1.0
