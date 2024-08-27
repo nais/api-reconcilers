@@ -1120,6 +1120,153 @@ func (_c *MockClientService_SearchTeams_Call) RunAndReturn(run func(*teams.Searc
 	return _c
 }
 
+// SetTeamMemberships provides a mock function with given fields: teamID, body, opts
+func (_m *MockClientService) SetTeamMemberships(teamID string, body *models.SetTeamMembershipsCommand, opts ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, teamID, body)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetTeamMemberships")
+	}
+
+	var r0 *teams.SetTeamMembershipsOK
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, *models.SetTeamMembershipsCommand, ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error)); ok {
+		return rf(teamID, body, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(string, *models.SetTeamMembershipsCommand, ...teams.ClientOption) *teams.SetTeamMembershipsOK); ok {
+		r0 = rf(teamID, body, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*teams.SetTeamMembershipsOK)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, *models.SetTeamMembershipsCommand, ...teams.ClientOption) error); ok {
+		r1 = rf(teamID, body, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockClientService_SetTeamMemberships_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetTeamMemberships'
+type MockClientService_SetTeamMemberships_Call struct {
+	*mock.Call
+}
+
+// SetTeamMemberships is a helper method to define mock.On call
+//   - teamID string
+//   - body *models.SetTeamMembershipsCommand
+//   - opts ...teams.ClientOption
+func (_e *MockClientService_Expecter) SetTeamMemberships(teamID interface{}, body interface{}, opts ...interface{}) *MockClientService_SetTeamMemberships_Call {
+	return &MockClientService_SetTeamMemberships_Call{Call: _e.mock.On("SetTeamMemberships",
+		append([]interface{}{teamID, body}, opts...)...)}
+}
+
+func (_c *MockClientService_SetTeamMemberships_Call) Run(run func(teamID string, body *models.SetTeamMembershipsCommand, opts ...teams.ClientOption)) *MockClientService_SetTeamMemberships_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]teams.ClientOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(teams.ClientOption)
+			}
+		}
+		run(args[0].(string), args[1].(*models.SetTeamMembershipsCommand), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockClientService_SetTeamMemberships_Call) Return(_a0 *teams.SetTeamMembershipsOK, _a1 error) *MockClientService_SetTeamMemberships_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockClientService_SetTeamMemberships_Call) RunAndReturn(run func(string, *models.SetTeamMembershipsCommand, ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error)) *MockClientService_SetTeamMemberships_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetTeamMembershipsWithParams provides a mock function with given fields: params, opts
+func (_m *MockClientService) SetTeamMembershipsWithParams(params *teams.SetTeamMembershipsParams, opts ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error) {
+	_va := make([]interface{}, len(opts))
+	for _i := range opts {
+		_va[_i] = opts[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, params)
+	_ca = append(_ca, _va...)
+	ret := _m.Called(_ca...)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetTeamMembershipsWithParams")
+	}
+
+	var r0 *teams.SetTeamMembershipsOK
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*teams.SetTeamMembershipsParams, ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error)); ok {
+		return rf(params, opts...)
+	}
+	if rf, ok := ret.Get(0).(func(*teams.SetTeamMembershipsParams, ...teams.ClientOption) *teams.SetTeamMembershipsOK); ok {
+		r0 = rf(params, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*teams.SetTeamMembershipsOK)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(*teams.SetTeamMembershipsParams, ...teams.ClientOption) error); ok {
+		r1 = rf(params, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockClientService_SetTeamMembershipsWithParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetTeamMembershipsWithParams'
+type MockClientService_SetTeamMembershipsWithParams_Call struct {
+	*mock.Call
+}
+
+// SetTeamMembershipsWithParams is a helper method to define mock.On call
+//   - params *teams.SetTeamMembershipsParams
+//   - opts ...teams.ClientOption
+func (_e *MockClientService_Expecter) SetTeamMembershipsWithParams(params interface{}, opts ...interface{}) *MockClientService_SetTeamMembershipsWithParams_Call {
+	return &MockClientService_SetTeamMembershipsWithParams_Call{Call: _e.mock.On("SetTeamMembershipsWithParams",
+		append([]interface{}{params}, opts...)...)}
+}
+
+func (_c *MockClientService_SetTeamMembershipsWithParams_Call) Run(run func(params *teams.SetTeamMembershipsParams, opts ...teams.ClientOption)) *MockClientService_SetTeamMembershipsWithParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]teams.ClientOption, len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(teams.ClientOption)
+			}
+		}
+		run(args[0].(*teams.SetTeamMembershipsParams), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *MockClientService_SetTeamMembershipsWithParams_Call) Return(_a0 *teams.SetTeamMembershipsOK, _a1 error) *MockClientService_SetTeamMembershipsWithParams_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockClientService_SetTeamMembershipsWithParams_Call) RunAndReturn(run func(*teams.SetTeamMembershipsParams, ...teams.ClientOption) (*teams.SetTeamMembershipsOK, error)) *MockClientService_SetTeamMembershipsWithParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // SetTransport provides a mock function with given fields: transport
 func (_m *MockClientService) SetTransport(transport runtime.ClientTransport) {
 	_m.Called(transport)
