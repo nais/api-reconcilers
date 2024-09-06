@@ -605,7 +605,10 @@ func (r *cdnReconciler) getOrCreateServiceAccount(ctx context.Context, teamSlug 
 		},
 	}).Context(ctx).Do()
 
-	log.Infof("created service account %s", created.Email)
+	if created != nil {
+		log.Infof("created service account %s", created.Email)
+	}
+
 	return created, err
 }
 
