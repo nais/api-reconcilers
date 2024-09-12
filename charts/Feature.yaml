@@ -102,6 +102,8 @@ values:
         {{ else }}
         {{ filter "kind" "tenant" .Envs | environmentsAsMap "teams_folder_id,project_id" | toJSON | quote }}
         {{ end }}
+    config:
+      type: string
 
   gcp.cnrmRole:
     displayName: CNRM role string
