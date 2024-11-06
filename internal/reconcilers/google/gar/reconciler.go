@@ -142,7 +142,7 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 			r,
 			auditActionCreateGarRepository,
 			naisTeam.Slug,
-			"Updated repository policy for %q", *naisTeam.GarRepository)
+			"Updated repository policy for %q", garRepository.Name)
 	}
 
 	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
