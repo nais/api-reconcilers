@@ -18,7 +18,7 @@ import (
 	google_cdn_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -181,13 +181,6 @@ func TestReconcile(t *testing.T) {
 				CdnBucket: &bucketName,
 			}).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).Once()
-
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.ReconcilerName == "google:gcp:cdn" && req.Action == "cdn:provision-resources"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		mocks := mocks{
 			iam: test.HttpServerWithHandlers(t, []http.HandlerFunc{
@@ -447,14 +440,7 @@ func TestDelete(t *testing.T) {
 	t.Run("Deletion calls the right endpoints in the right order", func(t *testing.T) {
 		log := logrus.StandardLogger()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.ReconcilerName == "google:gcp:cdn" && req.Action == "cdn:delete-resources"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		mocks := mocks{
 			backendbucket: test.HttpServerWithHandlers(t, []http.HandlerFunc{

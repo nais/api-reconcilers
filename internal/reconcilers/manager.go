@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

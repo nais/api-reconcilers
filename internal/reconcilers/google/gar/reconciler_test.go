@@ -17,7 +17,7 @@ import (
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -444,12 +444,6 @@ func TestReconcile(t *testing.T) {
 		artifactregistryClient, iamService := mocks.start(t, ctx)
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "google:gar:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
@@ -906,13 +900,7 @@ func TestDelete(t *testing.T) {
 			GarRepository: ptr.To(repositoryName),
 		}
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.ReconcilerName == "google:gcp:gar" && req.Action == "google:gar:delete"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		mockedClients := mocks{
 			artifactRegistry: &fakeArtifactRegistry{

@@ -11,7 +11,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/utils/ptr"
@@ -81,8 +81,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		client, mockServer := apiclient.NewMockClient(t)
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{
-				Slug:         teamSlug,
-				AzureGroupId: &group.ID,
+				Slug:           teamSlug,
+				EntraIdGroupId: &group.ID,
 			}).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
@@ -91,24 +91,6 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 			Return(&protoapi.ListTeamMembersResponse{Nodes: []*protoapi.TeamMember{
 				{User: addUser}, {User: keepUser},
 			}}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "azure:group:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "azure:group:add-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "azure:group:delete-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		err := azure_group_reconciler.
@@ -245,8 +227,8 @@ func TestAzureReconciler_Delete(t *testing.T) {
 
 	azGroupID := uuid.New()
 	team := &protoapi.Team{
-		Slug:         "slug",
-		AzureGroupId: ptr.To(azGroupID.String()),
+		Slug:           "slug",
+		EntraIdGroupId: ptr.To(azGroupID.String()),
 	}
 	ctx := context.Background()
 	log, _ := test.NewNullLogger()
@@ -282,13 +264,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	})
 
 	t.Run("Successful delete", func(t *testing.T) {
-		client, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "azure:group:delete"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		client, _ := apiclient.NewMockClient(t)
 
 		azureClient := azureclient.NewMockClient(t)
 		azureClient.EXPECT().

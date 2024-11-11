@@ -11,7 +11,7 @@ import (
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -67,30 +67,6 @@ func TestReconcile(t *testing.T) {
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{Slug: teamSlug, GoogleGroupEmail: ptr.To(expectedGoogleGroupEmail)}).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:create" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:delete-member" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:add-member" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:add-to-gke-security-group" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		ts := test.HttpServerWithHandlers(t, []http.HandlerFunc{
@@ -287,13 +263,7 @@ func Test_Delete(t *testing.T) {
 		})
 		defer closer()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:workspace-admin:delete" && req.ReconcilerName == "google:workspace-admin"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := google_workspace_admin_reconciler.New(ctx, serviceAccountEmail, subjectEmail, tenantDomain, google_workspace_admin_reconciler.WithAdminDirectoryService(googleAdminService))
 		if err != nil {

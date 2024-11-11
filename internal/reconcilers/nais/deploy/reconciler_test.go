@@ -10,9 +10,8 @@ import (
 
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
-	"github.com/stretchr/testify/mock"
 )
 
 func TestNaisDeployReconciler_Reconcile(t *testing.T) {
@@ -57,13 +56,7 @@ func TestNaisDeployReconciler_Reconcile(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "nais:deploy:provision-deploy-key"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := nais_deploy_reconciler.New(srv.URL, provisionKey)
 		if err != nil {
