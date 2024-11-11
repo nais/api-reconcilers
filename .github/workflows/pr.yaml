@@ -63,7 +63,7 @@ jobs:
         with:
           name: ${{ env.NAME }}
           build_args: GO_VERSION=${{ steps.go_version.outputs.go_version }}-
-          google_service_account: gh-api
+          google_service_account: gh-api-reconcilers
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
       - name: Build Chart
