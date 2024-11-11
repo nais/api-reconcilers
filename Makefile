@@ -19,7 +19,7 @@ local:
 test:
 	go test ./...
 
-check: staticcheck vulncheck deadcode
+check: staticcheck vulncheck deadcode gosec
 
 staticcheck:
 	go run honnef.co/go/tools/cmd/staticcheck@latest ./...
@@ -29,6 +29,9 @@ vulncheck:
 
 deadcode:
 	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
+
+gosec:
+	go run github.com/securego/gosec/v2/cmd/gosec@latest --exclude-generated -terse ./...
 
 fmt:
 	go run mvdan.cc/gofumpt@latest -w ./
