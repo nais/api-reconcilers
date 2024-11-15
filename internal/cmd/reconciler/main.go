@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -81,10 +82,13 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	ctx, signalStop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer signalStop()
 
+	start := time.Now()
+
 	_, promRegistry, err := newMeterProvider()
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating meter provider: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created meter provider")
 
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error {
@@ -101,47 +105,57 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 
 	client, err := apiclient.New(cfg.GRPC.Target, opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating API client: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created API client")
 
 	reconcilerManager := reconcilers.NewManager(ctx, client, cfg.ReconcilersToEnable, cfg.PubSub.SubscriptionID, cfg.PubSub.ProjectID, log)
+	log.WithField("duration", time.Since(start)).Debug("Created reconciler manager")
 
 	azureGroupReconciler := azure_group_reconciler.New(ctx, cfg.TenantDomain, cfg.Azure.GroupNamePrefix)
+	log.WithField("duration", time.Since(start)).Debug("Created Azure group reconciler")
 
 	githubReconciler, err := github_team_reconciler.New(ctx, cfg.GitHub.Organization, cfg.GitHub.AuthEndpoint, cfg.GCP.ServiceAccountEmail)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating GitHub reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created GitHub reconciler")
 
 	googleWorkspaceAdminReconciler, err := google_workspace_admin_reconciler.New(ctx, cfg.Google.AdminServiceAccountEmail, cfg.Google.AdminUserEmail, cfg.TenantDomain)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating Google Workspace Admin reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created Google Workspace Admin reconciler")
 
 	deployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeploy.Endpoint, cfg.NaisDeploy.ProvisionKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating NAIS deploy reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created NAIS deploy reconciler")
 
 	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount, cfg.FeatureFlags)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating Google GCP reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created Google GCP reconciler")
 
 	garReconciler, err := google_gar_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating Google GAR reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created Google GAR reconciler")
 
 	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.GoogleManagementProjectID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when creating NAIS namespace reconciler: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created NAIS namespace reconciler")
 
 	grafanaURL, err := url.Parse(cfg.Grafana.Endpoint)
 	if err != nil {
-		return err
+		return fmt.Errorf("error when parsing Grafana endpoint: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Parsed Grafana endpoint")
 
 	grafanaClient := grafana_client.NewHTTPClientWithConfig(strfmt.Default, &grafana_client.TransportConfig{
 		Host:      grafanaURL.Host,
@@ -157,16 +171,19 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		grafanaClient.ServiceAccounts,
 		grafanaClient.AdminUsers,
 	)
+	log.WithField("duration", time.Since(start)).Debug("Created Grafana reconciler")
 
 	dependencyTrackReconciler, err := dependencytrack_reconciler.New(cfg.DependencyTrack.Endpoint, cfg.DependencyTrack.Username, cfg.DependencyTrack.Password)
 	if err != nil {
 		log.WithField("reconciler", "dependencytrack").WithError(err).Errorf("error when creating reconciler")
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created DependencyTrack reconciler")
 
 	cdnReconciler, err := google_cdn_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		log.WithField("reconciler", "cdn").WithError(err).Errorf("error when creating reconciler")
 	}
+	log.WithField("duration", time.Since(start)).Debug("Created CDN reconciler")
 
 	// The reconcilers will be run in the order they are added to the manager
 	reconcilerManager.AddReconciler(githubReconciler)
@@ -182,10 +199,12 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	if dependencyTrackReconciler != nil {
 		reconcilerManager.AddReconciler(dependencyTrackReconciler)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Added reconcilers to manager")
 
 	if err := reconcilerManager.RegisterReconcilersWithAPI(ctx); err != nil {
-		return err
+		return fmt.Errorf("error when registering reconcilers with API: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Registered reconcilers with API")
 
 	for i := range 10 {
 		wg.Go(func() error {
@@ -202,8 +221,9 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	})
 
 	if err = reconcilerManager.SyncAllTeams(ctx, time.Minute*30); err != nil {
-		return err
+		return fmt.Errorf("error when syncing all teams: %w", err)
 	}
+	log.WithField("duration", time.Since(start)).Debug("Synced all teams")
 
 	reconcilerManager.Close()
 	return wg.Wait()
