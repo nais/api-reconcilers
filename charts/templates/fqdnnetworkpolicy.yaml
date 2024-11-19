@@ -2,7 +2,7 @@
 apiVersion: networking.gke.io/v1alpha3
 kind: FQDNNetworkPolicy
 metadata:
-  name: {{ include "api-reconcilers.fullname" . }}
+  name: {{ include "api-reconcilers.fullname" . }}-fqdn
   labels:
     {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
