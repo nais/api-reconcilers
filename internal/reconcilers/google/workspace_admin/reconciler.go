@@ -80,6 +80,16 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 		return fmt.Errorf("unable to get or create a Google Workspace group for team %q: %w", naisTeam.Slug, err)
 	}
 
+	if naisTeam.GoogleGroupEmail == nil || *naisTeam.GoogleGroupEmail != googleGroup.Email {
+		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+			Slug:             naisTeam.Slug,
+			GoogleGroupEmail: &googleGroup.Email,
+		})
+		if err != nil {
+			return fmt.Errorf("set Google group email for team %q: %w", naisTeam.Slug, err)
+		}
+	}
+
 	if err := r.syncGroupInfo(ctx, naisTeam, googleGroup); err != nil {
 		return err
 	}
@@ -90,16 +100,6 @@ func (r *googleWorkspaceAdminReconciler) Reconcile(ctx context.Context, client *
 
 	if err := r.addToGKESecurityGroup(ctx, client, naisTeam, googleGroup); err != nil {
 		return err
-	}
-
-	if naisTeam.GoogleGroupEmail == nil || *naisTeam.GoogleGroupEmail != googleGroup.Email {
-		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
-			Slug:             naisTeam.Slug,
-			GoogleGroupEmail: &googleGroup.Email,
-		})
-		if err != nil {
-			return fmt.Errorf("set Google group email for team %q: %w", naisTeam.Slug, err)
-		}
 	}
 
 	return nil
