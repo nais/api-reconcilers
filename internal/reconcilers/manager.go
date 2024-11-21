@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -45,6 +45,7 @@ type Manager struct {
 
 // NewManager creates a new Manager instance
 func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistration []string, pubsubSubscriptionID, pubsubProjectID string, log logrus.FieldLogger) *Manager {
+	start := time.Now()
 	meter := otel.Meter("reconcilers")
 	recTime, err := meter.Int64Histogram("reconciler_duration", metric.WithDescription("Duration of a specific reconciler, regardless of team, in milliseconds"))
 	if err != nil {
@@ -55,12 +56,16 @@ func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistr
 		log.WithError(err).Errorf("error when creating metric")
 	}
 
+	log.WithField("duration", time.Since(start).String()).Debug("metrics created")
+
 	var pubsubSubscription *pubsub.Subscription
 	pubsubClient, err := pubsub.NewClient(ctx, pubsubProjectID)
+	log.WithField("duration", time.Since(start).String()).Debug("pubsub client created")
 	if err != nil {
 		log.WithError(err).Errorf("error when creating pubsub client")
 	} else {
 		pubsubSubscription = pubsubClient.Subscription(pubsubSubscriptionID)
+		log.WithField("duration", time.Since(start).String()).Debug("subscription created")
 	}
 
 	queue, channel := NewQueue()

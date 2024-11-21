@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 )
 
 type client struct {
@@ -134,10 +134,10 @@ func (s *client) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
 // GetOrCreateGroup Get or create a group from the Graph API. The second return value informs if the group was
 // created or not.
 func (s *client) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, groupName string) (*Group, bool, error) {
-	if naisTeam.AzureGroupId != nil {
-		existingGroupID, err := uuid.Parse(*naisTeam.AzureGroupId)
+	if naisTeam.EntraIdGroupId != nil {
+		existingGroupID, err := uuid.Parse(*naisTeam.EntraIdGroupId)
 		if err != nil {
-			return nil, false, fmt.Errorf("group ID %q is not a valid UUID: %w", *naisTeam.AzureGroupId, err)
+			return nil, false, fmt.Errorf("group ID %q is not a valid UUID: %w", *naisTeam.EntraIdGroupId, err)
 		}
 
 		grp, err := s.GetGroupById(ctx, existingGroupID)

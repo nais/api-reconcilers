@@ -13,7 +13,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	strhelper "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -23,14 +23,7 @@ import (
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
-const (
-	reconcilerName = "github:team"
-
-	auditActionCreateGitHubTeam       = "github:team:create"
-	auditActionDeleteGitHubTeam       = "github:team:delete"
-	auditActionAddGitHubTeamMember    = "github:team:add-member"
-	auditActionDeleteGitHubTeamMember = "github:team:delete-member"
-)
+const reconcilerName = "github:team"
 
 type OptFunc func(*githubTeamReconciler)
 
@@ -151,14 +144,6 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionDeleteGitHubTeam,
-		naisTeam.Slug,
-		"Deleted GitHub team with slug %q", *naisTeam.GithubTeamSlug,
-	)
 	return nil
 }
 
@@ -243,7 +228,6 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 		return nil, fmt.Errorf("unable to create GitHub team: %w", err)
 	}
 
-	reconcilers.AuditLogForTeam(ctx, client, r, auditActionCreateGitHubTeam, naisTeam.Slug, "Created GitHub team with slug %q", *githubTeam.Slug)
 	return githubTeam, nil
 }
 
@@ -287,19 +271,15 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 				email = nil
 			}
 		}
-
-		reconcilers.AuditLogForTeam(ctx, client, r, auditActionDeleteGitHubTeamMember, teamSlug, "Deleted member %q from GitHub team %q", username, *githubTeam.Slug)
 	}
 
 	membersToAdd := localOnlyMembers(gitHubUsersToApiUsers, membersAccordingToGitHub)
-	for username, apiUser := range membersToAdd {
+	for username := range membersToAdd {
 		_, resp, err := r.teamsService.AddTeamMembershipBySlug(ctx, r.org, *githubTeam.Slug, username, &github.TeamAddTeamMembershipOptions{})
 		if err := httpError(http.StatusOK, resp, err); err != nil {
 			log.WithError(err).Warnf("add member %q to GitHub team %q", username, *githubTeam.Slug)
 			continue
 		}
-
-		reconcilers.AuditLogForTeamAndUser(ctx, client, r, auditActionAddGitHubTeamMember, teamSlug, apiUser.Email, "Added member %q to GitHub team %q", username, *githubTeam.Slug)
 	}
 
 	return nil

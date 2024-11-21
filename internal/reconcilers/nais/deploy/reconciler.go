@@ -9,7 +9,7 @@ import (
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -74,14 +74,6 @@ func (r *naisDeployReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 	switch response.StatusCode {
 	case http.StatusCreated:
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionNaisDeployProvisionDeployKey,
-			naisTeam.Slug,
-			"Provisioned NAIS deploy API key for team %q", naisTeam.Slug,
-		)
 		return nil
 	case http.StatusNoContent, http.StatusOK:
 		return nil

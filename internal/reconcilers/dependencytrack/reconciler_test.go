@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/nais/dependencytrack/pkg/client"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -91,18 +91,6 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			})).
 			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
-		grpcServers.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "dependencytrack:team:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		grpcServers.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "dependencytrack:team:add-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
 		if err != nil {
@@ -157,12 +145,6 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 					st.Members[0] == user
 			})).
 			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
-			Once()
-		grpcServers.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "dependencytrack:team:add-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))
@@ -271,18 +253,6 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 					st.Members[0] == user
 			})).
 			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
-			Once()
-		grpcServers.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "dependencytrack:team:add-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		grpcServers.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "dependencytrack:team:delete-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		reconciler, err := dependencytrack_reconciler.New("", "", "", dependencytrack_reconciler.WithDependencyTrackClient(dpClient))

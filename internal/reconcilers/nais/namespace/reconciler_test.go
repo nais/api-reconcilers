@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/api/option"
@@ -62,7 +62,7 @@ func TestReconcile(t *testing.T) {
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
 			GoogleGroupEmail: ptr.To(googleGroupEmail),
-			AzureGroupId:     ptr.To("invalid"),
+			EntraIdGroupId:   ptr.To("invalid"),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -113,7 +113,7 @@ func TestReconcile(t *testing.T) {
 			Slug:             teamSlug,
 			SlackChannel:     slackChannel,
 			GoogleGroupEmail: ptr.To(googleGroupEmail),
-			AzureGroupId:     ptr.To(uuid.New().String()),
+			EntraIdGroupId:   ptr.To(uuid.New().String()),
 		}
 
 		srv, pubsubClient, closer := getPubsubServerAndClient(ctx, googleManagementProjectID, "naisd-console-"+environmentDev, "naisd-console-"+environmentProd)
@@ -143,12 +143,6 @@ func TestReconcile(t *testing.T) {
 				},
 			}, nil).
 			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.ReconcilerName == "nais:namespace" && req.Action == "nais:namespace:create-namespace"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Times(2)
 		mockServer.Reconcilers.EXPECT().
 			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
 				st := map[string]int64{}
@@ -198,8 +192,8 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("expected slack alerts channel to be %q, got %q", expected, createNamespaceRequest.SlackAlertsChannel)
 		}
 
-		if createNamespaceRequest.AzureGroupID != *naisTeam.AzureGroupId {
-			t.Fatalf("expected Azure group ID to be %q, got %q", *naisTeam.AzureGroupId, createNamespaceRequest.AzureGroupID)
+		if createNamespaceRequest.AzureGroupID != *naisTeam.EntraIdGroupId {
+			t.Fatalf("expected Azure group ID to be %q, got %q", *naisTeam.EntraIdGroupId, createNamespaceRequest.AzureGroupID)
 		}
 	})
 
@@ -222,12 +216,6 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.ReconcilerName == "nais:namespace" && req.Action == "nais:namespace:delete-namespace"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		reconciler, err := nais_namespace_reconciler.New(ctx, serviceAccountEmail, tenantDomain, googleManagementProjectID, nais_namespace_reconciler.WithPubSubClient(pubsubClient))

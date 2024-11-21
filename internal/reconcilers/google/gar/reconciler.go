@@ -14,7 +14,7 @@ import (
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/api/googleapi"
@@ -38,9 +38,6 @@ const (
 
 	managedByLabelName  = "managed-by"
 	managedByLabelValue = "api-reconcilers"
-
-	auditActionCreateGarRepository = "google:gar:create"
-	auditActionDeleteGarRepository = "google:gar:delete"
 )
 
 type garReconciler struct {
@@ -130,19 +127,8 @@ func (r *garReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return err
 	}
 
-	updated, err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, naisTeam.GoogleGroupEmail)
-	if err != nil {
+	if err := r.setGarRepositoryPolicy(ctx, garRepository, serviceAccount, naisTeam.GoogleGroupEmail); err != nil {
 		return err
-	}
-
-	if updated {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionCreateGarRepository,
-			naisTeam.Slug,
-			"Updated repository policy for %q", garRepository.Name)
 	}
 
 	_, err = client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
@@ -195,14 +181,6 @@ func (r *garReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		return fmt.Errorf("wait for GAR repository deletion for team %q: %w", naisTeam.Slug, err)
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionDeleteGarRepository,
-		naisTeam.Slug,
-		"Delete GAR repository %q", *naisTeam.GarRepository,
-	)
 	return err
 }
 
@@ -350,12 +328,12 @@ func (r *garReconciler) updateGarRepository(ctx context.Context, repository *art
 	return repository, nil
 }
 
-func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail *string) (bool, error) {
+func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *artifactregistrypb.Repository, serviceAccount *iam.ServiceAccount, groupEmail *string) error {
 	resp, err := r.artifactRegistry.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{
 		Resource: repository.Name,
 	})
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	bindings := []*iampb.Binding{
@@ -373,7 +351,7 @@ func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *
 	}
 
 	if IsIAMPolicyBindingEqual(bindings, resp.Bindings) {
-		return false, nil
+		return nil
 	}
 
 	_, err = r.artifactRegistry.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{
@@ -383,10 +361,10 @@ func (r *garReconciler) setGarRepositoryPolicy(ctx context.Context, repository *
 		},
 	})
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return true, nil
+	return nil
 }
 
 func IsIAMPolicyBindingEqual(want, current []*iampb.Binding) bool {

@@ -1,5 +1,5 @@
 image:
-  repository: europe-north1-docker.pkg.dev/nais-io/nais/images/api-reconcilers
+  repository: europe-north1-docker.pkg.dev/nais-io/nais/images/nais-api-reconcilers
   tag: main
 resources:
   requests:

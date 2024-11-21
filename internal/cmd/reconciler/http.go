@@ -25,8 +25,9 @@ func runHttpServer(
 	router.Get("/healthz", func(_ http.ResponseWriter, _ *http.Request) {})
 
 	srv := &http.Server{
-		Addr:    listenAddress,
-		Handler: router,
+		Addr:              listenAddress,
+		Handler:           router,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	wg, ctx := errgroup.WithContext(ctx)

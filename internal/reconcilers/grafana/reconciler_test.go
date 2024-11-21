@@ -20,7 +20,7 @@ import (
 	grafana_mock_users "github.com/nais/api-reconcilers/internal/mocks/grafana/users"
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 )
@@ -67,36 +67,6 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("No data, create the first team", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:create-team"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:create-service-account"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:assign-service-account-permissions"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:add-team-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Twice()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:create-user"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Twice()
 
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
@@ -265,18 +235,6 @@ func TestReconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:remove-team-member"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:assign-service-account-permissions"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		uppercaseUser := &protoapi.TeamMember{
 			User: &protoapi.User{
@@ -422,12 +380,6 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("Test service account resource permissions", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:assign-service-account-permissions"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
@@ -562,14 +514,7 @@ func TestReconcile(t *testing.T) {
 	})
 
 	t.Run("Delete team", func(t *testing.T) {
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		auditLogsService := mockServer.AuditLogs
-		auditLogsService.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "grafana:removed-team"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		teamsService := grafana_mock_teams.NewMockClientService(t)
 		teamsService.EXPECT().

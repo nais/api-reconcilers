@@ -11,7 +11,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2/clientcredentials"
@@ -24,11 +24,6 @@ const (
 	configClientSecret = "azure:client_secret"
 	configClientID     = "azure:client_id"
 	configTenantID     = "azure:tenant_id"
-
-	auditActionCreateAzureGroup      = "azure:group:create"
-	auditActionDeleteAzureGroup      = "azure:group:delete"
-	auditActionAddMemberToGroup      = "azure:group:add-member"
-	auditActionRemoveMemberFromGroup = "azure:group:delete-member"
 )
 
 type azureGroupReconciler struct {
@@ -121,18 +116,9 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 	log = log.WithField("azure_group_name", azureGroup.MailNickname)
 	if created {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionCreateAzureGroup,
-			naisTeam.Slug,
-			"Created Azure AD group %q with ID %q", azureGroup.MailNickname, azureGroup.ID,
-		)
-
 		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
-			Slug:         naisTeam.Slug,
-			AzureGroupId: &azureGroup.ID,
+			Slug:           naisTeam.Slug,
+			EntraIdGroupId: &azureGroup.ID,
 		})
 		if err != nil {
 			return fmt.Errorf("set Azure group ID for team %q: %w", naisTeam.Slug, err)
@@ -154,12 +140,12 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 	}
 	log.Debug("client updated")
 
-	if naisTeam.AzureGroupId == nil {
+	if naisTeam.EntraIdGroupId == nil {
 		log.Info("team has no Azure AD group ID set, cannot delete external group")
 		return nil
 	}
 
-	id, err := uuid.Parse(*naisTeam.AzureGroupId)
+	id, err := uuid.Parse(*naisTeam.EntraIdGroupId)
 	if err != nil {
 		return fmt.Errorf("invalid Azure AD group ID set on team, cannot delete external group")
 	}
@@ -167,15 +153,6 @@ func (r *azureGroupReconciler) Delete(ctx context.Context, client *apiclient.API
 	if err := azureClient.DeleteGroup(ctx, id); err != nil {
 		return fmt.Errorf("delete Azure AD group with ID %q for team %q: %w", id, naisTeam.Slug, err)
 	}
-
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionDeleteAzureGroup,
-		naisTeam.Slug,
-		"Delete Azure AD group with ID %q", *naisTeam.AzureGroupId,
-	)
 
 	return nil
 }
@@ -199,16 +176,6 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 			log.WithError(err).Errorf("remove member from group in Azure")
 			continue
 		}
-
-		reconcilers.AuditLogForTeamAndUser(
-			ctx,
-			client,
-			r,
-			auditActionRemoveMemberFromGroup,
-			teamSlug,
-			remoteEmail,
-			"Removed member %q from Azure group %q", remoteEmail, azureGroup.MailNickname,
-		)
 	}
 
 	membersToAdd := localOnlyMembers(members, naisTeamMembers)
@@ -225,16 +192,6 @@ func (r *azureGroupReconciler) connectUsers(ctx context.Context, client *apiclie
 			log.WithError(err).Warnf("add member to group in Azure")
 			continue
 		}
-
-		reconcilers.AuditLogForTeamAndUser(
-			ctx,
-			client,
-			r,
-			auditActionAddMemberToGroup,
-			teamSlug,
-			user.Email,
-			"Added member %q to Azure group %q", user.Email, azureGroup.MailNickname,
-		)
 	}
 
 	return nil

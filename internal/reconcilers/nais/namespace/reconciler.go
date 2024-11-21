@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
 
@@ -17,12 +17,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 )
 
-const (
-	reconcilerName = "nais:namespace"
-
-	auditActionNaisNamespaceCreateNamespace = "nais:namespace:create-namespace"
-	auditActionNaisNamespaceDeleteNamespace = "nais:namespace:delete-namespace"
-)
+const reconcilerName = "nais:namespace"
 
 type OptFunc func(*naisNamespaceReconciler)
 
@@ -82,8 +77,8 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	}
 
 	azureGroupID := uuid.Nil
-	if naisTeam.AzureGroupId != nil {
-		id, err := uuid.Parse(*naisTeam.AzureGroupId)
+	if naisTeam.EntraIdGroupId != nil {
+		id, err := uuid.Parse(*naisTeam.EntraIdGroupId)
 		if err != nil {
 			return fmt.Errorf("unable to parse Azure group ID: %w", err)
 		}
@@ -102,17 +97,6 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		env := it.Value()
 		if err := r.createNamespace(ctx, naisTeam, env, azureGroupID); err != nil {
 			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", *env.GcpProjectId, env.EnvironmentName, err)
-		}
-
-		if _, exists := updated[env.EnvironmentName]; !exists {
-			reconcilers.AuditLogForTeam(
-				ctx,
-				client,
-				r,
-				auditActionNaisNamespaceCreateNamespace,
-				naisTeam.Slug,
-				"Request namespace creation for team %q in environment %q", naisTeam.Slug, env.EnvironmentName,
-			)
 		}
 
 		updated[env.EnvironmentName] = time.Now().Unix()
@@ -135,15 +119,6 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 		if err := r.deleteNamespace(ctx, naisTeam.Slug, env.EnvironmentName); err != nil {
 			log.WithError(err).Errorf("delete namespace")
 			errors = append(errors, err)
-		} else {
-			reconcilers.AuditLogForTeam(
-				ctx,
-				client,
-				r,
-				auditActionNaisNamespaceDeleteNamespace,
-				naisTeam.Slug,
-				"Request namespace deletion for team %q in environment %q", naisTeam.Slug, env.EnvironmentName,
-			)
 		}
 	}
 

@@ -12,7 +12,7 @@ import (
 	"github.com/google/go-github/v50/github"
 	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -41,12 +41,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "github:team:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 		mockServer.Reconcilers.EXPECT().
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(nil, status.Error(codes.NotFound, "state not found")).
@@ -275,12 +269,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
 			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "github:team:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
 		mockServer.Reconcilers.EXPECT().
 			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
 				st := &github_team_reconciler.GitHubState{}
@@ -393,24 +381,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		mockServer.Reconcilers.EXPECT().
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "github:team:create"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "github:team:delete-member" && strings.Contains(r.Message, `Deleted member "should-remove"`)
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(r *protoapi.CreateAuditLogsRequest) bool {
-				return r.Action == "github:team:add-member" && strings.Contains(r.Message, `Added member "should-create"`)
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 		mockServer.Reconcilers.EXPECT().
 			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
@@ -704,13 +674,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			GithubTeamSlug: ptr.To(gitHubSlug),
 		}
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "github:team:delete"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)

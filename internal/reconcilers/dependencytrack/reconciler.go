@@ -7,7 +7,7 @@ import (
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	dependencytrack "github.com/nais/dependencytrack/pkg/client"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -17,13 +17,7 @@ type reconciler struct {
 	client dependencytrack.Client
 }
 
-const (
-	reconcilerName = "nais:dependencytrack"
-
-	auditActionAddTeamMember    = "dependencytrack:team:add-member"
-	auditActionDeleteTeamMember = "dependencytrack:team:delete-member"
-	auditActionCreateTeam       = "dependencytrack:team:create"
-)
+const reconcilerName = "nais:dependencytrack"
 
 type OptFunc func(*reconciler)
 
@@ -130,16 +124,6 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 				if err := r.client.AddToTeam(ctx, member.User.Email, st.TeamID); err != nil {
 					return "", err
 				}
-
-				reconcilers.AuditLogForTeamAndUser(
-					ctx,
-					client,
-					r,
-					auditActionAddTeamMember,
-					teamSlug,
-					member.User.Email,
-					"Added member %q to Dependencytrack team %q", member.User.Email, teamSlug,
-				)
 			}
 		}
 
@@ -149,16 +133,6 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 				if err := r.client.DeleteUserMembership(ctx, st.TeamID, email); err != nil {
 					return "", err
 				}
-
-				reconcilers.AuditLogForTeamAndUser(
-					ctx,
-					client,
-					r,
-					auditActionDeleteTeamMember,
-					teamSlug,
-					email,
-					"Deleted member %q from Dependencytrack team %q", email, teamSlug,
-				)
 			}
 		}
 
@@ -171,15 +145,6 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 		return "", err
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionCreateTeam,
-		teamSlug,
-		"Created dependencytrack team %q with ID %q", team.Name, team.Uuid,
-	)
-
 	for _, member := range naisTeamMembers {
 		log := log.WithField("email", member.User.Email)
 		log.Debugf("creating user in DependencyTrack")
@@ -191,16 +156,6 @@ func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.API
 		if err := r.client.AddToTeam(ctx, member.User.Email, team.Uuid); err != nil {
 			return "", err
 		}
-
-		reconcilers.AuditLogForTeamAndUser(
-			ctx,
-			client,
-			r,
-			auditActionAddTeamMember,
-			teamSlug,
-			member.User.Email,
-			"Added member %q to Dependencytrack team %q", member.User.Email, teamSlug,
-		)
 	}
 
 	return team.Uuid, nil

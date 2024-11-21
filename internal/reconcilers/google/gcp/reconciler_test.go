@@ -14,7 +14,7 @@ import (
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -140,48 +140,6 @@ func TestReconcile(t *testing.T) {
 				GcpProjectId:    &expectedTeamProjectID,
 			}).
 			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:enable-google-apis" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Times(numberOfAPIs)
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:create-project" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:assign-permissions" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:create-cnrm-service-account" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:create-cnrm-role" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:set-billing-info" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
-			Once()
-		mockServer.AuditLogs.EXPECT().
-			Create(mock.Anything, mock.MatchedBy(func(req *protoapi.CreateAuditLogsRequest) bool {
-				return req.Action == "google:gcp:project:attach-shared-vpc" && req.ReconcilerName == "google:gcp:project"
-			})).
-			Return(&protoapi.CreateAuditLogsResponse{}, nil).
 			Once()
 
 		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{

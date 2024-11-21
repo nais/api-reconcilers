@@ -20,7 +20,7 @@ import (
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/cloudbilling/v1"
 	"google.golang.org/api/cloudresourcemanager/v3"
@@ -37,16 +37,6 @@ const (
 	googleProjectDisplayNameMaxLength = 30
 	ManagedByLabelName                = "managed-by"
 	ManagedByLabelValue               = "api-reconcilers"
-
-	auditActionGoogleGcpDeleteProject                   = "google:gcp:delete-project"
-	auditActionGoogleGcpProjectAssignPermissions        = "google:gcp:project:assign-permissions"
-	auditActionGoogleGcpProjectCreateCnrmServiceAccount = "google:gcp:project:create-cnrm-service-account"
-	auditActionGoogleGcpProjectCreateCnrmRole           = "google:gcp:project:create-cnrm-role"
-	auditActionGoogleGcpProjectPatchCnrmRole            = "google:gcp:project:patch-cnrm-role"
-	auditActionGoogleGcpProjectCreateProject            = "google:gcp:project:create-project"
-	auditActionGoogleGcpProjectEnableGoogleApis         = "google:gcp:project:enable-google-apis"
-	auditActionGoogleGcpProjectSetBillingInfo           = "google:gcp:project:set-billing-info"
-	auditActionGoogleGcpProjectAttachSharedVpc          = "google:gcp:project:attach-shared-vpc"
 )
 
 type GcpServices struct {
@@ -244,20 +234,16 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 			continue
 		}
 
-		auditLogMessage := fmt.Sprintf("Delete GCP project: %q", projectID)
 		_, err := r.gcpServices.CloudResourceManagerProjectsService.Delete("projects/" + projectID).Context(ctx).Do()
 		if err != nil {
 			var googleError *googleapi.Error
 			ok := errors.As(err, &googleError)
-			if ok && (googleError.Code == 400 || googleError.Code == 404 || googleError.Code == 403) {
-				auditLogMessage = fmt.Sprintf("GCP project %q no longer exists, removing from state", projectID)
-			} else {
+			if !(ok && (googleError.Code == 400 || googleError.Code == 404 || googleError.Code == 403)) {
 				retErrors = append(retErrors, err)
 				continue
 			}
 		}
 
-		reconcilers.AuditLogForTeam(ctx, client, r, auditActionGoogleGcpDeleteProject, naisTeam.Slug, auditLogMessage)
 		_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
 			Slug:            naisTeam.Slug,
 			EnvironmentName: env.EnvironmentName,
@@ -345,16 +331,6 @@ func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Con
 		return fmt.Errorf("complete operation: %s", operation.Error.Message)
 	}
 
-	for _, enabledApi := range servicesToEnable {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionGoogleGcpProjectEnableGoogleApis,
-			project.ProjectId,
-			"Enable Google API %q for %q", enabledApi, project.ProjectId,
-		)
-	}
 	return nil
 }
 
@@ -416,15 +392,6 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *ap
 		return nil, fmt.Errorf("convert operation response to the Created GCP project: %w", err)
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionGoogleGcpProjectCreateProject,
-		naisTeam.Slug,
-		"Created GCP project %q for team %q in environment %q", createdProject.ProjectId, naisTeam.Slug, environment,
-	)
-
 	return createdProject, nil
 }
 
@@ -468,15 +435,6 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 		return fmt.Errorf("assign GCP project IAM policy: %w", err)
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionGoogleGcpProjectAssignPermissions,
-		naisTeam.Slug,
-		"Assigned GCP project IAM permissions for %q", teamProject.ProjectId,
-	)
-
 	return nil
 }
 
@@ -502,15 +460,6 @@ func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.C
 		return nil, err
 	}
 
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionGoogleGcpProjectCreateCnrmServiceAccount,
-		naisTeam.Slug,
-		"Created CNRM service account for team %q in project %q", naisTeam.Slug, teamProjectID,
-	)
-
 	return serviceAccount, nil
 }
 
@@ -530,15 +479,6 @@ func (r *googleGcpReconciler) setTeamProjectBillingInfo(ctx context.Context, cli
 	if err != nil {
 		return err
 	}
-
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionGoogleGcpProjectSetBillingInfo,
-		naisTeam.Slug,
-		"Set billing info for %q", project.ProjectId,
-	)
 
 	return nil
 }
@@ -691,15 +631,6 @@ func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, clie
 		}
 	}
 	log.Infof("Attached team project %q as service project to shared vpc in %q", teamProjectId, clusterProjectId)
-
-	reconcilers.AuditLogForTeam(
-		ctx,
-		client,
-		r,
-		auditActionGoogleGcpProjectAttachSharedVpc,
-		naisTeam.Slug,
-		"Attached team project %q as service project to shared vpc in %q", teamProjectId, clusterProjectId,
-	)
 
 	return nil
 }

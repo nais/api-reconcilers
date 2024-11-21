@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nais/api-reconcilers/internal/reconcilers"
-
 	cloudcompute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
@@ -19,7 +17,7 @@ import (
 	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
-	"github.com/nais/api/pkg/protoapi"
+	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/cloudresourcemanager/v3"
 	"google.golang.org/api/compute/v1"
@@ -204,40 +202,23 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 		return fmt.Errorf("create team access for cache invalidation: %w", err)
 	}
 
-	updated, err := r.ensureUrlMapPathRule(naisTeam, backendBucket, log)
-	if err != nil {
+	if err := r.ensureUrlMapPathRule(naisTeam, backendBucket, log); err != nil {
 		return fmt.Errorf("create urlMap: %w", err)
 	}
 
 	log.Infof("reconciled cdn for %q", naisTeam.Slug)
 
-	if updated {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionCreatedCdn,
-			naisTeam.Slug,
-			"Provisioned CDN resources for team %q", naisTeam.Slug,
-		)
-	}
-
 	return nil
 }
 
 func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	// reverse order of creation
-
 	bucketName := r.bucketName(naisTeam)
-
-	// delete backendbucket
-	shouldAudit, err := r.deleteBackendBucket(ctx, bucketName, naisTeam, log)
-	if err != nil {
+	if err := r.deleteBackendBucket(ctx, bucketName, naisTeam, log); err != nil {
 		return err
 	}
 
 	// remove bucket
-	_, err = r.services.Storage.Bucket(bucketName).Attrs(ctx)
+	_, err := r.services.Storage.Bucket(bucketName).Attrs(ctx)
 	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
 		return fmt.Errorf("get bucket: %w", err)
 	}
@@ -282,7 +263,6 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 				})
 			}
 			if len(binding.Members) != numMembers {
-				shouldAudit = true
 				updateIAMPolicy = true
 			}
 		}
@@ -304,26 +284,15 @@ func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient,
 		if err != nil {
 			return fmt.Errorf("delete service account: %w", err)
 		}
-		shouldAudit = true
 		log.Infof("deleted service account %q", serviceAccount.Email)
 	}
 
 	log.Infof("deleted cdn resources for team %q", naisTeam.Slug)
 
-	if shouldAudit {
-		reconcilers.AuditLogForTeam(
-			ctx,
-			client,
-			r,
-			auditActionDeletedCdn,
-			naisTeam.Slug,
-			"Deleted CDN resources for %s", naisTeam.Slug,
-		)
-	}
 	return nil
 }
 
-func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName string, naisTeam *protoapi.Team, log logrus.FieldLogger) (shouldAudit bool, err error) {
+func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName string, naisTeam *protoapi.Team, log logrus.FieldLogger) (err error) {
 	// get backendbucket
 	backendBucket, err := r.services.BackendBuckets.Get(ctx, &computepb.GetBackendBucketRequest{
 		BackendBucket: bucketName,
@@ -333,15 +302,15 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 		var googleError *googleapi.Error
 		ok := errors.As(err, &googleError)
 		if !ok || googleError.Code != http.StatusNotFound {
-			return false, fmt.Errorf("get backend bucket, %w", err)
+			return fmt.Errorf("get backend bucket, %w", err)
 		}
-		return false, nil
+		return nil
 	}
 
 	// remove entry from urlmap
 	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
-		return false, fmt.Errorf("get urlmap: %w", err)
+		return fmt.Errorf("get urlmap: %w", err)
 	}
 
 	for _, pm := range urlMap.PathMatchers {
@@ -359,7 +328,7 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 
 	_, err = r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
 	if err != nil {
-		return false, fmt.Errorf("update urlMap: %w", err)
+		return fmt.Errorf("update urlMap: %w", err)
 	}
 
 	log.Infof("removed path rule for %q from url map %q", naisTeam.Slug, urlMapName)
@@ -370,11 +339,11 @@ func (r *cdnReconciler) deleteBackendBucket(ctx context.Context, bucketName stri
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		return false, fmt.Errorf("delete backend bucket: %w", err)
+		return fmt.Errorf("delete backend bucket: %w", err)
 	}
 
 	log.Infof("deleted backend bucket %q", *backendBucket.Name)
-	return true, nil
+	return nil
 }
 
 // bucketName returns a globally unique bucket name for the given team
@@ -437,18 +406,18 @@ func (r *cdnReconciler) setBucketPolicy(ctx context.Context, bucketName string, 
 }
 
 // ensureUrlMapPathRule ensures that the backend bucket exists for at least one path rule in the given urlMap
-func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket, log logrus.FieldLogger) (bool, error) {
+func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBucket *computepb.BackendBucket, log logrus.FieldLogger) error {
 	urlMap, err := r.services.UrlMap.Get(r.googleManagementProjectID, urlMapName).Do()
 	if err != nil {
-		return false, fmt.Errorf("get urlmap: %w", err)
+		return fmt.Errorf("get urlmap: %w", err)
 	}
 
 	if len(urlMap.PathMatchers) == 0 {
-		return false, fmt.Errorf("url map didn't contain any path matchers; ensure that terraform has run")
+		return fmt.Errorf("url map didn't contain any path matchers; ensure that terraform has run")
 	}
 
 	if backendBucket.SelfLink == nil {
-		return false, fmt.Errorf("backend bucket self link was nil; ensure that the bucket was created successfully")
+		return fmt.Errorf("backend bucket self link was nil; ensure that the bucket was created successfully")
 	}
 
 	updatedUrlMap := false
@@ -473,13 +442,13 @@ func (r *cdnReconciler) ensureUrlMapPathRule(naisTeam *protoapi.Team, backendBuc
 	if updatedUrlMap {
 		_, err := r.services.UrlMap.Update(r.googleManagementProjectID, urlMapName, urlMap).Do()
 		if err != nil {
-			return false, fmt.Errorf("update urlMap: %w", err)
+			return fmt.Errorf("update urlMap: %w", err)
 		}
 
 		log.Infof("added path rule for %q to url map %q", naisTeam.Slug, urlMapName)
 	}
 
-	return updatedUrlMap, nil
+	return nil
 }
 
 func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *protoapi.Team, bucketName string, log logrus.FieldLogger) (*computepb.BackendBucket, error) {

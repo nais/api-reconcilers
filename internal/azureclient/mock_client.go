@@ -5,7 +5,7 @@ package azureclient
 import (
 	context "context"
 
-	protoapi "github.com/nais/api/pkg/protoapi"
+	protoapi "github.com/nais/api/pkg/apiclient/protoapi"
 	mock "github.com/stretchr/testify/mock"
 
 	uuid "github.com/google/uuid"
