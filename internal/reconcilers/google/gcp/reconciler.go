@@ -72,6 +72,9 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 }
 
 func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, clusterAlias map[string]string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
+	if clusterAlias == nil {
+		clusterAlias = make(map[string]string)
+	}
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
