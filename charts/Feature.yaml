@@ -40,6 +40,7 @@ values:
 
   clusterAlias:
     displayName: Cluster aliases
+    description: Comma separated list of colon separeted key:value cluster aliases (e.g. dev:dev-gcp,prod:prod-gcp)
     config:
       type: string_array
 
@@ -96,7 +97,7 @@ values:
   gcp.billingAccount:
     displayName: Billing account
     computed:
-      template: '{{ .Env.billing_account | quote }}'
+      template: "{{ .Env.billing_account | quote }}"
 
   gcp.clusters:
     displayName: Cluster information
@@ -118,7 +119,7 @@ values:
   gcp.workloadIdentityPoolName:
     displayName: Google workload identity pool name
     computed:
-      template: '{{ .Env.nais_identity_pool_name | quote }}'
+      template: "{{ .Env.nais_identity_pool_name | quote }}"
 
   grafana.endpoint:
     displayName: Grafana API endpoint
