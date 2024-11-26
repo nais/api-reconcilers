@@ -38,6 +38,11 @@ values:
       template: |
         {{ .Env.tenant_domain | quote }}
 
+  clusterAlias:
+    displayName: Cluster aliases
+    config:
+      type: string_array
+
   reconcilersToEnable:
     displayName: Reconcilers to enable
     description: Comma separated list of reconcilers to enable. Changing this value after the reconciler has been registered will not have any effect.
