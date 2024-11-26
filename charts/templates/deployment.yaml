@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.naisAPI.target }}
             - name: LISTEN_ADDRESS
               value: :3005
+            - name: CLUSTER_ALIAS
+              value: {{ .Values.clusterAlias | join "," | quote }}
             - name: TENANT_DOMAIN
               value: {{ .Values.tenantDomain }}
             - name: TENANT_NAME

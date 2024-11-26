@@ -127,6 +127,9 @@ type Config struct {
 	// TenantName The name of the tenant.
 	TenantName string `env:"TENANT_NAME,default=example"`
 
+	// ClusterAlias The cluster alias for legacy migration
+	ClusterAlias map[string]string `env:"CLUSTER_ALIAS"`
+
 	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API
 	// If you later would like do enable/disable a reconciler, you can do so through the Console
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`

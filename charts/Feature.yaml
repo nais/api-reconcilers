@@ -38,6 +38,12 @@ values:
       template: |
         {{ .Env.tenant_domain | quote }}
 
+  clusterAlias:
+    displayName: Cluster aliases
+    description: Each entry must be colon separeted key:value cluster aliases (e.g. dev:dev-gcp)
+    config:
+      type: string_array
+
   reconcilersToEnable:
     displayName: Reconcilers to enable
     description: Comma separated list of reconcilers to enable. Changing this value after the reconciler has been registered will not have any effect.
@@ -91,7 +97,7 @@ values:
   gcp.billingAccount:
     displayName: Billing account
     computed:
-      template: '{{ .Env.billing_account | quote }}'
+      template: "{{ .Env.billing_account | quote }}"
 
   gcp.clusters:
     displayName: Cluster information
@@ -113,7 +119,7 @@ values:
   gcp.workloadIdentityPoolName:
     displayName: Google workload identity pool name
     computed:
-      template: '{{ .Env.nais_identity_pool_name | quote }}'
+      template: "{{ .Env.nais_identity_pool_name | quote }}"
 
   grafana.endpoint:
     displayName: Grafana API endpoint

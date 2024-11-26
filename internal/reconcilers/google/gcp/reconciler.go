@@ -60,6 +60,7 @@ type googleGcpReconciler struct {
 	tenantDomain   string
 	tenantName     string
 	flags          config.FeatureFlags
+	clusterAlias   map[string]string
 }
 
 type OptFunc func(*googleGcpReconciler)
@@ -70,7 +71,10 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, clusterAlias map[string]string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
+	if clusterAlias == nil {
+		clusterAlias = make(map[string]string)
+	}
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
@@ -78,6 +82,7 @@ func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenant
 		tenantDomain:   tenantDomain,
 		tenantName:     tenantName,
 		flags:          flags,
+		clusterAlias:   clusterAlias,
 	}
 
 	for _, opt := range opts {
@@ -136,6 +141,10 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			continue
 		}
 
+		if _, isAlias := r.clusterAlias[env.EnvironmentName]; isAlias {
+			continue
+		}
+
 		projectID := GenerateProjectID(r.tenantDomain, env.EnvironmentName, naisTeam.Slug)
 		log.WithField("project_id", projectID).Debugf("generated GCP project ID")
 		teamProject, err := r.getOrCreateProject(ctx, client, projectID, env, cluster.TeamsFolderID, naisTeam)
@@ -143,13 +152,22 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("get or create a GCP project %q for team %q in environment %q: %w", projectID, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
-			Slug:            naisTeam.Slug,
-			EnvironmentName: env.EnvironmentName,
-			GcpProjectId:    &teamProject.ProjectId,
-		})
-		if err != nil {
-			return fmt.Errorf("set GCP project ID for team %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		envList := []string{env.EnvironmentName}
+		for alias, original := range r.clusterAlias {
+			if original == env.EnvironmentName {
+				envList = append(envList, alias)
+			}
+		}
+
+		for _, envName := range envList {
+			_, err = client.Teams().SetTeamEnvironmentExternalReferences(ctx, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            naisTeam.Slug,
+				EnvironmentName: envName,
+				GcpProjectId:    &teamProject.ProjectId,
+			})
+			if err != nil {
+				return fmt.Errorf("set GCP project ID for team %q in environment %q: %w", naisTeam.Slug, envName, err)
+			}
 		}
 
 		labels := map[string]string{
@@ -214,6 +232,11 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 		env := it.Value()
 		if !env.Gcp || env.GcpProjectId == nil {
 			log.Warning("skipping environment, no GCP project or project is already deleted")
+			continue
+		}
+
+		if _, isAlias := r.clusterAlias[env.EnvironmentName]; isAlias {
+			log.Infof("skipping alias environment %q", env.EnvironmentName)
 			continue
 		}
 
