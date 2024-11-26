@@ -40,7 +40,7 @@ values:
 
   clusterAlias:
     displayName: Cluster aliases
-    description: Comma separated list of colon separeted key:value cluster aliases (e.g. dev:dev-gcp,prod:prod-gcp)
+    description: Each entry must be colon separeted key:value cluster aliases (e.g. dev:dev-gcp)
     config:
       type: string_array
 
