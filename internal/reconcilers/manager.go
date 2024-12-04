@@ -130,7 +130,8 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 
 			switch event {
 			case protoapi.EventTypes_EVENT_TEAM_DELETED,
-				protoapi.EventTypes_EVENT_TEAM_UPDATED:
+				protoapi.EventTypes_EVENT_TEAM_UPDATED,
+				protoapi.EventTypes_EVENT_TEAM_CREATED:
 
 				var obj interface {
 					proto.Message
@@ -143,6 +144,8 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 
 				if event == protoapi.EventTypes_EVENT_TEAM_DELETED {
 					obj = &protoapi.EventTeamDeleted{}
+				} else if event == protoapi.EventTypes_EVENT_TEAM_CREATED {
+					obj = &protoapi.EventTeamCreated{}
 				} else {
 					obj = &protoapi.EventTeamUpdated{}
 				}
