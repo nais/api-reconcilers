@@ -1,8 +1,6 @@
-version: "3.9"
-
 volumes:
-  grafana: {}
-  postgres: {}
+  grafana:
+  postgres:
 
 services:
   postgres:
