@@ -4,18 +4,19 @@ import (
 	"context"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/sethvargo/go-envconfig"
 )
 
 type FeatureFlags struct {
-	// AttachSharedVpc enabled the shared vpc feature
+	// AttachSharedVpc enables the shared vpc feature
 	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
+
 	// CnrmRoleInProject enables the CNRM role in project feature
 	CnrmRoleInProject bool `env:"FEATURE_CNRM_ROLE_IN_PROJECT"`
 }
 
 type Config struct {
-	// Flags to enable new features
 	FeatureFlags FeatureFlags
 
 	Azure struct {
@@ -133,6 +134,9 @@ type Config struct {
 	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API
 	// If you later would like do enable/disable a reconciler, you can do so through the Console
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
+
+	// OnpremClusters is a list of onprem clusters to connect to. This is only used by Nav.
+	OnpremClusters []kubernetes.OnpremCluster `env:"NAV_ONPREM_CLUSTERS"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

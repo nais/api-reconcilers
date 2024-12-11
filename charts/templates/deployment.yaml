@@ -111,6 +111,10 @@ spec:
             - name: FEATURE_CNRM_ROLE_IN_PROJECT
               value: {{ .Values.featureFlags.cnrmRoleInProject | quote }}
             {{- end }}
+            {{- if .Values.onprem.clusters }}
+            - name: NAV_ONPREM_CLUSTERS
+              value: {{ .Values.onprem.clusters | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 3005

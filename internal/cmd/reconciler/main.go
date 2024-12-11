@@ -4,27 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
 	"github.com/go-openapi/strfmt"
-
-	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
-
-	"github.com/joho/godotenv"
-	"github.com/nais/api/pkg/apiclient"
-	"github.com/sethvargo/go-envconfig"
-	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	grafana_client "github.com/grafana/grafana-openapi-client-go/client"
-
+	"github.com/joho/godotenv"
+	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/nais/api-reconcilers/internal/logger"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
@@ -37,6 +29,13 @@ import (
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
 	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/sethvargo/go-envconfig"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -145,7 +144,12 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created Google GAR reconciler")
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.GoogleManagementProjectID)
+	k8sClients, err := kubernetes.Clients(cfg.TenantName, slices.Sorted(maps.Keys(cfg.GCP.Clusters)), cfg.OnpremClusters)
+	if err != nil {
+		return fmt.Errorf("error when creating Kubernetes clients: %w", err)
+	}
+
+	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, k8sClients)
 	if err != nil {
 		return fmt.Errorf("error when creating NAIS namespace reconciler: %w", err)
 	}

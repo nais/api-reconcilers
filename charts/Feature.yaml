@@ -145,3 +145,10 @@ values:
     displayName: Image tag
     config:
       type: string
+
+  onprem.clusters:
+    displayName: Nav onprem clusters
+    description: Comma-separated list of clusters with static credentials on the format 'name|host|token'
+    config:
+      type: string
+      secret: true
