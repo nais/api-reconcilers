@@ -1,4 +1,4 @@
-.PHONY: all
+.PHONY: all local
 
 all: generate test check fmt build helm-lint
 
@@ -13,8 +13,6 @@ build:
 	go build -o bin/api-reconcilers ./cmd/api-reconcilers
 
 local:
-	PUBSUB_EMULATOR_HOST="localhost:3004" \
-	PUBSUB_PROJECT_ID="nais-local-dev" \
 	go run ./cmd/api-reconcilers
 
 test:
