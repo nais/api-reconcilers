@@ -10,7 +10,8 @@ The main purpose is to create team resources, permissions and maintain them.
 To run the reconciler locally, you need to have the nais/api project cloned and running.
 See the [nais/api README](https://github.com/nais/api?tab=readme-ov-file#local-development) for more information.
 
-Given that a lot of the reconcilers are using external services, most of these requires authentication and access to these services.
+Given that a lot of the reconcilers are using external services, most of these requires authentication and access to
+these services.
 So ensure that you configure and provide a proper environment for the reconcilers to run.
 You may use the example configuration file to skip the boring process of figuring it out:
 
@@ -39,12 +40,11 @@ Run `make test` to run the tests.
 kind create cluster 
 ```
 
-3. Create service account and cluster role binding:
+3. Apply required cluster resources:
 
 ```shell
-kubectl create serviceaccount api-reconciler
-kubectl create clusterrolebinding api-reconciler --clusterrole=cluster-admin --serviceaccount=default:api-reconciler
-TOKEN=$(kubectl create token api-reconciler --duration=99999h)
+kubectl apply -f ./hack/configconnectorcontexts.yaml
+kubectl apply -f ./hack/rbac.yaml
 ```
 
 4. Create a NAV_ONPREM_CLUSTERS entry in the .env file like so:
@@ -52,8 +52,8 @@ TOKEN=$(kubectl create token api-reconciler --duration=99999h)
 Run the following command in the same terminal as the previous step:
 
 ```shell
-NAV_ONPREM_CLUSTERS="kind-kind|127.0.0.1:$(docker ps | grep kindest | cut -d":" -f3 | cut -d "-" -f1)|$TOKEN"
-echo "NAV_ONPREM_CLUSTERS=\"$NAV_ONPREM_CLUSTERS\"" >> .env # only works once
+NAV_ONPREM_CLUSTERS="kind-kind|127.0.0.1:$(docker ps | grep kindest | cut -d":" -f3 | cut -d "-" -f1)|$(kubectl create token api-reconciler --duration=99999h)"
+(echo ""; echo "NAV_ONPREM_CLUSTERS=\"$NAV_ONPREM_CLUSTERS\"") >> .env # only works once
 ```
 
 ## Architecture
