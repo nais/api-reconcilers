@@ -130,7 +130,7 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
-	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", env.EnvironmentName)
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 
 	// TODO: nuke this when legacy is dead
 	if env.EnvironmentName == "prod-gcp" || env.EnvironmentName == "dev-gcp" || env.EnvironmentName == "ci-gcp" {
@@ -149,6 +149,7 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 
 func (r *naisNamespaceReconciler) ensureServiceAccount(ctx context.Context, naisTeam *protoapi.Team, c corev1Typed.ServiceAccountInterface, log logrus.FieldLogger) error {
 	name := fmt.Sprintf("serviceuser-%s", naisTeam.Slug)
+	log = log.WithField("sa_name", name)
 	sa, err := c.Get(ctx, name, metav1.GetOptions{})
 
 	if errors.IsNotFound(err) {
@@ -157,11 +158,11 @@ func (r *naisNamespaceReconciler) ensureServiceAccount(ctx context.Context, nais
 		if err != nil {
 			return fmt.Errorf("creating service account: %w", err)
 		}
-		log.Debugf("Created service account %q", name)
+		log.Debugf("Created service account")
 	} else if err != nil {
 		return fmt.Errorf("getting service account: %w", err)
 	} else {
-		log.Debugf("Service account %q already exists", name)
+		log.Debugf("Service account already exists")
 	}
 
 	return nil
@@ -169,6 +170,7 @@ func (r *naisNamespaceReconciler) ensureServiceAccount(ctx context.Context, nais
 
 func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
 	name := fmt.Sprintf("serviceuser-%s-naisdeveloper", naisTeam.Slug)
+	log = log.WithField("rolebinding_name", name)
 	rb, err := c.Get(ctx, name, metav1.GetOptions{})
 
 	rb.RoleRef = v1.RoleRef{
@@ -195,7 +197,7 @@ func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisT
 	} else if err != nil {
 		return fmt.Errorf("getting rolebinding %q: %w", name, err)
 	} else {
-		log.Debugf("Rolebinding %q already exists", name)
+		log.Debugf("Rolebinding already exists")
 		_, err := c.Update(ctx, rb, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("updating rolebinding: %w", err)
@@ -207,6 +209,7 @@ func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisT
 
 func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
 	name := fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug)
+	log = log.WithField("rolebinding_name", name)
 	rb, err := c.Get(ctx, name, metav1.GetOptions{})
 
 	rb.RoleRef = v1.RoleRef{
@@ -241,11 +244,11 @@ func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, nai
 		if err != nil {
 			return fmt.Errorf("creating rolebinding %q: %w", name, err)
 		}
-		log.Debugf("Created rolebinding %q", name)
+		log.Debugf("Created rolebinding")
 	} else if err != nil {
 		return fmt.Errorf("getting rolebinding: %w", err)
 	} else {
-		log.Debugf("Rolebinding %q already exists", name)
+		log.Debugf("Rolebinding already exists")
 		_, err := c.Update(ctx, rb, metav1.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("updating rolebinding %q: %w", name, err)
@@ -332,12 +335,14 @@ func (r *naisNamespaceReconciler) ensureResourceQuota(ctx context.Context, naisT
 }
 
 func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	log = log.WithField("namespace", naisTeam.Slug)
+
 	switch naisTeam.Slug {
 	case "nais-system",
 		"kube-system",
 		"default",
 		"kube-public":
-		log.WithField("namespace", naisTeam.Slug).Warn("Namespace is not allowed to be deleted")
+		log.Warn("Namespace is not allowed to be deleted")
 		return ErrDeleteRequiredNamespace
 	}
 
@@ -346,20 +351,20 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 	})
 	for it.Next() {
 		env := it.Value()
+		log = log.WithField("environment", env.EnvironmentName)
 
 		c, exists := r.k8sClients[env.EnvironmentName]
 		if !exists {
-			log.Errorf("No Kubernetes client for environment %q", env.EnvironmentName)
+			log.Errorf("No Kubernetes client for environment")
 			continue
 		}
 
-		log = log.WithField("environment", env.EnvironmentName)
 		err := r.deleteNamespace(ctx, naisTeam, c.Clientset.CoreV1().Namespaces(), log)
 		if err != nil {
-			log.Errorf("deleting namespace %q: %w", naisTeam.Slug, err)
+			log.WithError(err).Errorf("deleting namespace")
 			continue
 		}
-		log.Debugf("Deleted namespace %q", naisTeam.Slug)
+		log.Debugf("Deleted namespace")
 	}
 
 	return nil
@@ -369,7 +374,7 @@ func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, naisTeam 
 	err := c.Delete(ctx, naisTeam.Slug, metav1.DeleteOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Errorf("Namespace %q not found", naisTeam.Slug)
+			log.WithField("namespace", naisTeam.Slug).Errorf("Namespace not found")
 			return nil
 		}
 		return err
