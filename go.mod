@@ -10,21 +10,21 @@ require (
 	cloud.google.com/go/pubsub v1.44.0
 	cloud.google.com/go/storage v1.43.0
 	github.com/GoogleCloudPlatform/k8s-config-connector v1.125.0
-	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/chi/v5 v5.2.0
 	github.com/go-openapi/runtime v0.28.0
 	github.com/go-openapi/strfmt v0.23.0
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240826142251-d1c93bae4198
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api/pkg/apiclient v0.0.0-20241111133716-81030e9e22c6
+	github.com/nais/api/pkg/apiclient v0.0.0-20241216092820-883aa5b1b3e5
 	github.com/nais/dependencytrack v0.0.0-20240826042152-d9faa3523a2f
 	github.com/prometheus/client_golang v1.20.2
 	github.com/sethvargo/go-envconfig v1.1.0
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	github.com/vektra/mockery/v2 v2.46.3
+	github.com/vektra/mockery/v2 v2.50.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.55.0
 	go.opentelemetry.io/otel v1.30.0

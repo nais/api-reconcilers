@@ -86,8 +86,8 @@ github.com/fsnotify/fsnotify v1.7.0 h1:8JEhPFa5W2WU7YfeZzPNqzMP6Lwt7L2715Ggo0nos
 github.com/fsnotify/fsnotify v1.7.0/go.mod h1:40Bi/Hjc2AVfZrqy+aj+yEI+/bRxZnMJyTJwOpGvigM=
 github.com/fxamacker/cbor/v2 v2.7.0 h1:iM5WgngdRBanHcxugY4JySA0nk1wZorNOpTgCMedv5E=
 github.com/fxamacker/cbor/v2 v2.7.0/go.mod h1:pxXPTn3joSm21Gbwsv0w9OSA2y1HFR9qXEeXQVeNoDQ=
-github.com/go-chi/chi/v5 v5.1.0 h1:acVI1TYaD+hhedDJ3r54HyA6sExp3HfXq7QWEEY/xMw=
-github.com/go-chi/chi/v5 v5.1.0/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
+github.com/go-chi/chi/v5 v5.2.0 h1:Aj1EtB0qR2Rdo2dG4O94RIU35w2lvQSj6BRA4+qwFL0=
+github.com/go-chi/chi/v5 v5.2.0/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -244,8 +244,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/nais/api/pkg/apiclient v0.0.0-20241111133716-81030e9e22c6 h1:jRJCBmyrioERt3eMCX4FQXZFdtIl+a/jEbyQ4jz+lGE=
-github.com/nais/api/pkg/apiclient v0.0.0-20241111133716-81030e9e22c6/go.mod h1:JkPf3mShSP51IsmKkJ2ZhgrYjI0qnzu7xIxm6Kd0uuI=
+github.com/nais/api/pkg/apiclient v0.0.0-20241216092820-883aa5b1b3e5 h1:FrkZ05gwG39f3HK+oItzkgVaVE0tUKt8XpyK7YFsQ/U=
+github.com/nais/api/pkg/apiclient v0.0.0-20241216092820-883aa5b1b3e5/go.mod h1:JkPf3mShSP51IsmKkJ2ZhgrYjI0qnzu7xIxm6Kd0uuI=
 github.com/nais/dependencytrack v0.0.0-20240826042152-d9faa3523a2f h1:p0UOAzgRBGVJtCwwssIlSdrymPJHW4pDIbMLjiKEq3s=
 github.com/nais/dependencytrack v0.0.0-20240826042152-d9faa3523a2f/go.mod h1:9fDQCbofI1QKPBsH9l70CGmF5jXq5yYybiBfs/20xIM=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=
@@ -335,8 +335,8 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8=
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
-github.com/vektra/mockery/v2 v2.46.3 h1:Aia4iShZeNTy6CZJcvweK4X97XOzXcqb+k9jm8IqBS0=
-github.com/vektra/mockery/v2 v2.46.3/go.mod h1:dDivqi0ShM8A29mLgZn13yZ14MdXlTM4V360u8JDWCQ=
+github.com/vektra/mockery/v2 v2.50.0 h1:0GYRH38nKiRghwUq+0aJXG1sT3yyTYj/J1xQRM8kGzQ=
+github.com/vektra/mockery/v2 v2.50.0/go.mod h1:xO2DeYemEPC2tCzIZ+a1tifZ/7Laf/Chxg3vlc+oDsI=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb h1:zGWFAtiMcyryUHoUjUJX0/lt1H2+i2Ka2n+D3DImSNo=
