@@ -7,14 +7,14 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"github.com/google/uuid"
+	"github.com/nais/api-reconcilers/internal/google_token_source"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/option"
-
-	"github.com/nais/api-reconcilers/internal/google_token_source"
-	"github.com/nais/api-reconcilers/internal/reconcilers"
+	"k8s.io/utils/ptr"
 )
 
 const reconcilerName = "nais:namespace"
@@ -96,7 +96,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	for it.Next() {
 		env := it.Value()
 		if err := r.createNamespace(ctx, naisTeam, env, azureGroupID); err != nil {
-			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", *env.GcpProjectId, env.EnvironmentName, err)
+			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, "<no project ID>"), env.EnvironmentName, err)
 		}
 
 		updated[env.EnvironmentName] = time.Now().Unix()
