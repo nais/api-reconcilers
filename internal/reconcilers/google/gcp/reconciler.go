@@ -147,7 +147,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 
 		projectID := GenerateProjectID(r.tenantDomain, env.EnvironmentName, naisTeam.Slug)
 		log.WithField("project_id", projectID).Debugf("generated GCP project ID")
-		teamProject, err := r.getOrCreateProject(ctx, client, projectID, env, cluster.TeamsFolderID, naisTeam)
+		teamProject, err := r.getOrCreateProject(ctx, projectID, env, cluster.TeamsFolderID, naisTeam)
 		if err != nil {
 			return fmt.Errorf("get or create a GCP project %q for team %q in environment %q: %w", projectID, naisTeam.Slug, env.EnvironmentName, err)
 		}
@@ -180,11 +180,11 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("set project labels: %w", err)
 		}
 
-		if err := r.setTeamProjectBillingInfo(ctx, client, naisTeam, teamProject); err != nil {
+		if err := r.setTeamProjectBillingInfo(ctx, teamProject); err != nil {
 			return fmt.Errorf("set project billing info for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		cnrmServiceAccount, err := r.getOrCreateProjectCnrmServiceAccount(ctx, client, naisTeam, teamProject.ProjectId)
+		cnrmServiceAccount, err := r.getOrCreateProjectCnrmServiceAccount(ctx, teamProject.ProjectId)
 		if err != nil {
 			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
@@ -198,11 +198,11 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			cnrmRoleName = role.Name
 		}
 
-		if err := r.setProjectPermissions(ctx, client, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRoleName); err != nil {
+		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRoleName); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.ensureProjectHasAccessToGoogleApis(ctx, client, teamProject); err != nil {
+		if err := r.ensureProjectHasAccessToGoogleApis(ctx, teamProject); err != nil {
 			return fmt.Errorf("enable Google APIs access in project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -211,7 +211,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		}
 
 		if r.flags.AttachSharedVpc {
-			if err := r.attachProjectToSharedVPC(ctx, client, naisTeam, teamProject.ProjectId, cluster.ProjectID, log); err != nil {
+			if err := r.attachProjectToSharedVPC(ctx, teamProject.ProjectId, cluster.ProjectID, log); err != nil {
 				return fmt.Errorf("attach project %q as service project to shared VPC for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.SlackChannel, env.EnvironmentName, err)
 			}
 		}
@@ -292,7 +292,7 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 	return fmt.Errorf("%d error(s) occurred during GCP project deletion", len(retErrors))
 }
 
-func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Context, client *apiclient.APIClient, project *cloudresourcemanager.Project) error {
+func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Context, project *cloudresourcemanager.Project) error {
 	desiredServiceIDs := map[string]struct{}{
 		"compute.googleapis.com":              {},
 		"cloudbilling.googleapis.com":         {},
@@ -357,7 +357,7 @@ func (r *googleGcpReconciler) ensureProjectHasAccessToGoogleApis(ctx context.Con
 	return nil
 }
 
-func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *apiclient.APIClient, projectID string, environment *protoapi.TeamEnvironment, parentFolderID int64, naisTeam *protoapi.Team) (*cloudresourcemanager.Project, error) {
+func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID string, environment *protoapi.TeamEnvironment, parentFolderID int64, naisTeam *protoapi.Team) (*cloudresourcemanager.Project, error) {
 	if environment.GcpProjectId != nil {
 		response, err := r.gcpServices.CloudResourceManagerProjectsService.Search().Query("id:" + *environment.GcpProjectId).Context(ctx).Do()
 		if err != nil {
@@ -420,7 +420,7 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, client *ap
 
 // setProjectPermissions Make sure that the project has the necessary permissions, and don't remove permissions we don't
 // control
-func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client *apiclient.APIClient, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount, cnrmRoleName string) error {
+func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount, cnrmRoleName string) error {
 	member := "serviceAccount:" + clusterProjectID + ".svc.id.goog[cnrm-system/cnrm-controller-manager-" + naisTeam.Slug + "]"
 	_, err := r.gcpServices.IamProjectsServiceAccountsService.SetIamPolicy(cnrmServiceAccount.Name, &iam.SetIamPolicyRequest{
 		Policy: &iam.Policy{
@@ -463,7 +463,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, client 
 
 // getOrCreateProjectCnrmServiceAccount Get the CNRM service account for the project in this env. If the service account
 // does not exist, attempt to create it, and then return it.
-func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, teamProjectID string) (*iam.ServiceAccount, error) {
+func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.Context, teamProjectID string) (*iam.ServiceAccount, error) {
 	email := "nais-sa-cnrm@" + teamProjectID + ".iam.gserviceaccount.com"
 	name := "projects/-/serviceAccounts/" + email
 	serviceAccount, err := r.gcpServices.IamProjectsServiceAccountsService.Get(name).Context(ctx).Do()
@@ -486,7 +486,7 @@ func (r *googleGcpReconciler) getOrCreateProjectCnrmServiceAccount(ctx context.C
 	return serviceAccount, nil
 }
 
-func (r *googleGcpReconciler) setTeamProjectBillingInfo(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, project *cloudresourcemanager.Project) error {
+func (r *googleGcpReconciler) setTeamProjectBillingInfo(ctx context.Context, project *cloudresourcemanager.Project) error {
 	info, err := r.gcpServices.CloudBillingProjectsService.GetBillingInfo(project.Name).Context(ctx).Do()
 	if err != nil {
 		return err
@@ -621,7 +621,7 @@ func (r *googleGcpReconciler) deleteDefaultVPCNetworkRules(ctx context.Context, 
 	return nil
 }
 
-func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, teamProjectId string, clusterProjectId string, log logrus.FieldLogger) error {
+func (r *googleGcpReconciler) attachProjectToSharedVPC(ctx context.Context, teamProjectId string, clusterProjectId string, log logrus.FieldLogger) error {
 	getXpnResourcesResult, err := r.gcpServices.ComputeProjectsService.GetXpnResources(clusterProjectId).Context(ctx).Do()
 	if err != nil {
 		return err
