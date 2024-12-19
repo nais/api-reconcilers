@@ -131,8 +131,8 @@ type Config struct {
 	// ClusterAlias The cluster alias for legacy migration
 	ClusterAlias map[string]string `env:"CLUSTER_ALIAS"`
 
-	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API
-	// If you later would like do enable/disable a reconciler, you can do so through the Console
+	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API.
+	// If you later would like to enable/disable a reconciler, you can do so through the Console frontend.
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
 
 	// OnpremClusters is a list of onprem clusters to connect to. This is only used by Nav.
