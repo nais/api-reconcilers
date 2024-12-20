@@ -111,9 +111,9 @@ spec:
             - name: FEATURE_CNRM_ROLE_IN_PROJECT
               value: {{ .Values.featureFlags.cnrmRoleInProject | quote }}
             {{- end }}
-            {{- if .Values.onprem.clusters }}
+            {{- if .Values.kubernetes.static }}
             - name: NAV_ONPREM_CLUSTERS
-              value: {{ .Values.onprem.clusters | quote }}
+              value: {{ .Values.kubernetes.static | quote }}
             {{- end }}
           ports:
             - name: http

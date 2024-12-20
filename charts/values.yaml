@@ -34,6 +34,10 @@ google:
   adminServiceAccountEmail: null
   adminUserEmail: null
 
+kubernetes:
+  clusters: "dev,prod"
+  static: ""
+
 gcp:
   billingAccount: # mapped in fasit
   clusters: # mapped in fasit
@@ -56,6 +60,3 @@ naisAPI:
 featureFlags:
   attachSharedVpc:
   cnrmRoleInProject:
-
-onprem:
-  clusters:

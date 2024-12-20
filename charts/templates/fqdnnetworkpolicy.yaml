@@ -15,6 +15,39 @@ spec:
         - fqdns:
             - {{ get (urlParse .Values.gitHub.authEndpoint) "host" }}
     {{- end }}
+    - ports:
+        - port: 443
+          protocol: TCP
+    - ports:
+        - port: 80
+          protocol: TCP
+      to:
+        - fqdns:
+            - metadata.google.internal
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - fqdns:
+            - private.googleapis.com
+{{- range split "," .Values.kubernetes.clusters }}
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - fqdns:
+            - "apiserver.{{ . }}.{{ $root.Values.fasit.tenant.name }}.cloud.nais.io"
+{{- end }}
+{{- if .Values.kubernetes.static }}
+{{- range split "," .Values.kubernetes.static }}
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - fqdns:
+            - {{ (split "|" .)._1  }}
+{{- end }}
+{{- end }}
   podSelector:
     matchLabels:
       {{- include "api-reconcilers.selectorLabels" . | nindent 6 }}
