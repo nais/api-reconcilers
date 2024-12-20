@@ -26,4 +26,3 @@ jobs:
           google_service_account: gh-api-reconcilers
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
-          sbom: false
