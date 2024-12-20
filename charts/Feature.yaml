@@ -57,7 +57,7 @@ values:
 
   gitHub.authEndpoint:
     displayName: GitHub auth endpoint
-    description: The endpoint for the token service that provisions teams-backend with GitHub installation tokens for the correct tenant organization.
+    description: The endpoint for the token service that provisions GitHub installation tokens for the correct tenant organization.
     computed:
       template: |
         {{ .Env.teams_github_auth_endpoint | quote }}
