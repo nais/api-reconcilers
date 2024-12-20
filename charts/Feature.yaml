@@ -80,7 +80,7 @@ values:
     description: The email address of the service account that is used when using the Google APIs
     computed:
       template: |
-        {{ .Env.teams_google_service_account_email | quote }}
+        {{ .Env.nais_api_reconcilers_serviceaccount_email | quote }}
 
   google.adminServiceAccountEmail:
     displayName: Email address of the Google Workspace Admin service account
