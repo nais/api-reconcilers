@@ -16,9 +16,6 @@ spec:
             - {{ get (urlParse .Values.gitHub.authEndpoint) "host" }}
     {{- end }}
     - ports:
-        - port: 443
-          protocol: TCP
-    - ports:
         - port: 80
           protocol: TCP
       to:
