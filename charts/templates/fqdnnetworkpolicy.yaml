@@ -30,6 +30,8 @@ spec:
       to:
         - fqdns:
             - private.googleapis.com
+
+{{- $root := . }}
 {{- range split "," .Values.kubernetes.clusters }}
     - ports:
         - port: 443
