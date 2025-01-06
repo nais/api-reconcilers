@@ -231,6 +231,7 @@ func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) {
 
 	if !m.inFlight.Set(req.TeamSlug) {
 		log.Info("already in flight - adding to back of queue")
+		time.Sleep(10 * time.Second)
 		if err := m.syncQueue.Add(req); err != nil {
 			log.WithError(err).Error("failed while re-queueing team that is in flight")
 		}
