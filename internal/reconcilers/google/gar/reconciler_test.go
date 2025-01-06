@@ -3,6 +3,7 @@ package google_gar_reconciler_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -124,13 +125,13 @@ func (m *mocks) start(t *testing.T, ctx context.Context) (*artifactregistry.Clie
 		srv := grpc.NewServer()
 		artifactregistrypb.RegisterArtifactRegistryServer(srv, m.artifactRegistry)
 		go func() {
-			if err := srv.Serve(l); err != nil {
+			if err := srv.Serve(l); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 				panic(err)
 			}
 		}()
 		t.Cleanup(func() {
 			m.artifactRegistry.assert(t)
-			srv.Stop()
+			srv.GracefulStop()
 		})
 
 		artifactRegistryClient, err = artifactregistry.NewClient(ctx,
