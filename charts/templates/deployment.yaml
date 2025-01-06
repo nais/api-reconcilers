@@ -99,7 +99,7 @@ spec:
               value: {{ .Values.dependencyTrack.username | quote }}
             # Google
             - name: GOOGLE_ADMIN_SERVICE_ACCOUNT_EMAIL
-              value: {{ .Values.google.adminServiceAccountEmail | default (printf "nais-admin@%s.iam.gserviceaccount.com" .Values.googleManagementProjectID) | quote }}
+              value: {{ .Values.google.adminServiceAccountEmail | default (printf "tenant-directory-sa@%s.iam.gserviceaccount.com" .Values.googleManagementProjectID) | quote }}
             - name: GOOGLE_ADMIN_USER_EMAIL
               value: {{ .Values.google.adminUserEmail | default (printf "nais-admin@%s" .Values.tenantDomain) | quote }}
             # Feature flags
@@ -110,6 +110,10 @@ spec:
             {{- if .Values.featureFlags.cnrmRoleInProject }}
             - name: FEATURE_CNRM_ROLE_IN_PROJECT
               value: {{ .Values.featureFlags.cnrmRoleInProject | quote }}
+            {{- end }}
+            {{- if .Values.kubernetes.static }}
+            - name: NAV_ONPREM_CLUSTERS
+              value: {{ .Values.kubernetes.static | quote }}
             {{- end }}
           ports:
             - name: http

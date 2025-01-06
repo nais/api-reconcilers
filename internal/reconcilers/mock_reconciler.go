@@ -27,7 +27,7 @@ func (_m *MockReconciler) EXPECT() *MockReconciler_Expecter {
 	return &MockReconciler_Expecter{mock: &_m.Mock}
 }
 
-// Configuration provides a mock function with given fields:
+// Configuration provides a mock function with no fields
 func (_m *MockReconciler) Configuration() *protoapi.NewReconciler {
 	ret := _m.Called()
 
@@ -123,7 +123,7 @@ func (_c *MockReconciler_Delete_Call) RunAndReturn(run func(context.Context, *ap
 	return _c
 }
 
-// Name provides a mock function with given fields:
+// Name provides a mock function with no fields
 func (_m *MockReconciler) Name() string {
 	ret := _m.Called()
 

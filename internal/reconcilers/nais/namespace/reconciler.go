@@ -3,56 +3,45 @@ package nais_namespace_reconciler
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
-	"cloud.google.com/go/pubsub"
+	cnrmbeta1 "github.com/GoogleCloudPlatform/k8s-config-connector/operator/pkg/apis/core/v1beta1"
 	"github.com/google/uuid"
-	"github.com/nais/api-reconcilers/internal/google_token_source"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/api/option"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
+	corev1Typed "k8s.io/client-go/kubernetes/typed/core/v1"
+	rbacTypedV1 "k8s.io/client-go/kubernetes/typed/rbac/v1"
 	"k8s.io/utils/ptr"
 )
 
 const reconcilerName = "nais:namespace"
 
+var ErrDeleteRequiredNamespace = fmt.Errorf("namespace is required, cannot be deleted")
+
 type OptFunc func(*naisNamespaceReconciler)
 
-func WithPubSubClient(client *pubsub.Client) OptFunc {
-	return func(r *naisNamespaceReconciler) {
-		r.pubsubClient = client
-	}
-}
-
 type naisNamespaceReconciler struct {
-	googleManagementProjectID string
-	pubsubClient              *pubsub.Client
-	tenantDomain              string
+	k8sClients kubernetes.K8sClients
 }
 
-func New(ctx context.Context, serviceAccountEmail, tenantDomain, googleManagementProjectID string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, k8sClients kubernetes.K8sClients, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	r := &naisNamespaceReconciler{
-		googleManagementProjectID: googleManagementProjectID,
-		tenantDomain:              tenantDomain,
+		k8sClients: k8sClients,
 	}
 
 	for _, opt := range opts {
 		opt(r)
-	}
-
-	if r.pubsubClient == nil {
-		ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
-		if err != nil {
-			return nil, fmt.Errorf("create token source: %w", err)
-		}
-
-		pubsubClient, err := pubsub.NewClient(ctx, googleManagementProjectID, option.WithTokenSource(ts))
-		if err == nil {
-			r.pubsubClient = pubsubClient
-		}
 	}
 
 	return r, nil
@@ -76,85 +65,320 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
-	azureGroupID := uuid.Nil
-	if naisTeam.EntraIdGroupId != nil {
-		id, err := uuid.Parse(*naisTeam.EntraIdGroupId)
-		if err != nil {
-			return fmt.Errorf("unable to parse Azure group ID: %w", err)
-		}
-		azureGroupID = id
-	}
-
-	updated, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return fmt.Errorf("unable to load state: %w", err)
-	}
-
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 	for it.Next() {
 		env := it.Value()
-		if err := r.createNamespace(ctx, naisTeam, env, azureGroupID); err != nil {
-			return fmt.Errorf("unable to create namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, "<no project ID>"), env.EnvironmentName, err)
+
+		c, exists := r.k8sClients[env.EnvironmentName]
+		if !exists {
+			log.Errorf("No Kubernetes client for environment %q", env.EnvironmentName)
+			continue
 		}
 
-		updated[env.EnvironmentName] = time.Now().Unix()
-	}
+		log = log.WithField("environment", env.EnvironmentName)
 
-	if err := r.saveState(ctx, client, naisTeam.Slug, updated); err != nil {
-		return fmt.Errorf("unable to save state: %w", err)
+		if err := r.ensureNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
+			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
+		}
+
+		if err := r.ensureServiceAccount(ctx, naisTeam, c.Clientset.CoreV1().ServiceAccounts(naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure service account in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if err := r.ensureSARolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure service account rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if !strings.HasSuffix(env.EnvironmentName, "-fss") {
+			if err := r.ensureCNRMConfig(ctx, env, c.DynamicClient.Resource(cnrmbeta1.GroupVersion.WithResource("configconnectorcontexts")).Namespace(naisTeam.Slug), log); err != nil {
+				return fmt.Errorf("ensure CNRM config in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+			}
+		} else {
+			log.Debug("Skipping CNRM config for FSS")
+		}
+
+		if err := r.ensureResourceQuota(ctx, naisTeam, c.Clientset.CoreV1().ResourceQuotas(naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure resource quota in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
 	}
 
 	return it.Err()
 }
 
+func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+	var ns *corev1.Namespace
+
+	ns, err := c.Get(ctx, naisTeam.Slug, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		ns.Name = naisTeam.Slug
+		ns, err = c.Create(ctx, ns, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating namespace: %w", err)
+		}
+		log.Debug("Created namespace")
+	} else if err != nil {
+		return fmt.Errorf("getting namespace: %w", err)
+	} else {
+		log.Debug("Namespace already exists")
+	}
+
+	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
+	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
+
+	// TODO: nuke this when legacy is dead
+	if env.EnvironmentName == "prod-gcp" || env.EnvironmentName == "dev-gcp" || env.EnvironmentName == "ci-gcp" {
+		metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "linkerd.io/inject", "enabled")
+	}
+
+	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("updating namespace: %w", err)
+	}
+
+	log.Debug("Updated namespace")
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensureServiceAccount(ctx context.Context, naisTeam *protoapi.Team, c corev1Typed.ServiceAccountInterface, log logrus.FieldLogger) error {
+	name := fmt.Sprintf("serviceuser-%s", naisTeam.Slug)
+	log = log.WithField("sa_name", name)
+	sa, err := c.Get(ctx, name, metav1.GetOptions{})
+
+	if errors.IsNotFound(err) {
+		sa.Name = name
+		_, err = c.Create(ctx, sa, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating service account: %w", err)
+		}
+		log.Debugf("Created service account")
+	} else if err != nil {
+		return fmt.Errorf("getting service account: %w", err)
+	} else {
+		log.Debugf("Service account already exists")
+	}
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
+	name := fmt.Sprintf("serviceuser-%s-naisdeveloper", naisTeam.Slug)
+	log = log.WithField("rolebinding_name", name)
+	rb, err := c.Get(ctx, name, metav1.GetOptions{})
+
+	rb.RoleRef = v1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     "nais:developer",
+	}
+
+	rb.Subjects = []v1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      fmt.Sprintf("serviceuser-%s", naisTeam.Slug),
+			Namespace: naisTeam.Slug,
+		},
+	}
+
+	if errors.IsNotFound(err) {
+		rb.Name = name
+		_, err = c.Create(ctx, rb, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating rolebinding %q: %w", name, err)
+		}
+		log.Debugf("Created rolebinding")
+	} else if err != nil {
+		return fmt.Errorf("getting rolebinding %q: %w", name, err)
+	} else {
+		log.Debugf("Rolebinding already exists")
+		_, err := c.Update(ctx, rb, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("updating rolebinding: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
+	name := fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug)
+	log = log.WithField("rolebinding_name", name)
+	rb, err := c.Get(ctx, name, metav1.GetOptions{})
+
+	rb.RoleRef = v1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     "nais:developer",
+	}
+
+	rb.Subjects = []v1.Subject{
+		{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Group",
+			Name:     *naisTeam.GoogleGroupEmail,
+		},
+	}
+
+	if naisTeam.EntraIdGroupId != nil {
+		id, err := uuid.Parse(*naisTeam.EntraIdGroupId)
+		if err != nil {
+			return fmt.Errorf("unable to parse Azure group ID: %w", err)
+		}
+		rb.Subjects = append(rb.Subjects, v1.Subject{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Group",
+			Name:     id.String(),
+		})
+	}
+
+	if errors.IsNotFound(err) {
+		rb.Name = name
+		_, err = c.Create(ctx, rb, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating rolebinding %q: %w", name, err)
+		}
+		log.Debugf("Created rolebinding")
+	} else if err != nil {
+		return fmt.Errorf("getting rolebinding: %w", err)
+	} else {
+		log.Debugf("Rolebinding already exists")
+		_, err := c.Update(ctx, rb, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("updating rolebinding %q: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensureCNRMConfig(ctx context.Context, env *protoapi.TeamEnvironment, c dynamic.ResourceInterface, log logrus.FieldLogger) error {
+	if env.GcpProjectId == nil {
+		log.Error("Skipping creation of CNRM config, GCP project ID is missing")
+		return nil
+	}
+
+	const name = "configconnectorcontext.core.cnrm.cloud.google.com"
+
+	existing, err := c.Get(ctx, name, metav1.GetOptions{})
+
+	ccc := map[string]any{
+		"apiVersion": "core.cnrm.cloud.google.com/v1beta1",
+		"kind":       "ConfigConnectorContext",
+		"metadata": map[string]any{
+			"name": name,
+		},
+		"spec": map[string]any{
+			"googleServiceAccount": fmt.Sprintf("nais-sa-cnrm@%s.iam.gserviceaccount.com", *env.GcpProjectId),
+		},
+	}
+
+	if errors.IsNotFound(err) {
+		cctx := &unstructured.Unstructured{
+			Object: ccc,
+		}
+		_, err = c.Create(ctx, cctx, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating CNRM config: %w", err)
+		}
+		log.Debug("Created CNRM config")
+	} else if err != nil {
+		return fmt.Errorf("getting CNRM config: %w", err)
+	} else {
+		log.Debug("CNRM config already exists")
+		existing.Object["spec"] = ccc["spec"]
+		_, err := c.Update(ctx, existing, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("updating CNRM config: %w", err)
+		}
+		log.Debug("Updated CNRM config")
+	}
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensureResourceQuota(ctx context.Context, naisTeam *protoapi.Team, c corev1Typed.ResourceQuotaInterface, log logrus.FieldLogger) error {
+	const quotaName = "nais-quota"
+
+	_, err := c.Get(ctx, quotaName, metav1.GetOptions{})
+
+	if errors.IsNotFound(err) {
+		quota := &corev1.ResourceQuota{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      quotaName,
+				Namespace: naisTeam.Slug,
+			},
+			Spec: corev1.ResourceQuotaSpec{
+				Hard: corev1.ResourceList{
+					corev1.ResourcePods: resource.MustParse("200"),
+				},
+			},
+		}
+
+		_, err := c.Create(ctx, quota, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating resource quota: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("getting resource quota: %w", err)
+	} else {
+		log.Debug("Resource quota already exists, skipping")
+	}
+
+	return nil
+}
+
 func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	var errors []error
+	log = log.WithField("namespace", naisTeam.Slug)
+
+	switch naisTeam.Slug {
+	case "nais-system",
+		"kube-system",
+		"default",
+		"kube-public":
+		log.Warn("Namespace is not allowed to be deleted")
+		return ErrDeleteRequiredNamespace
+	}
+
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 	for it.Next() {
 		env := it.Value()
-		if err := r.deleteNamespace(ctx, naisTeam.Slug, env.EnvironmentName); err != nil {
-			log.WithError(err).Errorf("delete namespace")
-			errors = append(errors, err)
+		log = log.WithField("environment", env.EnvironmentName)
+
+		c, exists := r.k8sClients[env.EnvironmentName]
+		if !exists {
+			log.Errorf("No Kubernetes client for environment")
+			continue
 		}
+
+		err := r.deleteNamespace(ctx, naisTeam, c.Clientset.CoreV1().Namespaces(), log)
+		if err != nil {
+			log.WithError(err).Errorf("deleting namespace")
+			continue
+		}
+		log.Debugf("Deleted namespace")
 	}
 
-	if len(errors) == 0 {
-		return nil
-	}
-
-	return fmt.Errorf("%d errors occured during namespace deletion", len(errors))
+	return nil
 }
 
-func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, teamSlug, environment string) error {
-	payload, err := deleteNamespacePayload(teamSlug)
+func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, naisTeam *protoapi.Team, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+	err := c.Delete(ctx, naisTeam.Slug, metav1.DeleteOptions{})
 	if err != nil {
+		if errors.IsNotFound(err) {
+			log.WithField("namespace", naisTeam.Slug).Errorf("Namespace not found")
+			return nil
+		}
 		return err
 	}
 
-	return r.publishMessage(ctx, environment, payload)
-}
-
-func (r *naisNamespaceReconciler) createNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, azureGroupID uuid.UUID) error {
-	payload, err := createNamespacePayload(naisTeam, env, azureGroupID)
-	if err != nil {
-		return err
-	}
-
-	return r.publishMessage(ctx, env.EnvironmentName, payload)
-}
-
-func (r *naisNamespaceReconciler) publishMessage(ctx context.Context, env string, payload []byte) error {
-	topicName := naisdTopicPrefix + env
-	msg := &pubsub.Message{Data: payload}
-	topic := r.pubsubClient.Topic(topicName)
-	future := topic.Publish(ctx, msg)
-	<-future.Ready()
-	_, err := future.Get(ctx)
-	topic.Stop()
-
-	return err
+	return nil
 }
