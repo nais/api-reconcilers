@@ -14,8 +14,8 @@ type clients struct {
 	DynamicClient dynamic.Interface
 }
 
-func Clients(tenantName string, clusters []string, onpremClusters []OnpremCluster) (K8sClients, error) {
-	clusterConfig, err := getClusterConfigMap(tenantName, clusters, onpremClusters)
+func Clients(tenantName string, clusters []string, onpremClusters []OnpremCluster, clusterAliases map[string]string) (K8sClients, error) {
+	clusterConfig, err := getClusterConfigMap(tenantName, clusters, onpremClusters, clusterAliases)
 	if err != nil {
 		return nil, fmt.Errorf("creating cluster config map: %w", err)
 	}

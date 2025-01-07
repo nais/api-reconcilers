@@ -56,12 +56,19 @@ func (c *OnpremCluster) EnvDecode(value string) error {
 
 type clusterConfigMap map[string]*rest.Config
 
-func getClusterConfigMap(tenant string, clusters []string, onpremClusters []OnpremCluster) (clusterConfigMap, error) {
+func getClusterConfigMap(tenant string, clusters []string, onpremClusters []OnpremCluster, clusterAliases map[string]string) (clusterConfigMap, error) {
 	configs := clusterConfigMap{}
 
 	for _, cluster := range clusters {
+		domain := cluster
+		for alias, target := range clusterAliases { // TODO: remove this when legacy migration is done
+			if cluster == target {
+				domain = alias
+				break
+			}
+		}
 		configs[cluster] = &rest.Config{
-			Host: fmt.Sprintf("https://apiserver.%s.%s.cloud.nais.io", cluster, tenant),
+			Host: fmt.Sprintf("https://apiserver.%s.%s.cloud.nais.io", domain, tenant),
 			AuthProvider: &api.AuthProviderConfig{
 				Name: googleAuthPlugin,
 			},

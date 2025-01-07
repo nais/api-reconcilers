@@ -144,7 +144,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created Google GAR reconciler")
 
-	k8sClients, err := kubernetes.Clients(cfg.TenantName, slices.Sorted(maps.Keys(cfg.GCP.Clusters)), cfg.OnpremClusters)
+	k8sClients, err := kubernetes.Clients(cfg.TenantName, slices.Sorted(maps.Keys(cfg.GCP.Clusters)), cfg.OnpremClusters, cfg.ClusterAlias)
 	if err != nil {
 		return fmt.Errorf("error when creating Kubernetes clients: %w", err)
 	}
