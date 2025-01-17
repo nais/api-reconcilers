@@ -5,7 +5,7 @@ metadata:
   labels:
     {{- include "api-reconcilers.labels" . | nindent 4 }}
 spec:
-  endpoints:
+  podMetricsEndpoints:
   - interval: 1m
     port: http
     scrapeTimeout: 10s
