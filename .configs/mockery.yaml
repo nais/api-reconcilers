@@ -1,5 +1,6 @@
 with-expecter: true
 disable-version-string: true
+resolve-type-alias: false
 inpackage: true
 dir: "{{.InterfaceDir}}"
 filename: "mock_{{.InterfaceNameSnake}}.go"
