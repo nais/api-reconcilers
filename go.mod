@@ -17,7 +17,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240826142251-d1c93bae4198
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api/pkg/apiclient v0.0.0-20250128112457-36d7c801af54
+	github.com/nais/api/pkg/apiclient v0.0.0-20250203125351-77dc0579837a
 	github.com/nais/dependencytrack v0.0.0-20250128102604-08ebb70e6053
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sethvargo/go-envconfig v1.1.0
@@ -36,9 +36,9 @@ require (
 	golang.org/x/oauth2 v0.24.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/api v0.203.0
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20241209162323-e6fa225c2576
-	google.golang.org/grpc v1.68.1
-	google.golang.org/protobuf v1.35.2
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287
+	google.golang.org/grpc v1.70.0
+	google.golang.org/protobuf v1.36.4
 	k8s.io/api v0.31.4
 	k8s.io/apimachinery v0.31.4
 	k8s.io/client-go v0.31.4
@@ -145,7 +145,7 @@ require (
 	golang.org/x/time v0.7.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	google.golang.org/genproto v0.0.0-20241015192408-796eee8c2d53 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20241007155032-5fefd90f89a9 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20241202173237-19429a94021a // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
