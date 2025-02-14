@@ -11,9 +11,6 @@ import (
 type FeatureFlags struct {
 	// AttachSharedVpc enables the shared vpc feature
 	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
-
-	// CnrmRoleInProject enables the CNRM role in project feature
-	CnrmRoleInProject bool `env:"FEATURE_CNRM_ROLE_IN_PROJECT"`
 }
 
 type Config struct {
@@ -43,12 +40,6 @@ type Config struct {
 
 		// Clusters A JSON-encoded value describing the GCP clusters to use. Refer to the README for the format.
 		Clusters gcp.Clusters `env:"GCP_CLUSTERS"`
-
-		// CnrmRole The name of the custom CNRM role that is used when creating role bindings for the GCP projects of each
-		// team. The value must also contain the organization ID.
-		//
-		// Example: `organizations/<org_id>/roles/CustomCNRMRole`, where `<org_id>` is a numeric ID.
-		CnrmRole string `env:"GCP_CNRM_ROLE"`
 
 		// ServiceAccountEmail The email address to impersonate when using Google APIs
 		ServiceAccountEmail string `env:"GCP_SERVICE_ACCOUNT_EMAIL"`

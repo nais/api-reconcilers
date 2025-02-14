@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
-
 	"github.com/nais/api-reconcilers/internal/gcp"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	"github.com/nais/api-reconcilers/internal/test"
@@ -33,7 +32,6 @@ const (
 	clusterProjectID = "some-project-123"
 	tenantName       = "example"
 	tenantDomain     = "example.com"
-	cnrmRoleName     = "organizations/123/roles/name"
 	billingAccount   = "billingAccounts/123"
 	numberOfAPIs     = 14
 
@@ -70,7 +68,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -84,7 +82,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -98,7 +96,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_gcp_reconciler.New(ctx, gcp.Clusters{}, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
+		reconcilers, err := google_gcp_reconciler.New(ctx, gcp.Clusters{}, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -121,8 +119,7 @@ func TestReconcile(t *testing.T) {
 		expectedRoleId := "CustomCNRMRole"
 		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedRoleId
 		flags := config.FeatureFlags{
-			AttachSharedVpc:   true,
-			CnrmRoleInProject: true,
+			AttachSharedVpc: true,
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -513,7 +510,7 @@ func TestReconcile(t *testing.T) {
 			ProjectsRolesService:                  iamService.Projects.Roles,
 		}
 
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, flags, google_gcp_reconciler.WithGcpServices(gcpServices))
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, flags, google_gcp_reconciler.WithGcpServices(gcpServices))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -533,7 +530,7 @@ func TestDelete(t *testing.T) {
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(nil, fmt.Errorf("some error")).
 			Once()
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -557,7 +554,7 @@ func TestDelete(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, cnrmRoleName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, tenantName, billingAccount, aliasList, config.FeatureFlags{}, google_gcp_reconciler.WithGcpServices(&google_gcp_reconciler.GcpServices{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

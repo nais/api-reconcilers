@@ -86,8 +86,6 @@ spec:
               value: {{ .Values.gcp.billingAccount | quote }}
             - name: GCP_CLUSTERS
               value: {{ .Values.gcp.clusters | quote }}
-            - name: GCP_CNRM_ROLE
-              value: {{ .Values.gcp.cnrmRole | quote }}
             - name: GCP_WORKLOAD_IDENTITY_POOL_NAME
               value: {{ .Values.gcp.workloadIdentityPoolName | quote }}
             - name: GCP_SERVICE_ACCOUNT_EMAIL
@@ -106,10 +104,6 @@ spec:
             {{- if .Values.featureFlags.attachSharedVpc }}
             - name: FEATURE_ATTACH_SHARED_VPC
               value: {{ .Values.featureFlags.attachSharedVpc | quote }}
-            {{- end }}
-            {{- if .Values.featureFlags.cnrmRoleInProject }}
-            - name: FEATURE_CNRM_ROLE_IN_PROJECT
-              value: {{ .Values.featureFlags.cnrmRoleInProject | quote }}
             {{- end }}
             {{- if .Values.kubernetes.static }}
             - name: NAV_ONPREM_CLUSTERS

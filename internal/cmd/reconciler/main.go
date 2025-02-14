@@ -132,7 +132,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created NAIS deploy reconciler")
 
-	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.CnrmRole, cfg.GCP.BillingAccount, cfg.ClusterAlias, cfg.FeatureFlags)
+	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.BillingAccount, cfg.ClusterAlias, cfg.FeatureFlags)
 	if err != nil {
 		return fmt.Errorf("error when creating Google GCP reconciler: %w", err)
 	}

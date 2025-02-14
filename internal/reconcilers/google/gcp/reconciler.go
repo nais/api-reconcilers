@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
-
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -55,7 +54,6 @@ type GcpServices struct {
 type googleGcpReconciler struct {
 	billingAccount string
 	clusters       gcp.Clusters
-	cnrmRoleName   string
 	gcpServices    *GcpServices
 	tenantDomain   string
 	tenantName     string
@@ -71,14 +69,13 @@ func WithGcpServices(gcpServices *GcpServices) OptFunc {
 	}
 }
 
-func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, cnrmRoleName, billingAccount string, clusterAlias map[string]string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, clusters gcp.Clusters, serviceAccountEmail, tenantDomain, tenantName, billingAccount string, clusterAlias map[string]string, flags config.FeatureFlags, opts ...OptFunc) (reconcilers.Reconciler, error) {
 	if clusterAlias == nil {
 		clusterAlias = make(map[string]string)
 	}
 	r := &googleGcpReconciler{
 		billingAccount: billingAccount,
 		clusters:       clusters,
-		cnrmRoleName:   cnrmRoleName,
 		tenantDomain:   tenantDomain,
 		tenantName:     tenantName,
 		flags:          flags,
@@ -189,14 +186,11 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("create CNRM service account for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		cnrmRoleName := r.cnrmRoleName
-		if r.flags.CnrmRoleInProject {
-			role, err := r.createCNRMRole(ctx, client, naisTeam.Slug, teamProject.ProjectId)
-			if err != nil {
-				return fmt.Errorf("create CNRM role for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
-			}
-			cnrmRoleName = role.Name
+		role, err := r.createCNRMRole(ctx, teamProject.ProjectId)
+		if err != nil {
+			return fmt.Errorf("create CNRM role for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
+		cnrmRoleName := role.Name
 
 		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRoleName); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)

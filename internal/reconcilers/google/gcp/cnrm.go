@@ -5,18 +5,16 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/nais/api/pkg/apiclient"
 	"google.golang.org/api/iam/v1"
 )
 
 const CNRMRoleId = "CustomCNRMRole"
 
-func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, client *apiclient.APIClient, teamSlug string, projectId string) (*iam.Role, error) {
+func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId string) (*iam.Role, error) {
 	parent := fmt.Sprintf("projects/%s", projectId)
 	name := fmt.Sprintf("projects/%s/roles/%s", projectId, CNRMRoleId)
 	existingRole, _ := r.gcpServices.ProjectsRolesService.Get(name).Context(ctx).Do()
 
-	// Create a new role
 	role := &iam.Role{
 		Title:       "NAIS Custom CNRM Role",
 		Description: "Custom role for namespaced CNRM users to allow creation of GCP resources",

@@ -21,11 +21,6 @@ values:
     config:
       type: bool
 
-  featureFlags.cnrmRoleInProject:
-    displayName: CNRM Role in team project
-    config:
-      type: bool
-
   googleManagementProjectID:
     displayName: Google management project ID
     computed:
@@ -132,11 +127,6 @@ values:
         {{ end }}
     config:
       type: string
-
-  gcp.cnrmRole:
-    displayName: CNRM role string
-    computed:
-      template: '"organizations/{{ .Env.org_id }}/roles/{{ .Env.cnrm_role }}"'
 
   gcp.workloadIdentityPoolName:
     displayName: Google workload identity pool name
