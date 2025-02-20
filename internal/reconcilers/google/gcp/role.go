@@ -50,7 +50,6 @@ func (r *googleGcpReconciler) createTeamRole(ctx context.Context, projectId stri
 			"cloudsql.users.list",
 			"cloudsql.users.update",
 			"resourcemanager.projects.get",
-			"resourcemanager.projects.list",
 			"resourcemanager.projects.getIamPolicy",
 			"storage.buckets.get",
 			"storage.buckets.getIamPolicy",

@@ -329,7 +329,7 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("expected role id %q, got %q", expectedTeamRoleId, payload.RoleId)
 				}
 
-				if expected := 32; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
+				if expected := 31; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
 					t.Errorf("expected %d permissions, got %d", expected, len(payload.Role.IncludedPermissions))
 				}
 
