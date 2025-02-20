@@ -9,9 +9,6 @@ packages:
   github.com/nais/api-reconcilers/internal/azureclient:
     interfaces:
       Client:
-  github.com/nais/api-reconcilers/internal/logger:
-    interfaces:
-      Logger:
   github.com/nais/api-reconcilers/internal/reconcilers:
     interfaces:
       Reconciler:
