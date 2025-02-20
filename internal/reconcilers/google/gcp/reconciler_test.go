@@ -116,8 +116,10 @@ func TestReconcile(t *testing.T) {
 			},
 		}
 		expectedTeamProjectID := "slug-prod-ea99"
-		expectedRoleId := "CustomCNRMRole"
-		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedRoleId
+		expectedCNRMRoleId := "CustomCNRMRole"
+		expectedTeamRoleId := "CustomTeamRole"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedCNRMRoleId
+		expectedTeamRoleName := "projects/slug-prod-ea99/roles/" + expectedTeamRoleId
 		flags := config.FeatureFlags{
 			AttachSharedVpc: true,
 		}
@@ -292,8 +294,8 @@ func TestReconcile(t *testing.T) {
 				payload := iam.CreateRoleRequest{}
 				_ = json.NewDecoder(r.Body).Decode(&payload)
 
-				if payload.RoleId != expectedRoleId {
-					t.Errorf("expected role id %q, got %q", expectedRoleId, payload.RoleId)
+				if payload.RoleId != expectedCNRMRoleId {
+					t.Errorf("expected role id %q, got %q", expectedCNRMRoleId, payload.RoleId)
 				}
 
 				if expected := 35; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
@@ -301,6 +303,37 @@ func TestReconcile(t *testing.T) {
 				}
 
 				payload.Role.Name = expectedCnrmRoleName
+
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+
+			// get existing custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet {
+					t.Errorf("expected HTTP GET, got: %q", r.Method)
+				}
+				w.WriteHeader(404)
+			},
+
+			// create custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("expected HTTP POST, got: %q", r.Method)
+				}
+
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				if payload.RoleId != expectedTeamRoleId {
+					t.Errorf("expected role id %q, got %q", expectedTeamRoleId, payload.RoleId)
+				}
+
+				if expected := 32; payload.Role.IncludedPermissions != nil && len(payload.Role.IncludedPermissions) != expected {
+					t.Errorf("expected %d permissions, got %d", expected, len(payload.Role.IncludedPermissions))
+				}
+
+				payload.Role.Name = expectedTeamRoleName
 
 				resp, _ := payload.Role.MarshalJSON()
 				_, _ = w.Write(resp)
@@ -347,6 +380,7 @@ func TestReconcile(t *testing.T) {
 				expectedBindings := map[string]string{
 					payload.Policy.Bindings[0].Role: payload.Policy.Bindings[0].Members[0],
 					payload.Policy.Bindings[1].Role: payload.Policy.Bindings[1].Members[0],
+					payload.Policy.Bindings[2].Role: payload.Policy.Bindings[2].Members[0],
 				}
 
 				if expectedBindings["roles/owner"] != "group:slug@example.com" {

@@ -441,8 +441,8 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 
 	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
 		"roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
-		teamRoleName:  {"group:" + *naisTeam.GoogleGroupEmail},
 		cnrmRoleName:  {"serviceAccount:" + cnrmServiceAccount.Email},
+		teamRoleName:  {"group:" + *naisTeam.GoogleGroupEmail},
 	})
 
 	if !updated {
