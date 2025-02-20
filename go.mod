@@ -4,6 +4,7 @@ go 1.24
 
 tool (
 	github.com/vektra/mockery/v2
+	golang.org/x/tools/cmd/deadcode
 	golang.org/x/vuln/cmd/govulncheck
 	honnef.co/go/tools/cmd/staticcheck
 	mvdan.cc/gofumpt
