@@ -16,7 +16,7 @@ local:
 	go run ./cmd/api-reconcilers
 
 test:
-	go test ./...
+	go test -cover -race ./...
 
 check: staticcheck vulncheck deadcode gosec
 
