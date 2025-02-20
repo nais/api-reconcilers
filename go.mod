@@ -1,6 +1,6 @@
 module github.com/nais/api-reconcilers
 
-go 1.23.5
+go 1.24
 
 require (
 	cloud.google.com/go/artifactregistry v1.15.1
