@@ -2,7 +2,10 @@ module github.com/nais/api-reconcilers
 
 go 1.24
 
-tool github.com/vektra/mockery/v2
+tool (
+	github.com/vektra/mockery/v2
+	mvdan.cc/gofumpt
+)
 
 require (
 	cloud.google.com/go/artifactregistry v1.16.0
@@ -166,6 +169,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.27.9 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
+	mvdan.cc/gofumpt v0.7.0 // indirect
 	sigs.k8s.io/controller-runtime v0.15.2 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kubebuilder-declarative-pattern v0.15.0-beta.2 // indirect

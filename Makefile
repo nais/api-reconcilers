@@ -7,7 +7,7 @@ generate: generate-mocks
 generate-mocks:
 	find internal -type f -name "mock_*.go" -delete
 	go tool github.com/vektra/mockery/v2 --config ./.configs/mockery.yaml
-	find internal -type f -name "mock_*.go" -exec go run mvdan.cc/gofumpt@latest -w {} \;
+	find internal -type f -name "mock_*.go" -exec go tool mvdan.cc/gofumpt -w {} \;
 
 build:
 	go build -o bin/api-reconcilers ./cmd/api-reconcilers
@@ -33,7 +33,7 @@ gosec:
 	go run github.com/securego/gosec/v2/cmd/gosec@latest --exclude-generated -terse ./...
 
 fmt:
-	go run mvdan.cc/gofumpt@latest -w ./
+	go tool mvdan.cc/gofumpt -w ./
 
 helm-lint:
 	helm lint --strict ./charts
