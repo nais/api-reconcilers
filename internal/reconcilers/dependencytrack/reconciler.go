@@ -69,7 +69,7 @@ func (r *reconciler) Reconcile(ctx context.Context, client *apiclient.APIClient,
 		return err
 	}
 
-	teamId, err := r.syncTeamAndUsers(ctx, client, naisTeam.Slug, teamMembers, st, log)
+	teamId, err := r.syncTeamAndUsers(ctx, naisTeam.Slug, teamMembers, st, log)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (r *reconciler) Reconcile(ctx context.Context, client *apiclient.APIClient,
 	return nil
 }
 
-func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, _ logrus.FieldLogger) error {
 	s, err := r.loadState(ctx, client, naisTeam.Slug)
 	if err != nil {
 		return err
@@ -109,7 +109,7 @@ func (r *reconciler) Delete(ctx context.Context, client *apiclient.APIClient, na
 	return nil
 }
 
-func (r *reconciler) syncTeamAndUsers(ctx context.Context, client *apiclient.APIClient, teamSlug string, naisTeamMembers []*protoapi.TeamMember, st *DependencyTrackState, log logrus.FieldLogger) (string, error) {
+func (r *reconciler) syncTeamAndUsers(ctx context.Context, teamSlug string, naisTeamMembers []*protoapi.TeamMember, st *DependencyTrackState, log logrus.FieldLogger) (string, error) {
 	if st != nil && st.TeamID != "" {
 		log.Debugf("team has existing state")
 		for _, member := range naisTeamMembers {
