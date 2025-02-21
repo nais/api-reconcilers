@@ -13,7 +13,7 @@ tool (
 
 require (
 	cloud.google.com/go/artifactregistry v1.16.1
-	cloud.google.com/go/compute v1.33.0
+	cloud.google.com/go/compute v1.34.0
 	cloud.google.com/go/iam v1.4.0
 	cloud.google.com/go/longrunning v0.6.4
 	cloud.google.com/go/pubsub v1.47.0
@@ -26,8 +26,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20250108132429-8d7e1f158f65
 	github.com/joho/godotenv v1.5.1
-	github.com/nais/api/pkg/apiclient v0.0.0-20250219141540-fbee4ec8f861
-	github.com/nais/dependencytrack v0.0.0-20250217044741-3c6163f449e4
+	github.com/nais/api/pkg/apiclient v0.0.0-20250221105029-b00d09b3cc62
+	github.com/nais/dependencytrack v0.0.0-20250221091259-2b1c339bdac9
 	github.com/prometheus/client_golang v1.21.0
 	github.com/sethvargo/go-envconfig v1.1.1
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
@@ -162,11 +162,11 @@ require (
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
-	golang.org/x/exp/typeparams v0.0.0-20240506185415-9bf2ced13842 // indirect
+	golang.org/x/exp/typeparams v0.0.0-20250218142911-aa4b98e5adaa // indirect
 	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/telemetry v0.0.0-20240522233618-39ace7a40ae7 // indirect
+	golang.org/x/telemetry v0.0.0-20250220152412-165e2f84edbc // indirect
 	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
