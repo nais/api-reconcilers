@@ -16,7 +16,8 @@ So ensure that you configure and provide a proper environment for the reconciler
 You may use the example configuration file to skip the boring process of figuring it out:
 
 ```shell
-cp .env.example .env
+mise install         # Install required dependencies
+cp .env.example .env # Copy the example configuration file
 ```
 
 To run the reconciler locally, you can use the following command:
