@@ -1,3 +1,6 @@
+[settings]
+pin = true
+
 [tools]
 go = "1.24.0"
 helm = "3.17.1"
