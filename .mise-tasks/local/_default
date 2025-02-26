@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+#MISE description="Start local development server"
+#MISE sources=["**/*.go"]
+
+set -e
+
+go run ./cmd/api-reconcilers
