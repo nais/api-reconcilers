@@ -22,3 +22,4 @@
 /local/
 .envrc
 .air.toml
+hack/coverprofile.txt
