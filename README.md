@@ -6,7 +6,10 @@ The main purpose is to create team resources, permissions and maintain them.
 
 ## Local development
 
-[nais/api](https://github.com/nais/api) is a dependency for this project.
+[nais/api](https://github.com/nais/api) is a dependency for this project, and you will need to
+have [mise](https://mise.jdx.dev/) installed
+on your system.
+
 To run the reconciler locally, you need to have the nais/api project cloned and running.
 See the [nais/api README](https://github.com/nais/api?tab=readme-ov-file#local-development) for more information.
 
@@ -23,13 +26,13 @@ cp .env.example .env # Copy the example configuration file
 To run the reconciler locally, you can use the following command:
 
 ```shell
-make local
+mise run local
 ```
 
 This will build the reconciler and run it locally.
 It sets an environment variable to communicate with the nais/api project running locally.
 
-Run `make test` to run the tests.
+Run `mise run test` to run the tests.
 
 ### Local kind cluster setup (only relevant if doing stuff against Kubernetes, e.g. the namespace reconciler)
 
