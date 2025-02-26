@@ -1,5 +1,6 @@
 [settings]
 pin = true
+task_output = "prefix"
 
 [tools]
 go = "1.24.0"
