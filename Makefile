@@ -1,39 +1,37 @@
 .PHONY: all local
 
-all: generate test check fmt build helm-lint
+all:
+	mise run all
 
-generate: generate-mocks
-
-generate-mocks:
-	find internal -type f -name "mock_*.go" -delete
-	go tool github.com/vektra/mockery/v2 --config ./.configs/mockery.yaml
-	find internal -type f -name "mock_*.go" -exec go tool mvdan.cc/gofumpt -w {} \;
+generate:
+	mise run generate
 
 build:
-	go build -o bin/api-reconcilers ./cmd/api-reconcilers
+	mise run build
 
 local:
-	go run ./cmd/api-reconcilers
+	mise run local
 
 test:
-	go test -cover -race ./...
+	mise run test
 
-check: staticcheck vulncheck deadcode gosec
+check:
+	mise run check
 
 staticcheck:
-	go tool honnef.co/go/tools/cmd/staticcheck ./...
+	mise run check:staticcheck
 
 vulncheck:
-	go tool golang.org/x/vuln/cmd/govulncheck ./...
+	mise run check:vulncheck
 
 deadcode:
-	go tool golang.org/x/tools/cmd/deadcode -test ./...
+	mise run check:deadcode
 
 gosec:
-	go tool github.com/securego/gosec/v2/cmd/gosec --exclude-generated -terse ./...
+	mise run check:gosec
 
 fmt:
-	go tool mvdan.cc/gofumpt -w ./
+	mise run fmt
 
 helm-lint:
-	helm lint --strict ./charts
+	mise run check:helm-lint
