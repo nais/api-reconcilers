@@ -131,11 +131,7 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
-
-	// TODO: nuke this when legacy is dead
-	if env.EnvironmentName == "prod-gcp" || env.EnvironmentName == "dev-gcp" || env.EnvironmentName == "ci-gcp" {
-		metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "linkerd.io/inject", "enabled")
-	}
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
 	if err != nil {
