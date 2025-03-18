@@ -108,23 +108,14 @@ values:
       type: string
     computed:
       template: |
-        {{ if (eq .Tenant.Name "nav") }}
-        {{- $tenantEnvs := filter "kind" "legacy" .Envs -}}
-        {{ eachOf $tenantEnvs "name" | sortAlpha | join "," }}
-        {{ else }}
         {{- $tenantEnvs := filter "kind" "tenant" .Envs -}}
         {{ eachOf $tenantEnvs "name" | sortAlpha | join "," }}
-        {{ end }}
 
   gcp.clusters:
     displayName: Cluster information
     computed:
       template: |
-        {{ if (eq .Tenant.Name "nav") }}
-        {{ filter "kind" "legacy" .Envs | environmentsAsMap "teams_folder_id,project_id" | toJSON | quote }}
-        {{ else }}
         {{ filter "kind" "tenant" .Envs | environmentsAsMap "teams_folder_id,project_id" | toJSON | quote }}
-        {{ end }}
     config:
       type: string
 
