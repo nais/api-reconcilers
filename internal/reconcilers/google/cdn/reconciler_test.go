@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	cloudcompute "cloud.google.com/go/compute/apiv1"
+	computev1 "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
-	google_cdn_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
+	cdnreconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
@@ -27,7 +27,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
-	storageold "google.golang.org/api/storage/v1"
+	storagev1 "google.golang.org/api/storage/v1"
 	"k8s.io/utils/ptr"
 )
 
@@ -39,7 +39,7 @@ type mocks struct {
 	urlMap        *httptest.Server
 }
 
-func (m *mocks) start(t *testing.T, ctx context.Context) *google_cdn_reconciler.Services {
+func (m *mocks) start(t *testing.T, ctx context.Context) *cdnreconciler.Services {
 	t.Helper()
 
 	var iamService *iam.Service
@@ -60,10 +60,10 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *google_cdn_reconciler.
 		}
 	}
 
-	var backendBucketService *cloudcompute.BackendBucketsClient
+	var backendBucketService *computev1.BackendBucketsClient
 	if m.backendbucket != nil {
 		var err error
-		backendBucketService, err = cloudcompute.NewBackendBucketsRESTClient(ctx, option.WithoutAuthentication(), option.WithEndpoint(m.backendbucket.URL))
+		backendBucketService, err = computev1.NewBackendBucketsRESTClient(ctx, option.WithoutAuthentication(), option.WithEndpoint(m.backendbucket.URL))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -91,7 +91,7 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *google_cdn_reconciler.
 		urlMapService = computeService.UrlMaps
 	}
 
-	return &google_cdn_reconciler.Services{
+	return &cdnreconciler.Services{
 		BackendBuckets:               backendBucketService,
 		CloudResourceManagerProjects: projectService,
 		Iam:                          iamService,
@@ -133,7 +133,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
-		reconcilers, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
+		reconcilers, err := cdnreconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, cdnreconciler.WithGcpServices(&cdnreconciler.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -153,7 +153,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.ListAuthorizedRepositoriesResponse{GithubRepositories: make([]string, 0)}, nil).
 			Once()
 
-		reconcilers, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(&google_cdn_reconciler.Services{}))
+		reconcilers, err := cdnreconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, cdnreconciler.WithGcpServices(&cdnreconciler.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -227,7 +227,7 @@ func TestReconcile(t *testing.T) {
 
 				// create bucket
 				func(w http.ResponseWriter, r *http.Request) {
-					var req storageold.Bucket
+					var req storagev1.Bucket
 					_ = json.NewDecoder(r.Body).Decode(&req)
 
 					if req.IamConfiguration == nil || req.IamConfiguration.UniformBucketLevelAccess == nil || !req.IamConfiguration.UniformBucketLevelAccess.Enabled {
@@ -280,18 +280,18 @@ func TestReconcile(t *testing.T) {
 
 				// get bucket iam policy
 				func(w http.ResponseWriter, r *http.Request) {
-					if err := json.NewEncoder(w).Encode(&storageold.Policy{}); err != nil {
+					if err := json.NewEncoder(w).Encode(&storagev1.Policy{}); err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
 				},
 
 				// set bucket iam policy
 				func(w http.ResponseWriter, r *http.Request) {
-					var req storageold.Policy
+					var req storagev1.Policy
 					_ = json.NewDecoder(r.Body).Decode(&req)
 
-					expectedPolicy := storageold.Policy{
-						Bindings: []*storageold.PolicyBindings{
+					expectedPolicy := storagev1.Policy{
+						Bindings: []*storagev1.PolicyBindings{
 							{
 								Members: []string{"allUsers"},
 								Role:    "roles/storage.objectViewer",
@@ -306,7 +306,7 @@ func TestReconcile(t *testing.T) {
 						},
 					}
 
-					if !slices.EqualFunc(req.Bindings, expectedPolicy.Bindings, func(a, b *storageold.PolicyBindings) bool {
+					if !slices.EqualFunc(req.Bindings, expectedPolicy.Bindings, func(a, b *storagev1.PolicyBindings) bool {
 						return a != nil && b != nil && a.Role == b.Role && slices.Equal(a.Members, b.Members)
 					}) {
 						t.Errorf("expected bindings %v, got %v", len(expectedPolicy.Bindings), len(req.Bindings))
@@ -417,7 +417,7 @@ func TestReconcile(t *testing.T) {
 			}),
 		}
 		services := mocks.start(t, ctx)
-		reconciler, err := google_cdn_reconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, google_cdn_reconciler.WithGcpServices(services))
+		reconciler, err := cdnreconciler.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, cdnreconciler.WithGcpServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -481,10 +481,18 @@ func TestDelete(t *testing.T) {
 					}
 				},
 			}),
+
 			storage: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get the bucket attrs for the bucket that should get deleted
 				func(w http.ResponseWriter, r *http.Request) {
-					if err := json.NewEncoder(w).Encode(&storageold.Bucket{}); err != nil {
+					if err := json.NewEncoder(w).Encode(&storagev1.Bucket{}); err != nil {
+						t.Fatalf("unexpected error: %v", err)
+					}
+				},
+
+				// get bucket objects to see if there is anything to delete
+				func(w http.ResponseWriter, r *http.Request) {
+					if err := json.NewEncoder(w).Encode(&storagev1.Objects{}); err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
 				},
@@ -526,6 +534,7 @@ func TestDelete(t *testing.T) {
 					w.Write(body)
 				},
 			}),
+
 			urlMap: test.HttpServerWithHandlers(t, []http.HandlerFunc{
 				// get url map
 				func(w http.ResponseWriter, r *http.Request) {
@@ -565,13 +574,13 @@ func TestDelete(t *testing.T) {
 				},
 			}),
 		}
-		reconcilers, err := google_cdn_reconciler.New(
+		reconcilers, err := cdnreconciler.New(
 			ctx,
 			serviceAccountEmail,
 			managementProjectID,
 			tenantName,
 			workloadIdentityPoolName,
-			google_cdn_reconciler.WithGcpServices(mocks.start(t, ctx)),
+			cdnreconciler.WithGcpServices(mocks.start(t, ctx)),
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

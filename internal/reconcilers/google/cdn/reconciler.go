@@ -9,12 +9,13 @@ import (
 	"strings"
 	"time"
 
-	cloudcompute "cloud.google.com/go/compute/apiv1"
+	computev1 "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"cloud.google.com/go/storage"
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/google_token_source"
-	gcpReconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	"github.com/nais/api-reconcilers/internal/reconcilers"
+	gcpreconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	str "github.com/nais/api-reconcilers/internal/strings"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
@@ -23,21 +24,20 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"k8s.io/utils/ptr"
 )
 
 const (
-	managedByLabelName    = "managed-by"
-	managedByLabelValue   = "api-reconcilers"
-	reconcilerName        = "google:gcp:cdn"
-	urlMapName            = "nais-cdn"
-	auditActionDeletedCdn = "cdn:delete-resources"
-	auditActionCreatedCdn = "cdn:provision-resources"
+	managedByLabelName  = "managed-by"
+	managedByLabelValue = "api-reconcilers"
+	reconcilerName      = "google:gcp:cdn"
+	urlMapName          = "nais-cdn"
 )
 
 type Services struct {
-	BackendBuckets               *cloudcompute.BackendBucketsClient
+	BackendBuckets               *computev1.BackendBucketsClient
 	CloudResourceManagerProjects *cloudresourcemanager.ProjectsService
 	Iam                          *iam.Service
 	Storage                      *storage.Client
@@ -63,7 +63,7 @@ func WithGcpServices(gcpServices *Services) OverrideFunc {
 	}
 }
 
-func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (*cdnReconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", googleManagementProjectID)
 	reconciler := &cdnReconciler{
 		cacheReconcilerRoleID:     roleID,
@@ -117,7 +117,7 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 		return nil, fmt.Errorf("retrieve storage client: %w", err)
 	}
 
-	backendBucketsClient, err := cloudcompute.NewBackendBucketsRESTClient(ctx, opts...)
+	backendBucketsClient, err := computev1.NewBackendBucketsRESTClient(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve backend buckets client: %w", err)
 	}
@@ -211,21 +211,47 @@ func (r *cdnReconciler) Reconcile(ctx context.Context, client *apiclient.APIClie
 	return nil
 }
 
-func (r *cdnReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+// deleteBucketObjects deletes all objects in a bucket
+func deleteBucketObjects(ctx context.Context, bucket *storage.BucketHandle, log logrus.FieldLogger) error {
+	if bucket == nil {
+		return fmt.Errorf("bucket is nil")
+	}
+
+	it := bucket.Objects(ctx, nil)
+	for {
+		attrs, err := it.Next()
+		if errors.Is(err, iterator.Done) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		if err := bucket.Object(attrs.Name).Delete(ctx); err != nil {
+			return fmt.Errorf("failed to delete object %q: %w", attrs.Name, err)
+		}
+
+		log.Infof("deleted object %q from bucket", attrs.Name)
+	}
+}
+
+func (r *cdnReconciler) Delete(ctx context.Context, _ *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	bucketName := r.bucketName(naisTeam)
 	if err := r.deleteBackendBucket(ctx, bucketName, naisTeam, log); err != nil {
 		return err
 	}
 
-	// remove bucket
-	_, err := r.services.Storage.Bucket(bucketName).Attrs(ctx)
+	bucket := r.services.Storage.Bucket(bucketName)
+	_, err := bucket.Attrs(ctx)
 	if err != nil && !errors.Is(err, storage.ErrBucketNotExist) {
 		return fmt.Errorf("get bucket: %w", err)
 	}
 
 	if err == nil {
-		err = r.services.Storage.Bucket(bucketName).Delete(ctx)
-		if err != nil {
+		if err := deleteBucketObjects(ctx, bucket, log); err != nil {
+			return err
+		}
+
+		if err := bucket.Delete(ctx); err != nil {
 			return fmt.Errorf("delete bucket: %w", err)
 		}
 		log.Infof("deleted bucket %q", bucketName)
@@ -536,7 +562,7 @@ func (r *cdnReconciler) setCacheInvalidationIamPolicy(ctx context.Context, teamE
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := gcpReconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
+	newBindings, updated := gcpreconciler.CalculateRoleBindings(projectPolicy.Bindings, map[string][]string{
 		r.cacheReconcilerRoleID: {
 			fmt.Sprintf("group:%s", teamEmail),
 			fmt.Sprintf("serviceAccount:%s", googleServiceAccount.Email),
