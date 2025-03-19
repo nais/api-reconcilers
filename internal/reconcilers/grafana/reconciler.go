@@ -135,7 +135,7 @@ func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, n
 		existingMembers[member.Email] = member.UserID
 	}
 
-	membersToRemove := make(map[int64]string, 0)
+	membersToRemove := make(map[int64]string)
 	for email, userID := range existingMembers {
 		if !grafanaMemberExistsInTeamMembers(naisTeamMembers, email) {
 			membersToRemove[userID] = email
