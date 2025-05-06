@@ -65,7 +65,18 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 		return fmt.Errorf("no Google Workspace group exists for team %q yet", naisTeam.Slug)
 	}
 
+	// Since we do not have a good way to query the GCP project for a team we are building a local cache here.
+	// This is used to label namespaces in fss clusters for use with team logs.
+	gcpProjectIdCache := map[string]*string{}
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
+	})
+	for it.Next() {
+		env := it.Value()
+		gcpProjectIdCache[env.EnvironmentName] = env.GcpProjectId
+	}
+
+	it = iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 	for it.Next() {
@@ -79,7 +90,16 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 		log = log.WithField("environment", env.EnvironmentName)
 
-		if err := r.ensureNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
+		var gcpProjectIdOverride *string
+		if env.EnvironmentName == "ci-fss" {
+			gcpProjectIdOverride = gcpProjectIdCache["ci"]
+		} else if env.EnvironmentName == "dev-fss" {
+			gcpProjectIdOverride = gcpProjectIdCache["dev"]
+		} else if env.EnvironmentName == "prod-fss" {
+			gcpProjectIdOverride = gcpProjectIdCache["prod"]
+		}
+
+		if err := r.ensureNamespace(ctx, naisTeam, env, gcpProjectIdOverride, c.Clientset.CoreV1().Namespaces(), log); err != nil {
 			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
 		}
 
@@ -111,7 +131,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	return it.Err()
 }
 
-func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, gcpProjectIdOverride *string, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
 	var ns *corev1.Namespace
 
 	ns, err := c.Get(ctx, naisTeam.Slug, metav1.GetOptions{})
@@ -132,6 +152,11 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
+
+	if gcpProjectIdOverride != nil {
+		metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(gcpProjectIdOverride, ""))
+		metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(gcpProjectIdOverride, ""))
+	}
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
 	if err != nil {
