@@ -92,11 +92,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 		var gcpProjectIdOverride *string
 		if env.EnvironmentName == "ci-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["ci"]
+			gcpProjectIdOverride = gcpProjectIdCache["ci-gcp"]
 		} else if env.EnvironmentName == "dev-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["dev"]
+			gcpProjectIdOverride = gcpProjectIdCache["dev-gcp"]
 		} else if env.EnvironmentName == "prod-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["prod"]
+			gcpProjectIdOverride = gcpProjectIdCache["prod-gcp"]
 		}
 
 		if err := r.ensureNamespace(ctx, naisTeam, env, gcpProjectIdOverride, c.Clientset.CoreV1().Namespaces(), log); err != nil {
@@ -133,6 +133,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, gcpProjectIdOverride *string, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
 	var ns *corev1.Namespace
+
+	log = log.WithField("slug", env.Slug).
+		WithField("envrionment", env.EnvironmentName).
+		WithField("gcpProjectId", env.GcpProjectId).
+		WithField("gcpProjectIdOverride", gcpProjectIdOverride)
 
 	ns, err := c.Get(ctx, naisTeam.Slug, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
