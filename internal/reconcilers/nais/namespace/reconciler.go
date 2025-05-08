@@ -103,6 +103,10 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
 		}
 
+		if err := r.ensurePgNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
+			return fmt.Errorf("ensure pg namespace for team %s in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
 		if err := r.ensureServiceAccount(ctx, naisTeam, c.Clientset.CoreV1().ServiceAccounts(naisTeam.Slug), log); err != nil {
 			return fmt.Errorf("ensure service account in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
@@ -135,7 +139,7 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	var ns *corev1.Namespace
 
 	log = log.WithField("slug", env.Slug).
-		WithField("envrionment", env.EnvironmentName).
+		WithField("environment", env.EnvironmentName).
 		WithField("gcpProjectId", env.GcpProjectId).
 		WithField("gcpProjectIdOverride", gcpProjectIdOverride)
 
@@ -156,12 +160,49 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "workload")
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
 
 	if gcpProjectIdOverride != nil {
 		metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(gcpProjectIdOverride, ""))
 		metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(gcpProjectIdOverride, ""))
 	}
+
+	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("updating namespace: %w", err)
+	}
+
+	log.Debug("Updated namespace")
+
+	return nil
+}
+
+func (r *naisNamespaceReconciler) ensurePgNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+	var ns *corev1.Namespace
+	pgNamespaceName := "pg-" + naisTeam.Slug
+
+	log = log.WithField("slug", env.Slug).
+		WithField("environment", env.EnvironmentName).
+		WithField("pgNamespaceName", pgNamespaceName)
+
+	ns, err := c.Get(ctx, pgNamespaceName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		ns.Name = pgNamespaceName
+		ns, err = c.Create(ctx, ns, metav1.CreateOptions{})
+		if err != nil {
+			return fmt.Errorf("creating namespace: %w", err)
+		}
+		log.Debug("Created namespace")
+	} else if err != nil {
+		return fmt.Errorf("getting namespace: %w", err)
+	} else {
+		log.Debug("Namespace already exists")
+	}
+
+	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "postgres")
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
 	if err != nil {
