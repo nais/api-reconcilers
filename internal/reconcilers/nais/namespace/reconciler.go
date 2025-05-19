@@ -115,7 +115,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure service account rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), log); err != nil {
+		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), "nais:developer", fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings("pg-"+naisTeam.Slug), "postgres-operator:users:view", fmt.Sprintf("team-%s-pgviewer", naisTeam.Slug), log); err != nil {
 			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -274,15 +278,14 @@ func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisT
 	return nil
 }
 
-func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
-	name := fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug)
-	log = log.WithField("rolebinding_name", name)
-	rb, err := c.Get(ctx, name, metav1.GetOptions{})
+func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, targetRole, roleBindingName string, log logrus.FieldLogger) error {
+	log = log.WithField("rolebinding_name", roleBindingName)
+	rb, err := c.Get(ctx, roleBindingName, metav1.GetOptions{})
 
 	rb.RoleRef = v1.RoleRef{
 		APIGroup: "rbac.authorization.k8s.io",
 		Kind:     "ClusterRole",
-		Name:     "nais:developer",
+		Name:     targetRole,
 	}
 
 	rb.Subjects = []v1.Subject{
@@ -306,10 +309,10 @@ func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, nai
 	}
 
 	if errors.IsNotFound(err) {
-		rb.Name = name
+		rb.Name = roleBindingName
 		_, err = c.Create(ctx, rb, metav1.CreateOptions{})
 		if err != nil {
-			return fmt.Errorf("creating rolebinding %q: %w", name, err)
+			return fmt.Errorf("creating rolebinding %q: %w", roleBindingName, err)
 		}
 		log.Debugf("Created rolebinding")
 	} else if err != nil {
@@ -318,7 +321,7 @@ func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, nai
 		log.Debugf("Rolebinding already exists")
 		_, err := c.Update(ctx, rb, metav1.UpdateOptions{})
 		if err != nil {
-			return fmt.Errorf("updating rolebinding %q: %w", name, err)
+			return fmt.Errorf("updating rolebinding %q: %w", roleBindingName, err)
 		}
 	}
 
