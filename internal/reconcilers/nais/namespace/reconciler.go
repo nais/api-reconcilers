@@ -429,7 +429,13 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 			continue
 		}
 
-		err := r.deleteNamespace(ctx, naisTeam, c.Clientset.CoreV1().Namespaces(), log)
+		err := r.deleteNamespace(ctx, naisTeam.Slug, c.Clientset.CoreV1().Namespaces(), log)
+		if err != nil {
+			log.WithError(err).Errorf("deleting namespace")
+			continue
+		}
+
+		err = r.deleteNamespace(ctx, fmt.Sprintf("pg-%s", naisTeam.Slug), c.Clientset.CoreV1().Namespaces(), log)
 		if err != nil {
 			log.WithError(err).Errorf("deleting namespace")
 			continue
@@ -440,11 +446,11 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 	return nil
 }
 
-func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, naisTeam *protoapi.Team, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
-	err := c.Delete(ctx, naisTeam.Slug, metav1.DeleteOptions{})
+func (r *naisNamespaceReconciler) deleteNamespace(ctx context.Context, namespace string, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+	err := c.Delete(ctx, namespace, metav1.DeleteOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.WithField("namespace", naisTeam.Slug).Errorf("Namespace not found")
+			log.WithField("namespace", namespace).Errorf("Namespace not found")
 			return nil
 		}
 		return err
