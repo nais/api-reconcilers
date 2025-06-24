@@ -11,6 +11,10 @@ import (
 type FeatureFlags struct {
 	// AttachSharedVpc enables the shared vpc feature
 	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
+
+	// EnableGrafanaAlerts enables the Grafana alerts reconciler functionality.
+	// This will create Grafana Contact Points and Notification Policies for teams.
+	EnableGrafanaAlerts bool `env:"FEATURE_ENABLE_GRAFANA_ALERTS"`
 }
 
 type Config struct {

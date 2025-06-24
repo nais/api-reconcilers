@@ -21,6 +21,11 @@ values:
     config:
       type: bool
 
+  featureFlags.enableGrafanaAlerts:
+    displayName: Enable Grafana Alerts
+    config:
+      type: bool
+
   googleManagementProjectID:
     displayName: Google management project ID
     computed:
