@@ -459,6 +459,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 		UID:  name, // Use name as UID for idempotency
 		Type: &cpType,
 		Settings: map[string]interface{}{
+			"api_url":   "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
 			"channel":   slackChannel,
 			"title":     "Alert: {{.GroupLabels.alertname}}",
 			"text":      "Team: {{.GroupLabels.team}} | Environment: {{.GroupLabels.environment}}\n{{range .Alerts}}{{.Annotations.summary}}\n{{.Annotations.description}}{{end}}",
