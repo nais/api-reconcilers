@@ -8,7 +8,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
-	dependencytrack "github.com/nais/dependencytrack/pkg/client"
+	"github.com/nais/dependencytrack/pkg/dependencytrack"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -39,7 +39,11 @@ func New(endpoint, username, password string, opts ...OptFunc) (reconcilers.Reco
 			return nil, fmt.Errorf("no dependencytrack instances configured")
 		}
 
-		r.client = dependencytrack.New(endpoint, username, password, dependencytrack.WithHttpClient(otelhttp.DefaultClient))
+		c, err := dependencytrack.NewClient(endpoint, username, password, logrus.WithField("client", "dependencytrack"), dependencytrack.WithHTTPClient(otelhttp.DefaultClient))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create DependencyTrack client: %w", err)
+		}
+		r.client = c
 	}
 
 	return r, nil

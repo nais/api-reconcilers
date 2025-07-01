@@ -10,7 +10,7 @@ import (
 	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
-	"github.com/nais/dependencytrack/pkg/client"
+	"github.com/nais/dependencytrack/pkg/dependencytrack"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc/codes"
@@ -43,12 +43,12 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 	t.Run("team does not exist, new team created and new members added", func(t *testing.T) {
 		dpClient := dependencytrack_reconciler.NewMockClient(t)
 		dpClient.EXPECT().
-			CreateTeam(mock.Anything, teamSlug, []client.Permission{
-				client.ViewPortfolioPermission,
-				client.ViewVulnerabilityPermission,
-				client.ViewPolicyViolationPermission,
+			CreateTeam(mock.Anything, teamSlug, []dependencytrack.Permission{
+				dependencytrack.ViewPortfolioPermission,
+				dependencytrack.ViewVulnerabilityPermission,
+				dependencytrack.ViewPolicyViolationPermission,
 			}).
-			Return(&client.Team{
+			Return(&dependencytrack.Team{
 				Uuid:      teamID,
 				Name:      teamSlug,
 				OidcUsers: nil,
