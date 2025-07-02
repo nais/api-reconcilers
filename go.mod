@@ -25,6 +25,7 @@ require (
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20250108132429-8d7e1f158f65
+	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nais/api/pkg/apiclient v0.0.0-20250224130528-fed006aa5b1e
 	github.com/nais/dependencytrack/pkg/dependencytrack v0.0.0-20250630114639-8efe42d2c991
@@ -107,7 +108,6 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
-	github.com/in-toto/in-toto-golang v0.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
