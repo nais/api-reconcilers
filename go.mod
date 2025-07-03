@@ -25,10 +25,9 @@ require (
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20250108132429-8d7e1f158f65
-	github.com/in-toto/in-toto-golang v0.9.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nais/api/pkg/apiclient v0.0.0-20250224130528-fed006aa5b1e
-	github.com/nais/dependencytrack/pkg/dependencytrack v0.0.0-20250630114639-8efe42d2c991
+	github.com/nais/dependencytrack/pkg/dependencytrack v0.0.0-20250703115624-2bee19a6dd04
 	github.com/prometheus/client_golang v1.21.0
 	github.com/sethvargo/go-envconfig v1.1.1
 	github.com/shurcooL/githubv4 v0.0.0-20240727222349-48295856cce7
@@ -108,6 +107,7 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
+	github.com/in-toto/in-toto-golang v0.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -187,8 +187,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-replace github.com/nais/dependencytrack/pkg/dependencytrack => ../dependencytrack/pkg/dependencytrack
 
 // Seems to be needed to fix IDEA (ref: https://github.com/GoogleCloudPlatform/k8s-config-connector/issues/747)
 replace github.com/hashicorp/terraform-provider-google-beta => github.com/GoogleCloudPlatform/k8s-config-connector/third_party/github.com/hashicorp/terraform-provider-google-beta v0.0.0-20241216221108-811204fcd3c4

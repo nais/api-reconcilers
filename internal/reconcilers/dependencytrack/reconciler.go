@@ -14,14 +14,14 @@ import (
 )
 
 type reconciler struct {
-	client dependencytrack.Client
+	client dependencytrack.ManagementClient
 }
 
 const reconcilerName = "nais:dependencytrack"
 
 type OptFunc func(*reconciler)
 
-func WithDependencyTrackClient(client dependencytrack.Client) OptFunc {
+func WithDependencyTrackClient(client dependencytrack.ManagementClient) OptFunc {
 	return func(r *reconciler) {
 		r.client = client
 	}
@@ -39,7 +39,7 @@ func New(endpoint, username, password string, opts ...OptFunc) (reconcilers.Reco
 			return nil, fmt.Errorf("no dependencytrack instances configured")
 		}
 
-		c, err := dependencytrack.NewClient(endpoint, username, password, logrus.WithField("client", "dependencytrack"), dependencytrack.WithHTTPClient(otelhttp.DefaultClient))
+		c, err := dependencytrack.NewManagementClient(endpoint, username, password, logrus.WithField("client", "dependencytrack"), dependencytrack.WithHTTPClient(otelhttp.DefaultClient))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create DependencyTrack client: %w", err)
 		}

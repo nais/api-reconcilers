@@ -284,6 +284,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/nais/api/pkg/apiclient v0.0.0-20250224130528-fed006aa5b1e h1:C9JBRTgZ4TystQVkUDg28DWk1yLo80mS1HLOxnt2Awo=
 github.com/nais/api/pkg/apiclient v0.0.0-20250224130528-fed006aa5b1e/go.mod h1:0Tle2/7Ub7oryydDjLbvppxs+GgxuRBV1C+7hIAPV+Y=
+github.com/nais/dependencytrack/pkg/dependencytrack v0.0.0-20250703115624-2bee19a6dd04 h1:+WJkX5Vi7WqSpmUAc04k93J1H4jeqYor1V6cIFLSFJQ=
+github.com/nais/dependencytrack/pkg/dependencytrack v0.0.0-20250703115624-2bee19a6dd04/go.mod h1:pFcG1l0/cShxrKk5YSwdvgPD6gbtci7fbd6B6MoFsT4=
 github.com/oklog/ulid v1.3.1 h1:EGfNDEx6MqHz8B3uNV6QAib1UR2Lm97sHi3ocA6ESJ4=
 github.com/oklog/ulid v1.3.1/go.mod h1:CirwcVhetQ6Lv90oh/F+FBtV6XMibvdAFo93nm5qn4U=
 github.com/onsi/ginkgo v1.16.5 h1:8xi0RTUf59SOSfEtZMvwTvXYMzG4gV23XVHOZiXNtnE=
