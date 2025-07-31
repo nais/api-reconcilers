@@ -369,6 +369,8 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 		if len(response.Projects) > 1 {
 			return nil, fmt.Errorf("multiple projects with id: %q found, unable to continue", *environment.GcpProjectId)
 		}
+
+		return nil, fmt.Errorf("no project with id: %q found, unable to continue", *environment.GcpProjectId)
 	}
 
 	project := &cloudresourcemanager.Project{
@@ -399,7 +401,6 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 		}
 
 		return response.Projects[0], nil
-
 	}
 
 	response, err := r.getOperationResponse(ctx, operation)
