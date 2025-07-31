@@ -54,3 +54,10 @@ packages:
           dir: "internal/mocks/grafana/admin_users"
           outpkg: grafana_mock_admin_users
           inpackage: false
+  github.com/grafana/grafana-openapi-client-go/client/provisioning:
+    interfaces:
+      ClientService:
+        config:
+          dir: "internal/mocks/grafana/provisioning"
+          outpkg: grafana_mock_provisioning
+          inpackage: false
