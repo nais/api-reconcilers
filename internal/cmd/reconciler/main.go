@@ -176,6 +176,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		grafanaClient.AdminUsers,
 		grafanaClient.Provisioning,
 		cfg.FeatureFlags,
+		cfg.Grafana.SlackWebhookURL,
 	)
 	log.WithField("duration", time.Since(start).String()).Debug("Created Grafana reconciler")
 

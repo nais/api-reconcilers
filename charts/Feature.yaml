@@ -144,6 +144,12 @@ values:
     computed:
       template: "{{ .Env.grafana_admin_password | quote }}"
 
+  grafana.slackWebhookURL:
+    displayName: Grafana Slack webhook URL
+    description: The Slack webhook URL for sending alert notifications
+    computed:
+      template: "{{ .Env.grafana_slack_webhook_url | quote }}"
+
   dependencyTrack.password:
     displayName: DependencyTrack password
     computed:

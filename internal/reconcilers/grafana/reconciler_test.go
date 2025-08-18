@@ -28,6 +28,8 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+const testSlackWebhookURL = "https://hooks.slack.com/test/webhook"
+
 func TestReconcile(t *testing.T) {
 	ctx := context.Background()
 
@@ -260,6 +262,7 @@ func TestReconcile(t *testing.T) {
 			config.FeatureFlags{
 				EnableGrafanaAlerts: true,
 			},
+			testSlackWebhookURL,
 		)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
@@ -446,6 +449,7 @@ func TestReconcile(t *testing.T) {
 			config.FeatureFlags{
 				EnableGrafanaAlerts: true,
 			},
+			testSlackWebhookURL,
 		)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
@@ -617,6 +621,7 @@ func TestReconcile(t *testing.T) {
 			config.FeatureFlags{
 				EnableGrafanaAlerts: true,
 			},
+			testSlackWebhookURL,
 		)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
@@ -651,7 +656,7 @@ func TestReconcile(t *testing.T) {
 
 		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
-		})
+		}, testSlackWebhookURL)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -820,6 +825,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			config.FeatureFlags{
 				EnableGrafanaAlerts: true,
 			},
+			testSlackWebhookURL,
 		)
 
 		// Test by calling the full Reconcile method with environments that have Slack channels
@@ -897,7 +903,7 @@ func TestAlertingFunctionality(t *testing.T) {
 
 		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, provisioningService, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
-		})
+		}, testSlackWebhookURL)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatalf("Delete failed: %v", err)
@@ -932,7 +938,7 @@ func TestAlertingFunctionality(t *testing.T) {
 		// No provisioning service provided - should not call any provisioning methods
 		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
-		})
+		}, testSlackWebhookURL)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatalf("Delete failed: %v", err)
@@ -1192,6 +1198,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			config.FeatureFlags{
 				EnableGrafanaAlerts: true,
 			},
+			testSlackWebhookURL,
 		)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
