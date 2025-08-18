@@ -24,6 +24,10 @@ import (
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
 	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 	"github.com/grafana/grafana-openapi-client-go/models"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -47,6 +51,13 @@ type grafanaReconciler struct {
 	provisioning    grafana_provisioning.ClientService
 	flags           config.FeatureFlags
 	slackWebhookURL string
+
+	// Metrics for monitoring Grafana reconciler performance
+	metricContactPointsCreated    metric.Int64Counter
+	metricContactPointsFailed     metric.Int64Counter
+	metricPolicyTreeSize          metric.Int64Gauge
+	metricPolicyTreeUpdates       metric.Int64Counter
+	metricPolicyTreeUpdatesFailed metric.Int64Counter
 }
 
 func New(
@@ -59,6 +70,23 @@ func New(
 	flags config.FeatureFlags,
 	slackWebhookURL string,
 ) reconcilers.Reconciler {
+	meter := otel.Meter("grafana-reconciler")
+
+	contactPointsCreated, _ := meter.Int64Counter("grafana_contact_points_created_total",
+		metric.WithDescription("Total number of Grafana contact points created"))
+
+	contactPointsFailed, _ := meter.Int64Counter("grafana_contact_points_failed_total",
+		metric.WithDescription("Total number of Grafana contact points that failed to create"))
+
+	policyTreeSize, _ := meter.Int64Gauge("grafana_policy_tree_size",
+		metric.WithDescription("Current number of routes in the Grafana notification policy tree"))
+
+	policyTreeUpdates, _ := meter.Int64Counter("grafana_policy_tree_updates_total",
+		metric.WithDescription("Total number of Grafana policy tree updates"))
+
+	policyTreeUpdatesFailed, _ := meter.Int64Counter("grafana_policy_tree_updates_failed_total",
+		metric.WithDescription("Total number of Grafana policy tree updates that failed"))
+
 	return &grafanaReconciler{
 		users:           users,
 		teams:           teams,
@@ -68,6 +96,12 @@ func New(
 		provisioning:    provisioning,
 		flags:           flags,
 		slackWebhookURL: slackWebhookURL,
+
+		metricContactPointsCreated:    contactPointsCreated,
+		metricContactPointsFailed:     contactPointsFailed,
+		metricPolicyTreeSize:          policyTreeSize,
+		metricPolicyTreeUpdates:       policyTreeUpdates,
+		metricPolicyTreeUpdatesFailed: policyTreeUpdatesFailed,
 	}
 }
 
@@ -453,6 +487,20 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	params.SetContext(ctx)
 
 	_, err := r.provisioning.PutContactpoint(params)
+
+	// Record metrics
+	if err != nil {
+		r.metricContactPointsFailed.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("contact_point_name", name),
+			attribute.String("slack_channel", slackChannel),
+		))
+	} else {
+		r.metricContactPointsCreated.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("contact_point_name", name),
+			attribute.String("slack_channel", slackChannel),
+		))
+	}
+
 	return err
 }
 
@@ -467,6 +515,12 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 		policyTree.Routes = []*models.Route{}
 	}
 
+	// Record policy tree size before modification
+	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
+		attribute.String("operation", "read"),
+		attribute.String("team", teamSlug),
+	))
+
 	// Remove existing routes for this team to ensure idempotent behavior
 	filteredRoutes := r.filterRoutesForTeam(policyTree.Routes, teamSlug)
 
@@ -475,14 +529,29 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 
 	policyTree.Routes = filteredRoutes
 
+	// Record policy tree size after modification
+	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
+		attribute.String("operation", "write"),
+		attribute.String("team", teamSlug),
+	))
+
 	params := &grafana_provisioning.PutPolicyTreeParams{
 		Body: policyTree,
 	}
 	params.SetContext(ctx)
 
 	_, err = r.provisioning.PutPolicyTree(params)
+
+	// Record policy tree update metrics
 	if err != nil {
+		r.metricPolicyTreeUpdatesFailed.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("team", teamSlug),
+		))
 		return fmt.Errorf("updating policy tree: %w", err)
+	} else {
+		r.metricPolicyTreeUpdates.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("team", teamSlug),
+		))
 	}
 
 	return nil
@@ -582,7 +651,19 @@ func (r *grafanaReconciler) cleanupAlerting(ctx context.Context, teamSlug string
 
 	policyTree := resp.Payload
 	if policyTree.Routes != nil {
+		// Record policy tree size before cleanup
+		r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
+			attribute.String("operation", "cleanup_read"),
+			attribute.String("team", teamSlug),
+		))
+
 		policyTree.Routes = r.filterRoutesForTeam(policyTree.Routes, teamSlug)
+
+		// Record policy tree size after cleanup
+		r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
+			attribute.String("operation", "cleanup_write"),
+			attribute.String("team", teamSlug),
+		))
 
 		params := &grafana_provisioning.PutPolicyTreeParams{
 			Body: policyTree,
@@ -591,7 +672,16 @@ func (r *grafanaReconciler) cleanupAlerting(ctx context.Context, teamSlug string
 
 		_, err = r.provisioning.PutPolicyTree(params)
 		if err != nil {
+			r.metricPolicyTreeUpdatesFailed.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("team", teamSlug),
+				attribute.String("operation", "cleanup"),
+			))
 			return fmt.Errorf("updating policy tree during cleanup: %w", err)
+		} else {
+			r.metricPolicyTreeUpdates.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("team", teamSlug),
+				attribute.String("operation", "cleanup"),
+			))
 		}
 	}
 

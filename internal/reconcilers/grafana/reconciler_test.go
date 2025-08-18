@@ -1205,6 +1205,146 @@ func TestAlertingFunctionality(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("No alerting calls when feature toggle disabled", func(t *testing.T) {
+		// Define all variables and constants for this test
+		const (
+			testTeamID           = 1
+			testTeamIDAsString   = "1"
+			testServiceAccountID = 1
+			testResourceName     = "serviceaccounts"
+		)
+
+		teamName := teamSlug
+		serviceAccountName := "team-" + teamSlug
+		naisTeam := &protoapi.Team{
+			Slug:    teamSlug,
+			Purpose: "test-purpose",
+		}
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		// Mock the basic team operations but NO alerting operations
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{
+						EnvironmentName:    "dev",
+						SlackAlertsChannel: "#alerts-dev", // Even with Slack channel, no alerting should happen
+					},
+					{
+						EnvironmentName:    "prod",
+						SlackAlertsChannel: "#alerts-prod",
+					},
+				},
+			}, nil).
+			Once()
+
+		mockServer.Teams.EXPECT().
+			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+			Return(&protoapi.ListTeamMembersResponse{
+				Nodes: []*protoapi.TeamMember{},
+			}, nil).
+			Once()
+
+		// Mock basic Grafana services (users, teams, etc.)
+		usersService := grafana_mock_users.NewMockClientService(t)
+		teamsService := grafana_mock_teams.NewMockClientService(t)
+		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+
+		// Setup basic team operations
+		teamsService.EXPECT().
+			SearchTeams(&grafana_teams.SearchTeamsParams{
+				Query:   &teamName,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.SearchTeamsOK{
+				Payload: &models.SearchTeamQueryResult{
+					Teams: []*models.TeamDTO{
+						{ID: testTeamID, Name: teamName},
+					},
+				},
+			}, nil).
+			Once()
+
+		teamsService.EXPECT().
+			GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+				TeamID:  testTeamIDAsString,
+				Context: ctx,
+			}).
+			Return(&grafana_teams.GetTeamMembersOK{
+				Payload: []*models.TeamMemberDTO{},
+			}, nil).
+			Once()
+
+		// Setup service account operations
+		serviceAccountsService.EXPECT().
+			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
+				Query:   &serviceAccountName,
+				Context: ctx,
+			}).
+			Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
+				Payload: &models.SearchOrgServiceAccountsResult{
+					ServiceAccounts: []*models.ServiceAccountDTO{
+						{ID: testServiceAccountID, Name: serviceAccountName},
+					},
+				},
+			}, nil).
+			Once()
+
+		rbacService.EXPECT().
+			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+				Resource:   testResourceName,
+				ResourceID: strconv.Itoa(int(testServiceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+				Payload: []*models.ResourcePermissionDTO{},
+			}, nil).
+			Once()
+
+		rbacService.EXPECT().
+			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+				Body: &models.SetPermissionsCommand{
+					Permissions: []*models.SetResourcePermissionCommand{
+						{Permission: "Edit", TeamID: testTeamID},
+					},
+				},
+				Resource:   testResourceName,
+				ResourceID: strconv.Itoa(int(testServiceAccountID)),
+				Context:    ctx,
+			}).
+			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
+			Once()
+
+		// CRITICAL: Mock provisioning service but ensure NO methods are called
+		// If any provisioning methods are called, the test will fail
+		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		// No EXPECT() calls on provisioningService - any call will fail the test
+
+		reconciler := grafana_reconciler.New(
+			usersService,
+			teamsService,
+			rbacService,
+			serviceAccountsService,
+			adminUsersService,
+			provisioningService,
+			config.FeatureFlags{
+				EnableGrafanaAlerts: false, // DISABLED - this is the key test condition
+			},
+			testSlackWebhookURL,
+		)
+
+		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatal(err)
+		}
+
+		// If we reach here, it means no provisioning service methods were called
+		// which is exactly what we want when the feature toggle is disabled
+	})
 }
 
 // Helper functions for test assertions
