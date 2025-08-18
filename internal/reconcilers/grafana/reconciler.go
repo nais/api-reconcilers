@@ -384,7 +384,7 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 	}
 
 	if r.flags.EnableGrafanaAlerts {
-		if err := r.reconcileAlerting(ctx, naisTeam.Slug, environments); err != nil {
+		if err := r.reconcileAlerting(ctx, naisTeam.Slug, environments, log); err != nil {
 			return fmt.Errorf("reconciling alerting: %w", err)
 		}
 	} else {
@@ -450,14 +450,14 @@ func (r *grafanaReconciler) buildContactPointName(teamSlug, environmentName stri
 	return fmt.Sprintf("team-%s-%s", teamSlug, environmentName)
 }
 
-func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment) error {
+func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
 	for _, env := range environments {
 		if env.SlackAlertsChannel == "" {
 			continue
 		}
 
 		contactPointName := r.buildContactPointName(teamSlug, env.EnvironmentName)
-		if err := r.createOrUpdateContactPoint(ctx, contactPointName, env.SlackAlertsChannel); err != nil {
+		if err := r.createOrUpdateContactPoint(ctx, contactPointName, env.SlackAlertsChannel, log); err != nil {
 			return fmt.Errorf("creating contact point for %s-%s: %w", teamSlug, env.EnvironmentName, err)
 		}
 	}
@@ -470,7 +470,7 @@ func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug stri
 	return nil
 }
 
-func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name, slackChannel string) error {
+func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name, slackChannel string, log logrus.FieldLogger) error {
 	cpType := contactPointType
 
 	contactPoint := &models.EmbeddedContactPoint{
@@ -486,19 +486,32 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	}
 	getParams.SetContext(ctx)
 
-	_, err := r.provisioning.GetContactpoints(getParams)
+	log.Debugf("Checking if contact point exists: %s", name)
+	resp, err := r.provisioning.GetContactpoints(getParams)
 
 	var operationErr error
-	if err != nil {
+	if err != nil || resp == nil || len(resp.Payload) == 0 {
 		// Contact point doesn't exist, create it
+		log.Debugf("Contact point %s doesn't exist (error: %v, payload length: %d), creating with POST", name, err, func() int {
+			if resp != nil && resp.Payload != nil {
+				return len(resp.Payload)
+			}
+			return 0
+		}())
 		createParams := &grafana_provisioning.PostContactpointsParams{
 			Body: contactPoint,
 		}
 		createParams.SetContext(ctx)
 
 		_, operationErr = r.provisioning.PostContactpoints(createParams)
+		if operationErr != nil {
+			log.Debugf("POST contact point %s failed: %v", name, operationErr)
+		} else {
+			log.Debugf("POST contact point %s succeeded", name)
+		}
 	} else {
 		// Contact point exists, update it
+		log.Debugf("Contact point %s exists (found %d contact points), updating with PUT", name, len(resp.Payload))
 		updateParams := &grafana_provisioning.PutContactpointParams{
 			UID:  name,
 			Body: contactPoint,
@@ -506,6 +519,11 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 		updateParams.SetContext(ctx)
 
 		_, operationErr = r.provisioning.PutContactpoint(updateParams)
+		if operationErr != nil {
+			log.Debugf("PUT contact point %s failed: %v", name, operationErr)
+		} else {
+			log.Debugf("PUT contact point %s succeeded", name)
+		}
 	}
 
 	// Record metrics
