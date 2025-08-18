@@ -480,16 +480,36 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 		Settings: r.buildSlackContactPointSettings(slackChannel),
 	}
 
-	params := &grafana_provisioning.PutContactpointParams{
-		UID:  name,
-		Body: contactPoint,
+	// Try to get existing contact point first
+	getParams := &grafana_provisioning.GetContactpointsParams{
+		Name: &name,
 	}
-	params.SetContext(ctx)
+	getParams.SetContext(ctx)
 
-	_, err := r.provisioning.PutContactpoint(params)
+	_, err := r.provisioning.GetContactpoints(getParams)
+
+	var operationErr error
+	if err != nil {
+		// Contact point doesn't exist, create it
+		createParams := &grafana_provisioning.PostContactpointsParams{
+			Body: contactPoint,
+		}
+		createParams.SetContext(ctx)
+
+		_, operationErr = r.provisioning.PostContactpoints(createParams)
+	} else {
+		// Contact point exists, update it
+		updateParams := &grafana_provisioning.PutContactpointParams{
+			UID:  name,
+			Body: contactPoint,
+		}
+		updateParams.SetContext(ctx)
+
+		_, operationErr = r.provisioning.PutContactpoint(updateParams)
+	}
 
 	// Record metrics
-	if err != nil {
+	if operationErr != nil {
 		r.metricContactPointsFailed.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("contact_point_name", name),
 			attribute.String("slack_channel", slackChannel),
@@ -501,7 +521,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 		))
 	}
 
-	return err
+	return operationErr
 }
 
 func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment) error {
