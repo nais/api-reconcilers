@@ -159,3 +159,8 @@ values:
     displayName: Image tag
     config:
       type: string
+
+  loglevel:
+    displayName: Log level
+    config:
+      type: string
