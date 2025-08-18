@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
 	"github.com/nais/api-reconcilers/internal/kubernetes"
@@ -11,6 +12,10 @@ import (
 type FeatureFlags struct {
 	// AttachSharedVpc enables the shared vpc feature
 	AttachSharedVpc bool `env:"FEATURE_ATTACH_SHARED_VPC"`
+
+	// EnableGrafanaAlerts enables the Grafana alerts reconciler functionality.
+	// This will create Grafana Contact Points and Notification Policies for teams.
+	EnableGrafanaAlerts bool `env:"FEATURE_ENABLE_GRAFANA_ALERTS"`
 }
 
 type Config struct {
@@ -67,6 +72,9 @@ type Config struct {
 
 		// Password The password to use when authenticating with Grafana.
 		Password string `env:"GRAFANA_PASSWORD,default=admin"`
+
+		// SlackWebhookURL The Slack webhook URL for sending alert notifications.
+		SlackWebhookURL string `env:"GRAFANA_SLACK_WEBHOOK_URL"`
 	}
 
 	GRPC struct {
@@ -141,5 +149,20 @@ func NewConfig(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error
 		return nil, err
 	}
 
+	// Validate configuration
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+
 	return cfg, nil
+}
+
+// validate checks that the configuration is valid
+func (c *Config) validate() error {
+	// Ensure Slack webhook URL is configured when Grafana alerts are enabled
+	if c.FeatureFlags.EnableGrafanaAlerts && c.Grafana.SlackWebhookURL == "" {
+		return fmt.Errorf("GRAFANA_SLACK_WEBHOOK_URL must be set when FEATURE_ENABLE_GRAFANA_ALERTS is enabled")
+	}
+
+	return nil
 }

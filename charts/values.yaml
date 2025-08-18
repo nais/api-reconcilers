@@ -46,6 +46,7 @@ gcp:
 grafana:
   endpoint: http://grafana/api
   username: admin
+  slackWebhookURL: # mapped in fasit
 
 dependencyTrack:
   endpoint: http://dependencytrack-backend:8080
@@ -58,3 +59,4 @@ naisAPI:
 
 featureFlags:
   attachSharedVpc:
+  enableGrafanaAlerts:
