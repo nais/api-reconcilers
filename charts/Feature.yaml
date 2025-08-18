@@ -147,8 +147,8 @@ values:
   grafana.slackWebhookURL:
     displayName: Grafana Slack webhook URL
     description: The Slack webhook URL for sending alert notifications
-    computed:
-      template: "{{ .Env.grafana_slack_webhook_url | quote }}"
+    config:
+      type: string
 
   dependencyTrack.password:
     displayName: DependencyTrack password
