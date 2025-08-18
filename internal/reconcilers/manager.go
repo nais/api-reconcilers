@@ -397,7 +397,15 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 		log = log.WithField("trace_id", input.TraceID)
 	}
 
-	log.WithField("time", teamStart).Debugf("start team reconciliation process")
+	reconcilerNames := make([]string, len(reconcilers))
+	for i, r := range reconcilers {
+		reconcilerNames[i] = r.Name()
+	}
+	log.
+		WithField("time", teamStart).
+		WithField("reconcilers", reconcilerNames).
+		Debugf("start team reconciliation process")
+
 	successfulSync := true
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
