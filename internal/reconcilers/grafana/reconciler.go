@@ -515,6 +515,19 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 		policyTree.Routes = []*models.Route{}
 	}
 
+	// Debug: Log existing routes before modification
+	for i, route := range policyTree.Routes {
+		if route.ObjectMatchers != nil {
+			var matchers []string
+			for _, matcher := range route.ObjectMatchers {
+				if len(matcher) >= 3 {
+					matchers = append(matchers, fmt.Sprintf("%s %s %s", matcher[0], matcher[1], matcher[2]))
+				}
+			}
+			fmt.Printf("DEBUG: Existing route %d - Receiver: %s, Matchers: %v\n", i, route.Receiver, matchers)
+		}
+	}
+
 	// Record policy tree size before modification
 	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
 		attribute.String("operation", "read"),
@@ -589,6 +602,12 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 			GroupInterval:  defaultGroupInterval,
 			RepeatInterval: defaultRepeatInterval,
 		}
+
+		// Debug: Log what we're creating
+		fmt.Printf("DEBUG: Creating route - Receiver: %s, Team: %s, Environment: %s\n",
+			contactPointName, teamSlug, env.EnvironmentName)
+		fmt.Printf("DEBUG: Route details - ObjectMatchers: %+v, GroupBy: %+v\n",
+			route.ObjectMatchers, route.GroupBy)
 
 		routes = append(routes, route)
 	}
