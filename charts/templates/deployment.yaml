@@ -73,6 +73,8 @@ spec:
               value: {{ .Values.grafana.endpoint }}
             - name: GRAFANA_USERNAME
               value: {{ .Values.grafana.username }}
+            - name: GRAFANA_SLACK_WEBHOOK_URL
+              value: {{ .Values.grafana.slackWebhookURL | quote }}
             # Azure
             {{- if .Values.azure.groupNamePrefix }}
             - name: AZURE_GROUP_NAME_PREFIX
