@@ -725,13 +725,13 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 		contactPointName := r.buildContactPointName(teamSlug, env.EnvironmentName)
 
 		teamMatcher := models.ObjectMatcher{"team", "=", teamSlug}
-		envMatcher := models.ObjectMatcher{"environment", "=", env.EnvironmentName}
+		envMatcher := models.ObjectMatcher{"env", "=", env.EnvironmentName}
 
 		route := &models.Route{
 			Receiver:       contactPointName,
 			ObjectMatchers: models.ObjectMatchers{teamMatcher, envMatcher},
 			Continue:       false,
-			GroupBy:        []string{"alertname", "team", "environment"},
+			GroupBy:        []string{"alertname", "team", "env"},
 			GroupWait:      defaultGroupWait,
 			GroupInterval:  defaultGroupInterval,
 			RepeatInterval: defaultRepeatInterval,

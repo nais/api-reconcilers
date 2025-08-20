@@ -1453,7 +1453,7 @@ func hasCorrectMatchers(route *models.Route, expectedTeam, expectedEnv string) b
 			if matcher[0] == "team" && matcher[1] == "=" && matcher[2] == expectedTeam {
 				hasTeamMatcher = true
 			}
-			if matcher[0] == "environment" && matcher[1] == "=" && matcher[2] == expectedEnv {
+			if matcher[0] == "env" && matcher[1] == "=" && matcher[2] == expectedEnv {
 				hasEnvMatcher = true
 			}
 		}
