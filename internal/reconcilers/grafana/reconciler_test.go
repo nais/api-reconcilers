@@ -234,6 +234,15 @@ func TestReconcile(t *testing.T) {
 			Once()
 
 		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		// Mock the notification template creation with GET-then-PUT pattern
+		provisioningService.EXPECT().
+			GetTemplate("nais.slack").
+			Return(nil, fmt.Errorf("template not found")).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
+		provisioningService.EXPECT().
+			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
 		// Mock the alert/contact point operations
 		provisioningService.EXPECT().
 			PutContactpoint(mock.AnythingOfType("*provisioning.PutContactpointParams")).
@@ -421,6 +430,15 @@ func TestReconcile(t *testing.T) {
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
 
 		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		// Mock the notification template creation with GET-then-PUT pattern
+		provisioningService.EXPECT().
+			GetTemplate("nais.slack").
+			Return(nil, fmt.Errorf("template not found")).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
+		provisioningService.EXPECT().
+			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
 		// Mock the alert/contact point operations
 		provisioningService.EXPECT().
 			PutContactpoint(mock.AnythingOfType("*provisioning.PutContactpointParams")).
@@ -593,6 +611,15 @@ func TestReconcile(t *testing.T) {
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
 
 		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		// Mock the notification template creation with GET-then-PUT pattern
+		provisioningService.EXPECT().
+			GetTemplate("nais.slack").
+			Return(nil, fmt.Errorf("template not found")).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
+		provisioningService.EXPECT().
+			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+			Maybe() // Use Maybe() since templates are created when alerting is enabled
 		// Mock the alert/contact point operations
 		provisioningService.EXPECT().
 			PutContactpoint(mock.AnythingOfType("*provisioning.PutContactpointParams")).
@@ -700,6 +727,16 @@ func TestAlertingFunctionality(t *testing.T) {
 		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
 		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
 		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+
+		// Mock the notification template creation with GET-then-PUT pattern
+		provisioningService.EXPECT().
+			GetTemplate("nais.slack").
+			Return(nil, fmt.Errorf("template not found")).
+			Once()
+		provisioningService.EXPECT().
+			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+			Once()
 
 		// Mock team operations
 		teamNameVar := teamSlug
@@ -1172,6 +1209,16 @@ func TestAlertingFunctionality(t *testing.T) {
 
 		// Mock provisioning service with specific expectations for alerting
 		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+
+		// Mock the notification template creation with GET-then-PUT pattern
+		provisioningService.EXPECT().
+			GetTemplate("nais.slack").
+			Return(nil, fmt.Errorf("template not found")).
+			Once()
+		provisioningService.EXPECT().
+			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+			Once()
 
 		// Expect contact point creation for both environments
 		// The fix now calls GET first to check existence, then POST/PUT accordingly

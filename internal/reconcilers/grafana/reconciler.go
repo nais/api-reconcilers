@@ -52,6 +52,9 @@ type grafanaReconciler struct {
 	flags           config.FeatureFlags
 	slackWebhookURL string
 
+	// Template management - ensures templates are created only once
+	templatesInitialized bool
+
 	// Metrics for monitoring Grafana reconciler performance
 	metricContactPointsCreated    metric.Int64Counter
 	metricContactPointsFailed     metric.Int64Counter
@@ -118,14 +121,102 @@ func (r *grafanaReconciler) Configuration() *protoapi.NewReconciler {
 	}
 }
 
+func (r *grafanaReconciler) createNotificationTemplates(ctx context.Context) error {
+	// Only create templates once across all team reconciliations
+	if r.templatesInitialized {
+		return nil
+	}
+
+	templateName := "nais.slack"
+
+	// Define the desired template content
+	desiredContent := `{{ define "alert_severity_prefix_emoji" -}}
+	{{- if ne .Status "firing" -}}
+:solved:
+	{{- else if eq .CommonLabels.severity "critical" -}}
+:fire:
+	{{- else if eq .CommonLabels.severity "warning" -}}
+:warning:
+	{{- end -}}
+{{- end -}}
+
+{{ define "nais.slack.title" -}}
+	{{ template "alert_severity_prefix_emoji" . }} [{{- .Status | toUpper -}}{{- if eq .Status "firing" }} x {{ len .Alerts.Firing }}{{- end }} | {{- if .CommonLabels.env }} {{ .CommonLabels.env | toUpper }}{{- else }} UNKNOWN{{- end }} ] || {{- if .CommonLabels.alertname }} {{ .CommonLabels.alertname }}{{- else }} ALERT{{- end -}}
+{{- end -}}
+
+{{ define "nais.slack.body" -}}
+{{- range .Alerts -}}
+{{- if gt (len .Annotations) 0 }}
+{{ .Annotations.summary }}
+{{- if eq .Status "firing" }}
+{{- if .Annotations.description }}
+*Description*: {{ .Annotations.description }}
+{{- end }}
+{{- if .Annotations.runbook_url }}
+*Runbook URL*: {{ .Annotations.runbook_url }}
+{{- end }}
+{{- if .Annotations.action }}
+*Action*: {{ .Annotations.action }}
+{{- end }}
+{{- if .Annotations.consequence }}
+*Consequence*: {{ .Annotations.consequence }}
+{{- end }}
+{{- end }}
+{{- with .Labels.SortedPairs }}
+Labels:
+{{- range . }}
+{{- if or (eq .Name "app") (eq .Name "team") (eq .Name "env") }}
+• {{ .Name }}: ` + "`" + `{{ .Value }}` + "`" + `
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}`
+
+	// Check if template exists and get current content for drift detection
+	resp, err := r.provisioning.GetTemplate(templateName)
+
+	needsUpdate := false
+	if err != nil || resp == nil {
+		// Template doesn't exist, needs creation
+		needsUpdate = true
+	} else if resp != nil && resp.Payload != nil && resp.Payload.Template != desiredContent {
+		// Template exists but content differs (drift detected), needs update
+		needsUpdate = true
+	}
+
+	if needsUpdate {
+		// Use PUT for both creation and updates (idempotent for templates)
+		templateContent := &models.NotificationTemplateContent{
+			Template: desiredContent,
+		}
+
+		putParams := &grafana_provisioning.PutTemplateParams{
+			Name: templateName,
+			Body: templateContent,
+		}
+		putParams.SetContext(ctx)
+
+		_, operationErr := r.provisioning.PutTemplate(putParams)
+		if operationErr != nil {
+			return fmt.Errorf("creating/updating notification template %s: %w", templateName, operationErr)
+		}
+	}
+
+	// Mark templates as initialized to prevent future calls
+	r.templatesInitialized = true
+	return nil
+}
+
 func (r *grafanaReconciler) buildSlackContactPointSettings(slackChannel string) map[string]interface{} {
 	return map[string]interface{}{
 		"recipient":  slackChannel,
 		"username":   defaultSlackUsername,
 		"icon_emoji": ":grafana:",
 		"color":      "{{ if eq .Status \"firing\" }}#D63232{{ else }}#36a64f{{ end }}",
-		"title":      "{{ template \"slack.default.title\" . }}",
-		"text":       "{{ template \"slack.default.text\" . }}",
+		"title":      "{{ template \"nais.slack.title\" . }}",
+		"text":       "{{ template \"nais.slack.body\" . }}",
 		"url":        r.slackWebhookURL,
 	}
 }
@@ -451,6 +542,11 @@ func (r *grafanaReconciler) buildContactPointName(teamSlug, environmentName stri
 }
 
 func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
+	// Create notification templates first (only once, they're shared across all teams)
+	if err := r.createNotificationTemplates(ctx); err != nil {
+		return fmt.Errorf("creating notification templates: %w", err)
+	}
+
 	for _, env := range environments {
 		if env.SlackAlertsChannel == "" {
 			continue
