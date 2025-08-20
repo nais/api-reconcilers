@@ -559,7 +559,7 @@ func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug stri
 	}
 
 	// Update notification routing policy to direct alerts to the correct contact points
-	if err := r.updateNotificationPolicy(ctx, teamSlug, environments); err != nil {
+	if err := r.updateNotificationPolicy(ctx, teamSlug, environments, log); err != nil {
 		return fmt.Errorf("updating notification policy: %w", err)
 	}
 
@@ -638,7 +638,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	return operationErr
 }
 
-func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment) error {
+func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
 	resp, err := r.provisioning.GetPolicyTree()
 	if err != nil {
 		return fmt.Errorf("getting policy tree: %w", err)
@@ -658,7 +658,7 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 					matchers = append(matchers, fmt.Sprintf("%s %s %s", matcher[0], matcher[1], matcher[2]))
 				}
 			}
-			fmt.Printf("DEBUG: Existing route %d - Receiver: %s, Matchers: %v\n", i, route.Receiver, matchers)
+			log.Debugf("Existing route %d - Receiver: %s, Matchers: %v", i, route.Receiver, matchers)
 		}
 	}
 
@@ -671,7 +671,7 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 	// Remove existing routes for this team to ensure idempotent behavior
 	filteredRoutes := r.filterRoutesForTeam(policyTree.Routes, teamSlug)
 
-	newRoutes := r.buildNotificationRoutes(teamSlug, environments)
+	newRoutes := r.buildNotificationRoutes(teamSlug, environments, log)
 	filteredRoutes = append(filteredRoutes, newRoutes...)
 
 	policyTree.Routes = filteredRoutes
@@ -714,7 +714,7 @@ func (r *grafanaReconciler) filterRoutesForTeam(routes []*models.Route, teamSlug
 	return filteredRoutes
 }
 
-func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environments []*protoapi.TeamEnvironment) []*models.Route {
+func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) []*models.Route {
 	var routes []*models.Route
 
 	for _, env := range environments {
@@ -738,9 +738,9 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 		}
 
 		// Debug: Log what we're creating
-		fmt.Printf("DEBUG: Creating route - Receiver: %s, Team: %s, Environment: %s\n",
+		log.Debugf("Creating route - Receiver: %s, Team: %s, Environment: %s",
 			contactPointName, teamSlug, env.EnvironmentName)
-		fmt.Printf("DEBUG: Route details - ObjectMatchers: %+v, GroupBy: %+v\n",
+		log.Debugf("Route details - ObjectMatchers: %+v, GroupBy: %+v",
 			route.ObjectMatchers, route.GroupBy)
 
 		routes = append(routes, route)
