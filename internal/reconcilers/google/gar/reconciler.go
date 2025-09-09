@@ -386,7 +386,7 @@ func serviceAccountNameAndAccountID(teamSlug, projectID string) (serviceAccountN
 	accountID = str.SlugHashPrefixTruncate(teamSlug, "gar", gcp.GoogleServiceAccountMaxLength)
 	emailAddress := accountID + "@" + projectID + ".iam.gserviceaccount.com"
 	serviceAccountName = "projects/" + projectID + "/serviceAccounts/" + emailAddress
-	return
+	return serviceAccountName, accountID
 }
 
 // Remove all images that are more than 90 days old, but keep the last 50 "versions" regardless of age.
