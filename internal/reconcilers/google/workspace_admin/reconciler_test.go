@@ -284,5 +284,5 @@ func getAdminDirectoryServiceAndClient(t *testing.T, ctx context.Context, handle
 	ts := test.HttpServerWithHandlers(t, handlers)
 	closer = ts.Close
 	service, _ = admin_directory_v1.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(ts.URL))
-	return
+	return service, closer
 }

@@ -612,7 +612,7 @@ func (r *cdnReconciler) serviceAccountNameAndAccountID(teamSlug string) (service
 	accountID = str.SlugHashPrefixTruncate(teamSlug, "cdn", gcp.GoogleServiceAccountMaxLength)
 	emailAddress := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", accountID, projectID)
 	serviceAccountName = fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, emailAddress)
-	return
+	return serviceAccountName, accountID
 }
 
 func (r *cdnReconciler) setServiceAccountPolicy(ctx context.Context, serviceAccount *iam.ServiceAccount, teamSlug string, client *apiclient.APIClient) error {
