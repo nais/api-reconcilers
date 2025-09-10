@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"cloud.google.com/go/pubsub"
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
@@ -34,7 +34,7 @@ type Manager struct {
 	// Reconcilers to enable during registration
 	reconcilersToEnable []string
 	log                 logrus.FieldLogger
-	pubsubSubscription  *pubsub.Subscription
+	pubsubSubscription  *pubsub.Subscriber
 	syncQueueChan       <-chan ReconcileRequest
 	syncQueue           Queue
 	inFlight            InFlight
@@ -58,13 +58,13 @@ func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistr
 
 	log.WithField("duration", time.Since(start).String()).Debug("metrics created")
 
-	var pubsubSubscription *pubsub.Subscription
+	var pubsubSubscription *pubsub.Subscriber
 	pubsubClient, err := pubsub.NewClient(ctx, pubsubProjectID)
 	log.WithField("duration", time.Since(start).String()).Debug("pubsub client created")
 	if err != nil {
 		log.WithError(err).Errorf("error when creating pubsub client")
 	} else {
-		pubsubSubscription = pubsubClient.Subscription(pubsubSubscriptionID)
+		pubsubSubscription = pubsubClient.Subscriber(pubsubSubscriptionID)
 		log.WithField("duration", time.Since(start).String()).Debug("subscription created")
 	}
 

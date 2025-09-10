@@ -17,7 +17,7 @@ require (
 	cloud.google.com/go/compute v1.39.0
 	cloud.google.com/go/iam v1.5.2
 	cloud.google.com/go/longrunning v0.6.7
-	cloud.google.com/go/pubsub v1.49.0
+	cloud.google.com/go/pubsub/v2 v2.0.0
 	cloud.google.com/go/storage v1.55.0
 	github.com/GoogleCloudPlatform/k8s-config-connector v1.132.0
 	github.com/go-chi/chi/v5 v5.2.3
