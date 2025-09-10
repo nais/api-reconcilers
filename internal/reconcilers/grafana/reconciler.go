@@ -8,26 +8,22 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/exp/maps"
-
+	grafanaaccesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
+	grafanaadminusers "github.com/grafana/grafana-openapi-client-go/client/admin_users"
+	grafanaprovisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
+	grafanaserviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
+	grafanateams "github.com/grafana/grafana-openapi-client-go/client/teams"
+	grafanausers "github.com/grafana/grafana-openapi-client-go/client/users"
+	"github.com/grafana/grafana-openapi-client-go/models"
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
-
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
-
-	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
-	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
-	grafana_provisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
-	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
-	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
-	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
-	"github.com/grafana/grafana-openapi-client-go/models"
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -42,13 +38,50 @@ const (
 	defaultSlackUsername = "Grafana"
 )
 
+type UsersClientService interface {
+	GetUserByLoginOrEmailWithParams(params *grafanausers.GetUserByLoginOrEmailParams, opts ...grafanausers.ClientOption) (*grafanausers.GetUserByLoginOrEmailOK, error)
+}
+
+type TeamsClientService interface {
+	SearchTeams(params *grafanateams.SearchTeamsParams, opts ...grafanateams.ClientOption) (*grafanateams.SearchTeamsOK, error)
+	CreateTeamWithParams(params *grafanateams.CreateTeamParams, opts ...grafanateams.ClientOption) (*grafanateams.CreateTeamOK, error)
+	GetTeamMembersWithParams(params *grafanateams.GetTeamMembersParams, opts ...grafanateams.ClientOption) (*grafanateams.GetTeamMembersOK, error)
+	RemoveTeamMemberWithParams(params *grafanateams.RemoveTeamMemberParams, opts ...grafanateams.ClientOption) (*grafanateams.RemoveTeamMemberOK, error)
+	AddTeamMemberWithParams(params *grafanateams.AddTeamMemberParams, opts ...grafanateams.ClientOption) (*grafanateams.AddTeamMemberOK, error)
+	DeleteTeamByID(teamID string, opts ...grafanateams.ClientOption) (*grafanateams.DeleteTeamByIDOK, error)
+}
+
+type AccessControlClientService interface {
+	GetResourcePermissionsWithParams(params *grafanaaccesscontrol.GetResourcePermissionsParams, opts ...grafanaaccesscontrol.ClientOption) (*grafanaaccesscontrol.GetResourcePermissionsOK, error)
+	SetResourcePermissions(params *grafanaaccesscontrol.SetResourcePermissionsParams, opts ...grafanaaccesscontrol.ClientOption) (*grafanaaccesscontrol.SetResourcePermissionsOK, error)
+}
+
+type ServiceAccountsClientService interface {
+	SearchOrgServiceAccountsWithPaging(params *grafanaserviceaccounts.SearchOrgServiceAccountsWithPagingParams, opts ...grafanaserviceaccounts.ClientOption) (*grafanaserviceaccounts.SearchOrgServiceAccountsWithPagingOK, error)
+	CreateServiceAccount(params *grafanaserviceaccounts.CreateServiceAccountParams, opts ...grafanaserviceaccounts.ClientOption) (*grafanaserviceaccounts.CreateServiceAccountCreated, error)
+}
+
+type AdminUsersClientService interface {
+	AdminCreateUserWithParams(params *grafanaadminusers.AdminCreateUserParams, opts ...grafanaadminusers.ClientOption) (*grafanaadminusers.AdminCreateUserOK, error)
+}
+
+type ProvisioningClientService interface {
+	GetTemplate(name string, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetTemplateOK, error)
+	PutTemplate(params *grafanaprovisioning.PutTemplateParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutTemplateAccepted, error)
+	GetContactpoints(params *grafanaprovisioning.GetContactpointsParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetContactpointsOK, error)
+	PostContactpoints(params *grafanaprovisioning.PostContactpointsParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PostContactpointsAccepted, error)
+	PutContactpoint(params *grafanaprovisioning.PutContactpointParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutContactpointAccepted, error)
+	GetPolicyTree(opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetPolicyTreeOK, error)
+	PutPolicyTree(params *grafanaprovisioning.PutPolicyTreeParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutPolicyTreeAccepted, error)
+}
+
 type grafanaReconciler struct {
-	users           grafana_users.ClientService
-	teams           grafana_teams.ClientService
-	rbac            grafana_accesscontrol.ClientService
-	serviceAccounts grafana_serviceaccounts.ClientService
-	adminUsers      grafana_admin_users.ClientService
-	provisioning    grafana_provisioning.ClientService
+	users           UsersClientService
+	teams           TeamsClientService
+	rbac            AccessControlClientService
+	serviceAccounts ServiceAccountsClientService
+	adminUsers      AdminUsersClientService
+	provisioning    ProvisioningClientService
 	flags           config.FeatureFlags
 	slackWebhookURL string
 
@@ -64,12 +97,12 @@ type grafanaReconciler struct {
 }
 
 func New(
-	users grafana_users.ClientService,
-	teams grafana_teams.ClientService,
-	rbac grafana_accesscontrol.ClientService,
-	serviceAccounts grafana_serviceaccounts.ClientService,
-	adminUsers grafana_admin_users.ClientService,
-	provisioning grafana_provisioning.ClientService,
+	users UsersClientService,
+	teams TeamsClientService,
+	rbac AccessControlClientService,
+	serviceAccounts ServiceAccountsClientService,
+	adminUsers AdminUsersClientService,
+	provisioning ProvisioningClientService,
 	flags config.FeatureFlags,
 	slackWebhookURL string,
 ) reconcilers.Reconciler {
@@ -192,7 +225,7 @@ Labels:
 			Template: desiredContent,
 		}
 
-		putParams := &grafana_provisioning.PutTemplateParams{
+		putParams := &grafanaprovisioning.PutTemplateParams{
 			Name: templateName,
 			Body: templateContent,
 		}
@@ -222,7 +255,7 @@ func (r *grafanaReconciler) buildSlackContactPointSettings(slackChannel string) 
 }
 
 func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string) (int64, error) {
-	params := &grafana_teams.SearchTeamsParams{
+	params := &grafanateams.SearchTeamsParams{
 		Query:   &teamName,
 		Context: ctx,
 	}
@@ -238,7 +271,7 @@ func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string
 		}
 	}
 
-	createResp, err := r.teams.CreateTeamWithParams(&grafana_teams.CreateTeamParams{
+	createResp, err := r.teams.CreateTeamWithParams(&grafanateams.CreateTeamParams{
 		Body: &models.CreateTeamCommand{
 			Name: teamName,
 		},
@@ -252,7 +285,7 @@ func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string
 }
 
 func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, user *protoapi.User) (int64, error) {
-	existingUser, err := r.users.GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+	existingUser, err := r.users.GetUserByLoginOrEmailWithParams(&grafanausers.GetUserByLoginOrEmailParams{
 		LoginOrEmail: user.GetEmail(),
 		Context:      ctx,
 	})
@@ -260,7 +293,7 @@ func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, user *protoapi.
 		return existingUser.GetPayload().ID, nil
 	}
 
-	newUser, err := r.adminUsers.AdminCreateUserWithParams(&grafana_admin_users.AdminCreateUserParams{
+	newUser, err := r.adminUsers.AdminCreateUserWithParams(&grafanaadminusers.AdminCreateUserParams{
 		Body: &models.AdminCreateUserForm{
 			Email:    user.GetEmail(),
 			Login:    user.GetEmail(),
@@ -278,7 +311,7 @@ func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, user *protoapi.
 
 func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, naisTeamMembers []*protoapi.TeamMember, grafanaUserIDMap map[string]int64) error {
 	teamIDString := strconv.Itoa(int(teamID))
-	grafanaExistingMembers, err := r.teams.GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+	grafanaExistingMembers, err := r.teams.GetTeamMembersWithParams(&grafanateams.GetTeamMembersParams{
 		TeamID:  teamIDString,
 		Context: ctx,
 	})
@@ -309,7 +342,7 @@ func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, n
 	}
 
 	for userID := range membersToRemove {
-		_, err = r.teams.RemoveTeamMemberWithParams(&grafana_teams.RemoveTeamMemberParams{
+		_, err = r.teams.RemoveTeamMemberWithParams(&grafanateams.RemoveTeamMemberParams{
 			TeamID:  teamIDString,
 			UserID:  userID,
 			Context: ctx,
@@ -320,7 +353,7 @@ func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, n
 	}
 
 	for _, email := range membersToAdd {
-		_, err = r.teams.AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+		_, err = r.teams.AddTeamMemberWithParams(&grafanateams.AddTeamMemberParams{
 			Body: &models.AddTeamMemberCommand{
 				UserID: grafanaUserIDMap[email],
 			},
@@ -354,7 +387,7 @@ func teamMemberExistsInGrafanaMembers(grafanaTeamMemberEmails []string, email st
 }
 
 func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, teamName string) (int64, error) {
-	params := &grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
+	params := &grafanaserviceaccounts.SearchOrgServiceAccountsWithPagingParams{
 		Query:   &teamName,
 		Context: ctx,
 	}
@@ -370,7 +403,7 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, teamN
 		}
 	}
 
-	createParams := &grafana_serviceaccounts.CreateServiceAccountParams{
+	createParams := &grafanaserviceaccounts.CreateServiceAccountParams{
 		Body: &models.CreateServiceAccountForm{
 			Name: teamName,
 		},
@@ -388,7 +421,7 @@ func (r *grafanaReconciler) getOrCreateServiceAccount(ctx context.Context, teamN
 func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, teamID int64, serviceAccountID int64) error {
 	const resourceName = "serviceaccounts"
 
-	existingPermissions, err := r.rbac.GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+	existingPermissions, err := r.rbac.GetResourcePermissionsWithParams(&grafanaaccesscontrol.GetResourcePermissionsParams{
 		Resource:   resourceName,
 		ResourceID: strconv.Itoa(int(serviceAccountID)),
 		Context:    ctx,
@@ -419,7 +452,7 @@ func (r *grafanaReconciler) setServiceAccountMembers(ctx context.Context, teamID
 			TeamID:     teamID,
 		})
 
-		_, err = r.rbac.SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+		_, err = r.rbac.SetResourcePermissions(&grafanaaccesscontrol.SetResourcePermissionsParams{
 			Body: &models.SetPermissionsCommand{
 				Permissions: permissions,
 			},
@@ -577,7 +610,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	}
 
 	// Try to get existing contact point first
-	getParams := &grafana_provisioning.GetContactpointsParams{
+	getParams := &grafanaprovisioning.GetContactpointsParams{
 		Name: &name,
 	}
 	getParams.SetContext(ctx)
@@ -594,7 +627,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 			}
 			return 0
 		}())
-		createParams := &grafana_provisioning.PostContactpointsParams{
+		createParams := &grafanaprovisioning.PostContactpointsParams{
 			Body: contactPoint,
 		}
 		createParams.SetContext(ctx)
@@ -608,7 +641,7 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	} else {
 		// Contact point exists, update it
 		log.Debugf("Contact point %s exists (found %d contact points), updating with PUT", name, len(resp.Payload))
-		updateParams := &grafana_provisioning.PutContactpointParams{
+		updateParams := &grafanaprovisioning.PutContactpointParams{
 			UID:  name,
 			Body: contactPoint,
 		}
@@ -682,7 +715,7 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 		attribute.String("team", teamSlug),
 	))
 
-	params := &grafana_provisioning.PutPolicyTreeParams{
+	params := &grafanaprovisioning.PutPolicyTreeParams{
 		Body: policyTree,
 	}
 	params.SetContext(ctx)
@@ -772,7 +805,7 @@ func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APICli
 		}
 	}
 
-	params := &grafana_teams.SearchTeamsParams{
+	params := &grafanateams.SearchTeamsParams{
 		Query:   &teamName,
 		Context: ctx,
 	}
@@ -818,7 +851,7 @@ func (r *grafanaReconciler) cleanupAlerting(ctx context.Context, teamSlug string
 			attribute.String("team", teamSlug),
 		))
 
-		params := &grafana_provisioning.PutPolicyTreeParams{
+		params := &grafanaprovisioning.PutPolicyTreeParams{
 			Body: policyTree,
 		}
 		params.SetContext(ctx)
