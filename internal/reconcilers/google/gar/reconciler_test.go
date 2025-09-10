@@ -17,6 +17,8 @@ import (
 	"cloud.google.com/go/artifactregistry/apiv1/artifactregistrypb"
 	"cloud.google.com/go/iam/apiv1/iampb"
 	"cloud.google.com/go/longrunning/autogen/longrunningpb"
+	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
+	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
@@ -32,9 +34,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"k8s.io/utils/ptr"
-
-	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
-	"github.com/nais/api-reconcilers/internal/test"
 )
 
 type fakeArtifactRegistry struct {
@@ -481,12 +480,12 @@ func TestReconcile(t *testing.T) {
 						t.Errorf("expected name %q, got %q", expectedRepository.Name, r.Name)
 					}
 
-					repo := expectedRepository
+					repo := proto.Clone(&expectedRepository).(*artifactregistrypb.Repository)
 					repo.Description = "some incorrect description"
 					repo.Labels = map[string]string{
 						"team": "some-incorrect-team",
 					}
-					return &repo, nil
+					return repo, nil
 				},
 				update: func(ctx context.Context, r *artifactregistrypb.UpdateRepositoryRequest) (*artifactregistrypb.Repository, error) {
 					if r.Repository.Description != expectedRepository.Description {

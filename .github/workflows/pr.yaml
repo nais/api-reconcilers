@@ -17,7 +17,8 @@ jobs:
           - check:gosec
           - check:helm-lint
           - check:staticcheck
-          - check:vulncheck
+          - check:govulncheck
+          - check:govet
           - fmt:ci
     steps:
       - uses: actions/checkout@v5

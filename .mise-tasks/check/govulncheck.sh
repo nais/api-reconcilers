@@ -1,5 +1,5 @@
-#!/usr/bin/env sh
-#MISE description="Run vulncheck"
+#!/usr/bin/env bash
+#MISE description="Run govulncheck"
 
 set -e
 
