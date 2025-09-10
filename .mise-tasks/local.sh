@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #MISE description="Start local development server"
 #MISE sources=["**/*.go"]
 

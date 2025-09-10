@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #MISE description="Test all code"
 #USAGE flag "--coverage" help="Generate a coverage profile"
 
