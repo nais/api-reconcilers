@@ -15,12 +15,6 @@ import (
 	grafana_users "github.com/grafana/grafana-openapi-client-go/client/users"
 	"github.com/grafana/grafana-openapi-client-go/models"
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
-	grafana_mock_access_control "github.com/nais/api-reconcilers/internal/mocks/grafana/access_control"
-	grafana_mock_admin_users "github.com/nais/api-reconcilers/internal/mocks/grafana/admin_users"
-	grafana_mock_provisioning "github.com/nais/api-reconcilers/internal/mocks/grafana/provisioning"
-	grafana_mock_service_accounts "github.com/nais/api-reconcilers/internal/mocks/grafana/service_accounts"
-	grafana_mock_teams "github.com/nais/api-reconcilers/internal/mocks/grafana/teams"
-	grafana_mock_users "github.com/nais/api-reconcilers/internal/mocks/grafana/users"
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
@@ -87,7 +81,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Maybe()
 
-		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
 		usersService.EXPECT().
 			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
 				LoginOrEmail: members[0].User.Email,
@@ -104,7 +98,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
 			Once()
 
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
@@ -159,7 +153,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
 		rbacService.EXPECT().
 			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
 				Resource:   resourceName,
@@ -187,7 +181,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
 			Once()
 
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
 		serviceAccountsService.EXPECT().
 			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
 				Query:   &serviceAccountName,
@@ -211,7 +205,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
 		adminUsersService.
 			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
 				return params.Body.Email == members[0].User.Email
@@ -233,7 +227,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		// Mock the notification template creation with GET-then-PUT pattern
 		provisioningService.EXPECT().
 			GetTemplate("nais.slack").
@@ -308,7 +302,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Maybe()
 
-		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
 		usersService.EXPECT().
 			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
 				LoginOrEmail: members[0].User.Email,
@@ -332,7 +326,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			RemoveTeamMemberWithParams(&grafana_teams.RemoveTeamMemberParams{
 				UserID:  2,
@@ -380,7 +374,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
 		rbacService.EXPECT().
 			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
 				Resource:   resourceName,
@@ -408,7 +402,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
 			Once()
 
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
 
 		serviceAccounts := make([]*models.ServiceAccountDTO, 0)
 		serviceAccounts = append(serviceAccounts, &models.ServiceAccountDTO{
@@ -427,9 +421,9 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
 
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		// Mock the notification template creation with GET-then-PUT pattern
 		provisioningService.EXPECT().
 			GetTemplate("nais.slack").
@@ -492,7 +486,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Maybe()
 
-		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
 		usersService.EXPECT().
 			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
 				LoginOrEmail: members[0].User.Email,
@@ -516,7 +510,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
@@ -552,7 +546,7 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
 		rbacService.EXPECT().
 			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
 				Resource:   resourceName,
@@ -589,7 +583,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
 			Once()
 
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
 
 		serviceAccounts := make([]*models.ServiceAccountDTO, 0)
 		serviceAccounts = append(serviceAccounts, &models.ServiceAccountDTO{
@@ -608,9 +602,9 @@ func TestReconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
 
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		// Mock the notification template creation with GET-then-PUT pattern
 		provisioningService.EXPECT().
 			GetTemplate("nais.slack").
@@ -659,7 +653,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("Delete team", func(t *testing.T) {
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
@@ -721,12 +715,12 @@ func TestAlertingFunctionality(t *testing.T) {
 		}
 
 		// Create all necessary mock services for the reconciler
-		usersService := grafana_mock_users.NewMockClientService(t)
-		teamsService := grafana_mock_teams.NewMockClientService(t)
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 
 		// Mock the notification template creation with GET-then-PUT pattern
 		provisioningService.EXPECT().
@@ -924,7 +918,7 @@ func TestAlertingFunctionality(t *testing.T) {
 		naisTeam := &protoapi.Team{Slug: teamSlug}
 
 		// Mock team search and deletion
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamSlugVar,
@@ -944,7 +938,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Once()
 
 		// Mock provisioning service for cleanup
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		provisioningService.EXPECT().
 			GetPolicyTree().
 			Return(&grafana_provisioning.GetPolicyTreeOK{
@@ -971,7 +965,7 @@ func TestAlertingFunctionality(t *testing.T) {
 		naisTeam := &protoapi.Team{Slug: teamSlug}
 
 		// Mock team search and deletion
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamSlugVar,
@@ -1061,7 +1055,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Once()
 
 		// Mock all the existing services (reuse from previous test)
-		usersService := grafana_mock_users.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
 		usersService.EXPECT().
 			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
 				LoginOrEmail: members[0].User.Email,
@@ -1078,7 +1072,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
 			Once()
 
-		teamsService := grafana_mock_teams.NewMockClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
@@ -1133,7 +1127,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			}, nil).
 			Once()
 
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
 		rbacService.EXPECT().
 			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
 				Resource:   resourceName,
@@ -1161,7 +1155,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
 			Once()
 
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
 		serviceAccountsService.EXPECT().
 			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
 				Query:   &serviceAccountName,
@@ -1185,7 +1179,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			}, nil).
 			Once()
 
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
 		adminUsersService.
 			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
 				return params.Body.Email == members[0].User.Email
@@ -1208,7 +1202,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Once()
 
 		// Mock provisioning service with specific expectations for alerting
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 
 		// Mock the notification template creation with GET-then-PUT pattern
 		provisioningService.EXPECT().
@@ -1332,11 +1326,11 @@ func TestAlertingFunctionality(t *testing.T) {
 			Once()
 
 		// Mock basic Grafana services (users, teams, etc.)
-		usersService := grafana_mock_users.NewMockClientService(t)
-		teamsService := grafana_mock_teams.NewMockClientService(t)
-		rbacService := grafana_mock_access_control.NewMockClientService(t)
-		serviceAccountsService := grafana_mock_service_accounts.NewMockClientService(t)
-		adminUsersService := grafana_mock_admin_users.NewMockClientService(t)
+		usersService := grafana_reconciler.NewMockUsersClientService(t)
+		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
+		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
+		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
+		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
 
 		// Setup basic team operations
 		teamsService.EXPECT().
@@ -1405,7 +1399,7 @@ func TestAlertingFunctionality(t *testing.T) {
 
 		// CRITICAL: Mock provisioning service but ensure NO methods are called
 		// If any provisioning methods are called, the test will fail
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		// No EXPECT() calls on provisioningService - any call will fail the test
 
 		reconciler := grafana_reconciler.New(
@@ -1480,7 +1474,7 @@ func TestContactPointCreationRegression(t *testing.T) {
 		// This test demonstrates what the original buggy code pattern would do
 		// and validates that it would indeed fail with 404
 
-		provisioningService := grafana_mock_provisioning.NewMockClientService(t)
+		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 
 		// Simulate the old buggy behavior: direct PUT call without checking existence
 		// This would fail with 404 like in the original error logs
