@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #MISE description="Run all checks"
-
-set -e
-
-mise run check:deadcode ::: check:gosec ::: check:helm-lint ::: check:staticcheck ::: check:vulncheck
+#MISE depends=["check:*"]

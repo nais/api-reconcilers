@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 #MISE description="Generate mocks using mockery"
 
 set -e

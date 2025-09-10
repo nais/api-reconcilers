@@ -4,34 +4,25 @@ env:
   NAME: nais-api-reconcilers
   IMAGE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais
 jobs:
-  test:
+  checks:
     name: Check pull request
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mise_task:
+          - test
+          - check:deadcode
+          - check:gosec
+          - check:helm-lint
+          - check:staticcheck
+          - check:vulncheck
+          - ci:fmt
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
-      - name: Find go cache dir
-        id: go-cache
-        run: |
-          go version
-          # Clear cache dirs to avoid error when restoring
-          go clean -cache -modcache
-          echo "gocache=$(go env GOCACHE)" >> $GITHUB_OUTPUT
-          echo "gomodcache=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
-      - name: Cache go modules
-        uses: actions/cache@v4
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
         with:
-          path: |
-            ${{ steps.go-cache.outputs.gocache }}
-            ${{ steps.go-cache.outputs.gomodcache }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-      - run: mise run test
-      - run: mise run check
-      - name: Check code format and run code generators
-        run: |
-          mise run fmt
-          mise run generate
-          git diff --exit-code --name-only
+          cache: false
+      - run: mise run ${{ matrix.mise_task }}
 
   build_push:
     outputs:
@@ -42,10 +33,10 @@ jobs:
     name: Build and push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
         with:
-          cache_key_prefix: "pr_bp_"
+          cache: false
       - id: go_version
         run: echo "go_version=$(mise current go)" >> $GITHUB_OUTPUT
       - uses: nais/platform-build-push-sign@main
