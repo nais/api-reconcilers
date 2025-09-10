@@ -8,11 +8,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   checks:
-    name: Check pull request
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mise_task:
+        mise-task:
           - test
           - check:deadcode
           - check:gosec
@@ -25,11 +24,9 @@ jobs:
       - uses: jdx/mise-action@v3
         with:
           cache: false
-      - run: mise run ${{ matrix.mise_task }}
+      - run: mise run ${{ matrix.mise-task }}
 
-  build_push:
-    outputs:
-      version: ${{ steps.build-push-sign.outputs.version }}
+  build-push:
     permissions:
       contents: read
       id-token: write
@@ -40,13 +37,13 @@ jobs:
       - uses: jdx/mise-action@v3
         with:
           cache: false
-      - id: go_version
-        run: echo "go_version=$(mise current go)" >> $GITHUB_OUTPUT
+      - id: version-info
+        run: echo "go-version=$(mise current go)" >> $GITHUB_OUTPUT
       - uses: nais/platform-build-push-sign@main
         id: build-push-sign
         with:
           name: ${{ env.NAME }}
-          build_args: GO_VERSION=${{ steps.go_version.outputs.go_version }}-
+          build_args: GO_VERSION=${{ steps.version-info.outputs.go-version }}-
           google_service_account: gh-api-reconcilers
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
