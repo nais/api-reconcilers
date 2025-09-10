@@ -16,7 +16,7 @@ jobs:
           - check:helm-lint
           - check:staticcheck
           - check:vulncheck
-          - ci:fmt
+          - fmt:ci
     steps:
       - uses: actions/checkout@v5
       - uses: jdx/mise-action@v3
