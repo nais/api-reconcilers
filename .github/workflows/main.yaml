@@ -7,53 +7,65 @@ env:
   NAME: nais-api-reconcilers
   IMAGE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais
 jobs:
-  build_push:
+  version-info:
     outputs:
-      version: ${{ steps.build-push-sign.outputs.version }}
-      chart_version: ${{ steps.package_chart.outputs.version }}
+      go-version: ${{ steps.go-version.outputs.version }}
+    name: Get version info
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with:
+          cache: false
+      - id: go-version
+        run: echo "version=$(mise current go)" >> $GITHUB_OUTPUT
+
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mise-task:
+          - test
+          - check:deadcode
+          - check:gosec
+          - check:helm-lint
+          - check:staticcheck
+          - check:vulncheck
+          - fmt:ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
+        with:
+          cache: false
+      - run: mise run ${{ matrix.mise-task }}
+
+  build-push:
+    needs:
+      - version-info
+      - check
+    outputs:
+      chart-version: ${{ steps.package-chart.outputs.version }}
     permissions:
       contents: read
       id-token: write
     name: Build and push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
-      - name: Find go cache dir
-        id: go-cache
-        run: |
-          go version
-          # Clear cache dirs to avoid error when restoring
-          go clean -cache -modcache
-          echo "gocache=$(go env GOCACHE)" >> $GITHUB_OUTPUT
-          echo "gomodcache=$(go env GOMODCACHE)" >> $GITHUB_OUTPUT
-      - name: Cache go modules
-        uses: actions/cache@v4
+      - uses: actions/checkout@v5
+      - uses: jdx/mise-action@v3
         with:
-          path: |
-            ${{ steps.go-cache.outputs.gocache }}
-            ${{ steps.go-cache.outputs.gomodcache }}
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-      - run: mise run test
-      - run: mise run check
-      - name: Check code format and run code generators
-        run: |
-          mise run fmt
-          mise run generate
-          git diff --exit-code --name-only
-      - id: go_version
-        run: echo "go_version=$(mise current go)" >> $GITHUB_OUTPUT
+          cache: false
       - uses: nais/platform-build-push-sign@main
         id: build-push-sign
         with:
           name: ${{ env.NAME }}
           build_args: |
-            GO_VERSION=${{ steps.go_version.outputs.go_version }}-
+            GO_VERSION=${{ needs.version-info.outputs.go-version }}-
           google_service_account: gh-api-reconcilers
           workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
           push: true
       - name: Package chart
-        id: package_chart
+        id: package-chart
         env:
           CHART_PATH: ./charts
         run: |
@@ -76,7 +88,7 @@ jobs:
       - name: Push Chart
         if: github.ref == 'refs/heads/main'
         run: |-
-          chart="${{ steps.package_chart.outputs.archive }}"
+          chart="${{ steps.package-chart.outputs.archive }}"
           echo "Pushing: $chart"
           helm push "$chart" ${{ env.IMAGE_REPOSITORY }}
 
@@ -85,10 +97,10 @@ jobs:
     permissions:
       id-token: write
     needs:
-      - build_push
+      - build-push
     steps:
       - uses: nais/fasit-deploy@v2
         if: github.ref == 'refs/heads/main'
         with:
           chart: ${{ env.IMAGE_REPOSITORY }}/${{ env.NAME }}
-          version: ${{ needs.build_push.outputs.chart_version }}
+          version: ${{ needs.build-push.outputs.chart-version }}
