@@ -22,7 +22,7 @@ values:
       type: bool
 
   featureFlags.enableGrafanaAlerts:
-    displayName: Enable Grafana Alerts
+    displayName: Enable reconcile of Grafana Alerts config
     config:
       type: bool
 
