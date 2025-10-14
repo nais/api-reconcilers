@@ -25,6 +25,7 @@ import (
 	google_cdn_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
 	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
+	google_log_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/log_admin"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
@@ -192,6 +193,12 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created CDN reconciler")
 
+	logAdminReconciler, err := google_log_admin_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
+	if err != nil {
+		log.WithField("reconciler", "log_admin").WithError(err).Errorf("error when creating reconciler")
+	}
+	log.WithField("duration", time.Since(start).String()).Debug("Created Log Admin reconciler")
+
 	// The reconcilers will be run in the order they are added to the manager
 	reconcilerManager.AddReconciler(githubReconciler)
 	reconcilerManager.AddReconciler(azureGroupReconciler)
@@ -201,6 +208,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
+	reconcilerManager.AddReconciler(logAdminReconciler)
 	reconcilerManager.AddReconciler(grafanaReconciler)
 
 	if dependencyTrackReconciler != nil {

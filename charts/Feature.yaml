@@ -32,6 +32,12 @@ values:
       template: |
         {{ .Env.project_id | quote }}
 
+  naisAuditLogProjectID:
+    displayName: NAIS audit log project ID
+    computed:
+      template: |
+        {{ .Env.nais_audit_log_project | quote }}
+
   tenantDomain:
     displayName: Tenant domain
     computed:
