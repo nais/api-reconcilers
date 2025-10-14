@@ -10,6 +10,7 @@ logLevel: info
 logFormat: json
 googleManagementProjectID: # mapped in fasit
 tenantDomain: # mapped in fasit
+naisAuditLogProjectID: # mapped in fasit
 clusterAlias: [ ]
 reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,grafana"
 fasit:
