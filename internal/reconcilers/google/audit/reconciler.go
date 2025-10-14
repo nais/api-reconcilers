@@ -35,14 +35,12 @@ type Services struct {
 }
 
 type auditLogReconciler struct {
-	naisAuditLogProjectID    string
-	services                 *Services
-	tenantName               string
-	workloadIdentityPoolName string
-	config                   Config
+	services *Services
+	config   Config
 }
 
 type Config struct {
+	ProjectID     string
 	Location      string
 	RetentionDays int32
 }
@@ -59,16 +57,16 @@ func WithServices(services *Services) OverrideFunc {
 	}
 }
 
-func New(ctx context.Context, serviceAccountEmail, naisAuditLogProjectID, tenantName string, workloadIdentityPoolName string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
+	if config.ProjectID == "" {
+		return nil, fmt.Errorf("audit log project ID is required: specify the GCP project ID where audit log buckets will be created")
+	}
 	if config.Location == "" {
-		return nil, fmt.Errorf("audit log location is required: specify a GCP location (e.g., 'europe-north1') where audit log buckets will be created")
+		return nil, fmt.Errorf("audit log location is required: specify a GCP location (e.g., 'europe-north1', 'us-central1') where audit log buckets will be created")
 	}
 
 	reconciler := &auditLogReconciler{
-		naisAuditLogProjectID:    naisAuditLogProjectID,
-		tenantName:               tenantName,
-		workloadIdentityPoolName: workloadIdentityPoolName,
-		config:                   config,
+		config: config,
 	}
 
 	for _, override := range testOverrides {
@@ -173,10 +171,9 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 }
 
 func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) error {
-	parent := fmt.Sprintf("projects/%s/locations/%s", r.naisAuditLogProjectID, location)
+	parent := fmt.Sprintf("projects/%s/locations/%s", r.config.ProjectID, location)
 	bucketName := GenerateLogBucketName(teamSlug, envName, sqlInstance)
 
-	// Validate bucket name according to Google Cloud Logging requirements
 	if err := ValidateLogBucketName(bucketName); err != nil {
 		return fmt.Errorf("invalid bucket name %q: %w", bucketName, err)
 	}
@@ -187,10 +184,6 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 	}
 
 	if !exists {
-
-		/*
-			{"correlation_id":"e5426330-d67d-402b-b420-b4cc73e8d050","error":"create log bucket for team tommy, instance contests-test: check if bucket exists: rpc error: code = InvalidArgument desc = Name \"projects/nais-management-7178/location/europe-north1/buckets/dev-contests-test\" is missing the locations component. Expected the form projects/[PROJECT_ID]/locations/[ID]/buckets/[ID]","level":"error","msg":"error during team reconciler","reconciler":"google:gcp:audit","team":"tommy","time":"2025-10-14T13:21:04Z"}
-		*/
 		bucketReq := &loggingpb.CreateBucketRequest{
 			Parent:   parent,
 			BucketId: bucketName,
@@ -222,35 +215,25 @@ func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) 
 	return true, nil
 }
 
-// getRetentionDays returns the configured retention days with a sensible default
 func (r *auditLogReconciler) getRetentionDays() int32 {
 	if r.config.RetentionDays > 0 {
 		return r.config.RetentionDays
 	}
-	// Default to 365 days for production audit logs
 	return 365
 }
 
-// GenerateLogBucketName creates a bucket name from team, environment, and SQL instance components.
-// Uses a hash-based approach to ensure names always fit within the 100-character limit while
-// maintaining uniqueness and some readability.
 func GenerateLogBucketName(teamSlug, envName, sqlInstance string) string {
-	// Try the natural name first
 	naturalName := fmt.Sprintf("%s-%s-%s", teamSlug, envName, sqlInstance)
 
-	// If it fits, use it as-is
 	if len(naturalName) <= 100 {
 		return naturalName
 	}
 
-	// For long names, use a hybrid approach:
-	// Format: {shortTeam}-{shortEnv}-{shortInstance}-{hash}
 	fullIdentifier := fmt.Sprintf("%s/%s/%s", teamSlug, envName, sqlInstance)
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
 	availableForComponents := 100 - 8 - 4
-
 	maxComponentLen := availableForComponents / 3
 
 	shortTeam := truncateToLength(teamSlug, maxComponentLen)

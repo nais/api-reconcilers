@@ -24,16 +24,14 @@ import (
 )
 
 const (
-	managementProjectID      = "management-project-123"
-	tenantName               = "example"
-	serviceAccountEmail      = "sa@example.com"
-	teamSlug                 = "slug"
-	googleGroupEmail         = "slug@example.com"
-	workloadIdentityPoolName = "projects/123456789/locations/global/workloadIdentityPools/some-identity-pool"
-	environment              = "prod"
-	teamProjectID            = "team-project-456"
-	sqlInstanceName          = "test-instance"
-	location                 = "europe-north1"
+	managementProjectID = "management-project-123"
+	serviceAccountEmail = "sa@example.com"
+	teamSlug            = "slug"
+	googleGroupEmail    = "slug@example.com"
+	environment         = "prod"
+	teamProjectID       = "team-project-456"
+	sqlInstanceName     = "test-instance"
+	location            = "europe-north1"
 )
 
 var (
@@ -127,7 +125,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,7 +164,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -190,7 +188,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -211,7 +209,7 @@ func TestDelete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -224,7 +222,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestConfiguration(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -417,7 +415,7 @@ func TestGenerateLogBucketName(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -476,7 +474,7 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -493,6 +491,47 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 		// Verify that we got to the log bucket creation part, not SQL listing failure
 		if strings.Contains(err.Error(), "get sql instances for team") {
 			t.Errorf("error should be related to log bucket creation, not SQL instance listing: %v", err)
+		}
+	})
+}
+
+func TestConfigValidation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("missing project ID", func(t *testing.T) {
+		_, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			Location: location,
+		})
+		if err == nil {
+			t.Fatal("expected error for missing project ID")
+		}
+		if !strings.Contains(err.Error(), "audit log project ID is required") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("missing location", func(t *testing.T) {
+		_, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			ProjectID: managementProjectID,
+		})
+		if err == nil {
+			t.Fatal("expected error for missing location")
+		}
+		if !strings.Contains(err.Error(), "audit log location is required") {
+			t.Errorf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("valid config", func(t *testing.T) {
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			ProjectID: managementProjectID,
+			Location:  location,
+		}, audit.WithServices(&audit.Services{}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if reconciler == nil {
+			t.Fatal("expected reconciler to be created")
 		}
 	})
 }
