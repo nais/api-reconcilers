@@ -109,17 +109,19 @@ type Config struct {
 		AdminUserEmail string `env:"GOOGLE_ADMIN_USER_EMAIL"`
 	}
 
+	AuditLog struct {
+		// ProjectID The ID of the GCP project where audit log buckets are created.
+		ProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
+
+		// Location The GCP location where audit log buckets are created.
+		Location string `env:"NAIS_AUDIT_LOG_LOCATION,default=europe-north1"`
+
+		// RetentionDays The number of days to retain audit logs. Defaults to 365 days if not set.
+		RetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=365"`
+	}
+
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
-
-	// NaisAuditLogProjectID The ID of the GCP project where audit log buckets are created.
-	NaisAuditLogProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
-
-	// NaisAuditLogLocation The GCP location where audit log buckets are created.
-	NaisAuditLogLocation string `env:"NAIS_AUDIT_LOG_LOCATION,default=europe-north1"`
-
-	// NaisAuditLogRetentionDays The number of days to retain audit logs. Defaults to 365 days if not set.
-	NaisAuditLogRetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=365"`
 
 	// ListenAddress The host:port combination used by the http server.
 	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`

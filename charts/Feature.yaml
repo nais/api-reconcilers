@@ -32,19 +32,19 @@ values:
       template: |
         {{ .Env.project_id | quote }}
 
-  naisAuditLogProjectID:
+  auditLog.projectID:
     displayName: NAIS audit log project ID
     computed:
       template: |
         {{ .Env.nais_audit_log_project | quote }}
 
-  naisAuditLogLocation:
+  auditLog.location:
     displayName: NAIS audit log location
     description: The GCP location where audit log buckets are created
     config:
       type: string
 
-  naisAuditLogRetentionDays:
+  auditLog.retentionDays:
     displayName: NAIS audit log retention days
     description: The number of days to retain audit logs
     config:

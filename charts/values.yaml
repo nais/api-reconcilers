@@ -9,9 +9,12 @@ resources:
 logLevel: info
 logFormat: json
 googleManagementProjectID: # mapped in fasit
-naisAuditLogProjectID: # mapped in fasit
-naisAuditLogLocation: europe-north1
-naisAuditLogRetentionDays: 365
+
+auditLog:
+  projectID: # mapped in fasit
+  location: europe-north1
+  retentionDays: 365
+
 tenantDomain: # mapped in fasit
 clusterAlias: [ ]
 reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,google:gcp:audit,grafana"

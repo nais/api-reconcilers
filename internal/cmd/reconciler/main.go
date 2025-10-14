@@ -193,14 +193,14 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created CDN reconciler")
 
-	logAdminReconciler, err := google_audit_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.NaisAuditLogProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName, google_audit_reconciler.Config{
-		Location:      cfg.NaisAuditLogLocation,
-		RetentionDays: cfg.NaisAuditLogRetentionDays,
+	auditLogReconciler, err := google_audit_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.AuditLog.ProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName, google_audit_reconciler.Config{
+		Location:      cfg.AuditLog.Location,
+		RetentionDays: cfg.AuditLog.RetentionDays,
 	})
 	if err != nil {
-		log.WithField("reconciler", "log_admin").WithError(err).Errorf("error when creating reconciler")
+		log.WithField("reconciler", "audit_log").WithError(err).Errorf("error when creating reconciler")
 	}
-	log.WithField("duration", time.Since(start).String()).Debug("Created Log Admin reconciler")
+	log.WithField("duration", time.Since(start).String()).Debug("Created Audit Log reconciler")
 
 	// The reconcilers will be run in the order they are added to the manager
 	reconcilerManager.AddReconciler(githubReconciler)
@@ -211,7 +211,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
-	reconcilerManager.AddReconciler(logAdminReconciler)
+	reconcilerManager.AddReconciler(auditLogReconciler)
 	reconcilerManager.AddReconciler(grafanaReconciler)
 
 	if dependencyTrackReconciler != nil {
