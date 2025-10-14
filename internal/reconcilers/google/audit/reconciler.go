@@ -139,7 +139,7 @@ func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		for _, i := range listSQLInstances {
-			err := r.createLogBucketIfNotExists(ctx, env.EnvironmentName, i, location, log)
+			err := r.createLogBucketIfNotExists(ctx, env.EnvironmentName, i, naisTeam.Slug, location, log)
 			if err != nil {
 				return fmt.Errorf("create log bucket for team %s, instance %s: %w", naisTeam.Slug, i, err)
 			}
@@ -161,9 +161,9 @@ func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 	return sqlInstances, nil
 }
 
-func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, envName, sqlInstance, location string, log logrus.FieldLogger) error {
+func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, envName, sqlInstance, teamName, location string, log logrus.FieldLogger) error {
 	parent := fmt.Sprintf("projects/%s/locations/%s", r.naisAuditLogProjectID, location)
-	bucketName := fmt.Sprintf("%s-%s", envName, sqlInstance)
+	bucketName := fmt.Sprintf("%s-%s-%s", teamName, envName, sqlInstance)
 
 	exists, err := r.bucketExists(ctx, fmt.Sprintf("%s/buckets/%s", parent, bucketName))
 	if err != nil {
