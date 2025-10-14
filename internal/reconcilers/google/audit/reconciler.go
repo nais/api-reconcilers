@@ -1,4 +1,4 @@
-package log_admin
+package audit
 
 import (
 	"context"
@@ -44,12 +44,6 @@ func (r *logAdminReconciler) Name() string {
 }
 
 type OverrideFunc func(reconciler *logAdminReconciler)
-
-func WithGcpServices(gcpServices *Services) OverrideFunc {
-	return func(r *logAdminReconciler) {
-		r.services = gcpServices
-	}
-}
 
 func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	// roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", naisAuditLogProjectID)
@@ -127,13 +121,13 @@ func (r *logAdminReconciler) Delete(ctx context.Context, client *apiclient.APICl
 
 func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	location := "europe-north1"
-	it := iterator.New[*protoapi.TeamEnvironment](ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
 	for it.Next() {
 		env := it.Value()
-		listSQLInstances, err := r.getSqlInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
+		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
@@ -149,9 +143,9 @@ func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return nil
 }
 
-func (r *logAdminReconciler) getSqlInstancesForTeam(ctx context.Context, teamSlug, teamProjectId string) ([]string, error) {
+func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
 	sqlInstances := make([]string, 0)
-	response, err := r.services.SQLAdminService.Instances.List(teamProjectId).Context(ctx).Do()
+	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("list sql instances for team %s: %w", teamSlug, err)
 	}
@@ -175,7 +169,7 @@ func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, env
 			Parent:   parent,
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
-				RetentionDays: 0,
+				RetentionDays: 1, // TODO: must be 365 when in production
 				Locked:        true,
 			},
 		}

@@ -22,10 +22,10 @@ import (
 	azure_group_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/azure/group"
 	dependencytrack_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/dependencytrack"
 	github_team_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/github/team"
+	google_audit_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/audit"
 	google_cdn_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/cdn"
 	google_gar_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gar"
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
-	google_log_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/log_admin"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
 	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
@@ -193,7 +193,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created CDN reconciler")
 
-	logAdminReconciler, err := google_log_admin_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
+	logAdminReconciler, err := google_audit_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, cfg.GoogleManagementProjectID, cfg.TenantName, cfg.GCP.WorkloadIdentityPoolName)
 	if err != nil {
 		log.WithField("reconciler", "log_admin").WithError(err).Errorf("error when creating reconciler")
 	}
