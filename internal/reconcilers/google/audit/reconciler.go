@@ -34,7 +34,7 @@ type Services struct {
 	SQLAdminService  *sqladmin.Service
 }
 
-type logAdminReconciler struct {
+type auditLogReconciler struct {
 	naisAuditLogProjectID    string
 	services                 *Services
 	tenantName               string
@@ -47,14 +47,14 @@ type Config struct {
 	RetentionDays int32
 }
 
-func (r *logAdminReconciler) Name() string {
+func (r *auditLogReconciler) Name() string {
 	return reconcilerName
 }
 
-type OverrideFunc func(reconciler *logAdminReconciler)
+type OverrideFunc func(reconciler *auditLogReconciler)
 
 func WithServices(services *Services) OverrideFunc {
-	return func(reconciler *logAdminReconciler) {
+	return func(reconciler *auditLogReconciler) {
 		reconciler.services = services
 	}
 }
@@ -65,7 +65,7 @@ func New(ctx context.Context, serviceAccountEmail, naisAuditLogProjectID, tenant
 		return nil, fmt.Errorf("config.Location is required")
 	}
 
-	reconciler := &logAdminReconciler{
+	reconciler := &auditLogReconciler{
 		naisAuditLogProjectID:    naisAuditLogProjectID,
 		tenantName:               tenantName,
 		workloadIdentityPoolName: workloadIdentityPoolName,
@@ -125,20 +125,20 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 	}, nil
 }
 
-func (r *logAdminReconciler) Configuration() *protoapi.NewReconciler {
+func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 	return &protoapi.NewReconciler{
 		Name:        r.Name(),
-		DisplayName: "Google Log Admin",
-		Description: "Create log bucket resources for team",
+		DisplayName: "Google Audit Log",
+		Description: "Create audit log buckets for SQL instances",
 		MemberAware: false,
 	}
 }
 
-func (r *logAdminReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	return nil
 }
 
-func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
@@ -161,7 +161,7 @@ func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return it.Err()
 }
 
-func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
+func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 	return sqlInstances, nil
 }
 
-func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) error {
 	parent := fmt.Sprintf("projects/%s/locations/%s", r.naisAuditLogProjectID, location)
 	bucketName := GenerateLogBucketName(teamSlug, envName, sqlInstance)
 
@@ -211,7 +211,7 @@ func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 	return nil
 }
 
-func (r *logAdminReconciler) bucketExists(ctx context.Context, bucketID string) (bool, error) {
+func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) (bool, error) {
 	_, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketID})
 	if err != nil {
 		s, ok := status.FromError(err)
@@ -224,7 +224,7 @@ func (r *logAdminReconciler) bucketExists(ctx context.Context, bucketID string) 
 }
 
 // getRetentionDays returns the configured retention days with a sensible default
-func (r *logAdminReconciler) getRetentionDays() int32 {
+func (r *auditLogReconciler) getRetentionDays() int32 {
 	if r.config.RetentionDays > 0 {
 		return r.config.RetentionDays
 	}

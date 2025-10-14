@@ -235,12 +235,12 @@ func TestConfiguration(t *testing.T) {
 		t.Errorf("expected name 'google:gcp:audit', got %q", config.Name)
 	}
 
-	if config.DisplayName != "Google Log Admin" {
-		t.Errorf("expected display name 'Google Log Admin', got %q", config.DisplayName)
+	if config.DisplayName != "Google Audit Log" {
+		t.Errorf("expected display name 'Google Audit Log', got %q", config.DisplayName)
 	}
 
-	if config.Description != "Create log bucket resources for team" {
-		t.Errorf("expected description 'Create log bucket resources for team', got %q", config.Description)
+	if config.Description != "Create audit log buckets for SQL instances" {
+		t.Errorf("expected description 'Create audit log buckets for SQL instances', got %q", config.Description)
 	}
 
 	if config.MemberAware {
