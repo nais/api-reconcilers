@@ -38,6 +38,18 @@ values:
       template: |
         {{ .Env.nais_audit_log_project | quote }}
 
+  naisAuditLogLocation:
+    displayName: NAIS audit log location
+    description: The GCP location where audit log buckets are created
+    config:
+      type: string
+
+  naisAuditLogRetentionDays:
+    displayName: NAIS audit log retention days
+    description: The number of days to retain audit logs
+    config:
+      type: int
+
   tenantDomain:
     displayName: Tenant domain
     computed:

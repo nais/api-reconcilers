@@ -115,6 +115,12 @@ type Config struct {
 	// NaisAuditLogProjectID The ID of the GCP project where audit log buckets are created.
 	NaisAuditLogProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
 
+	// NaisAuditLogLocation The GCP location where audit log buckets are created.
+	NaisAuditLogLocation string `env:"NAIS_AUDIT_LOG_LOCATION,default=europe-north1"`
+
+	// NaisAuditLogRetentionDays The number of days to retain audit logs. Defaults to 365 days if not set.
+	NaisAuditLogRetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=365"`
+
 	// ListenAddress The host:port combination used by the http server.
 	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
 

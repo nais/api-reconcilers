@@ -127,7 +127,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -166,7 +166,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -190,7 +190,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -211,7 +211,7 @@ func TestDelete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -224,7 +224,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestConfiguration(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -248,8 +248,176 @@ func TestConfiguration(t *testing.T) {
 	}
 }
 
+func TestValidateLogBucketName(t *testing.T) {
+	tests := []struct {
+		name        string
+		bucketName  string
+		expectError bool
+		errorSubstr string
+	}{
+		{
+			name:        "valid bucket name",
+			bucketName:  "valid-bucket-name",
+			expectError: false,
+		},
+		{
+			name:        "valid bucket with underscores and periods",
+			bucketName:  "team_test.bucket-name123",
+			expectError: false,
+		},
+		{
+			name:        "empty bucket name",
+			bucketName:  "",
+			expectError: true,
+			errorSubstr: "cannot be empty",
+		},
+		{
+			name:        "bucket name too long",
+			bucketName:  "a" + strings.Repeat("b", 100), // 101 characters
+			expectError: true,
+			errorSubstr: "exceeds 100 character limit",
+		},
+		{
+			name:        "bucket name starts with hyphen",
+			bucketName:  "-invalid-start",
+			expectError: true,
+			errorSubstr: "must start with an alphanumeric character",
+		},
+		{
+			name:        "bucket name starts with underscore",
+			bucketName:  "_invalid-start",
+			expectError: true,
+			errorSubstr: "must start with an alphanumeric character",
+		},
+		{
+			name:        "bucket name starts with period",
+			bucketName:  ".invalid-start",
+			expectError: true,
+			errorSubstr: "must start with an alphanumeric character",
+		},
+		{
+			name:        "bucket name with invalid characters",
+			bucketName:  "invalid@bucket",
+			expectError: true,
+			errorSubstr: "can only contain letters, digits, underscores, hyphens, and periods",
+		},
+		{
+			name:        "bucket name with spaces",
+			bucketName:  "invalid bucket name",
+			expectError: true,
+			errorSubstr: "can only contain letters, digits, underscores, hyphens, and periods",
+		},
+		{
+			name:        "exactly 100 characters",
+			bucketName:  strings.Repeat("a", 100),
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := audit.ValidateLogBucketName(tt.bucketName)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error for bucket name %q, got nil", tt.bucketName)
+				} else if !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("expected error containing %q, got %q", tt.errorSubstr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("expected no error for bucket name %q, got %v", tt.bucketName, err)
+				}
+			}
+		})
+	}
+}
+
+func TestGenerateLogBucketName(t *testing.T) {
+	tests := []struct {
+		name        string
+		teamSlug    string
+		envName     string
+		sqlInstance string
+		description string
+	}{
+		{
+			name:        "normal case - all components fit",
+			teamSlug:    "myteam",
+			envName:     "dev",
+			sqlInstance: "postgres-1",
+			description: "Should keep original format when under 100 chars",
+		},
+		{
+			name:        "short components",
+			teamSlug:    "team",
+			envName:     "prod",
+			sqlInstance: "db",
+			description: "Short names should remain unchanged",
+		},
+		{
+			name:        "long components requiring hash",
+			teamSlug:    "very-long-team-name",
+			envName:     "production-environment",
+			sqlInstance: "postgresql-instance-with-very-long-name",
+			description: "Should use hash suffix for long names",
+		},
+		{
+			name:        "extremely long components",
+			teamSlug:    strings.Repeat("team-", 20),
+			envName:     strings.Repeat("env-", 20),
+			sqlInstance: strings.Repeat("instance-", 20),
+			description: "Should handle extreme cases with hash",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := audit.GenerateLogBucketName(tt.teamSlug, tt.envName, tt.sqlInstance)
+
+			// Verify length constraint
+			if len(result) > 100 {
+				t.Errorf("Generated name exceeds max length: got %d chars, max 100 chars", len(result))
+			}
+
+			// Verify it passes validation
+			if err := audit.ValidateLogBucketName(result); err != nil {
+				t.Errorf("Generated name failed validation: %v", err)
+			}
+
+			// Verify deterministic behavior (same inputs = same outputs)
+			result2 := audit.GenerateLogBucketName(tt.teamSlug, tt.envName, tt.sqlInstance)
+			if result != result2 {
+				t.Errorf("Function is not deterministic: %s != %s", result, result2)
+			}
+
+			t.Logf("Input: team=%s, env=%s, instance=%s", tt.teamSlug, tt.envName, tt.sqlInstance)
+			t.Logf("Output: %s (len=%d)", result, len(result))
+		})
+	}
+
+	// Test collision resistance
+	t.Run("collision resistance", func(t *testing.T) {
+		testPairs := []struct{ team, env, instance string }{
+			{"team1", "prod", "instance"},
+			{"team2", "prod", "instance"},
+			{"team1", "dev", "instance"},
+			{"team1", "prod", "database"},
+		}
+
+		names := make(map[string]bool)
+		for _, tc := range testPairs {
+			name := audit.GenerateLogBucketName(tc.team, tc.env, tc.instance)
+			if names[name] {
+				t.Errorf("Hash collision detected for %s-%s-%s: %s", tc.team, tc.env, tc.instance, name)
+			}
+			names[name] = true
+		}
+	})
+}
+
 func TestName(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -308,7 +476,7 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.Config{Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

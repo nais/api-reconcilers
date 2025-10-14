@@ -65,6 +65,11 @@ spec:
               value: {{ .Values.googleManagementProjectID | quote }}
             - name: NAIS_AUDIT_LOG_PROJECT_ID
               value: {{ .Values.naisAuditLogProjectID | quote }}
+            # Audit log
+            - name: NAIS_AUDIT_LOG_LOCATION
+              value: {{ .Values.naisAuditLogLocation | quote }}
+            - name: NAIS_AUDIT_LOG_RETENTION_DAYS
+              value: {{ .Values.naisAuditLogRetentionDays | quote }}
             # GitHub
             - name: GITHUB_AUTH_ENDPOINT
               value: {{ .Values.gitHub.authEndpoint }}
