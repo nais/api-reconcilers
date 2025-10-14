@@ -60,9 +60,8 @@ func WithServices(services *Services) OverrideFunc {
 }
 
 func New(ctx context.Context, serviceAccountEmail, naisAuditLogProjectID, tenantName string, workloadIdentityPoolName string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
-	// Validate required configuration
 	if config.Location == "" {
-		return nil, fmt.Errorf("config.Location is required")
+		return nil, fmt.Errorf("audit log location is required: specify a GCP location (e.g., 'europe-north1') where audit log buckets will be created")
 	}
 
 	reconciler := &auditLogReconciler{

@@ -12,7 +12,7 @@ googleManagementProjectID: # mapped in fasit
 
 auditLog:
   projectID: # mapped in fasit
-  location: europe-north1
+  location: # must be configured
   retentionDays: 365
 
 tenantDomain: # mapped in fasit

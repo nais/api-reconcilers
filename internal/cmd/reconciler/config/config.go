@@ -114,7 +114,7 @@ type Config struct {
 		ProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
 
 		// Location The GCP location where audit log buckets are created.
-		Location string `env:"NAIS_AUDIT_LOG_LOCATION,default=europe-north1"`
+		Location string `env:"NAIS_AUDIT_LOG_LOCATION"`
 
 		// RetentionDays The number of days to retain audit logs. Defaults to 365 days if not set.
 		RetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=365"`
