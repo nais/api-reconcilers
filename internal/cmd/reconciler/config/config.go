@@ -112,7 +112,8 @@ type Config struct {
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 
-	NaisAuditLogProjectID string `env:"NAIS_AUDIT_LOG_PROJECT"`
+	// NaisAuditLogProjectID The ID of the GCP project where audit log buckets are created.
+	NaisAuditLogProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
 
 	// ListenAddress The host:port combination used by the http server.
 	ListenAddress string `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
