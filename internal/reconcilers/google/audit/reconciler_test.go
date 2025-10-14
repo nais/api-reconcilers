@@ -190,7 +190,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -211,7 +211,7 @@ func TestDelete(t *testing.T) {
 
 		apiClient, _ := apiclient.NewMockClient(t)
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -224,7 +224,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestConfiguration(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName)
+	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestConfiguration(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName)
+	reconciler, err := audit.New(ctx, serviceAccountEmail, managementProjectID, tenantName, workloadIdentityPoolName, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
