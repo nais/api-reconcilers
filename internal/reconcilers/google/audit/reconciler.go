@@ -51,10 +51,10 @@ func WithServices(services *Services) OverrideFunc {
 	}
 }
 
-func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, serviceAccountEmail, naisAuditLogProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	// roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", naisAuditLogProjectID)
 	reconciler := &logAdminReconciler{
-		naisAuditLogProjectID:    googleManagementProjectID,
+		naisAuditLogProjectID:    naisAuditLogProjectID,
 		tenantName:               tenantName,
 		workloadIdentityPoolName: workloadIdentityPoolName,
 	}
@@ -162,7 +162,7 @@ func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 }
 
 func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, envName, sqlInstance, location string, log logrus.FieldLogger) error {
-	parent := fmt.Sprintf("projects/%s/location/%s", r.naisAuditLogProjectID, location)
+	parent := fmt.Sprintf("projects/%s/locations/%s", r.naisAuditLogProjectID, location)
 	bucketName := fmt.Sprintf("%s-%s", envName, sqlInstance)
 
 	exists, err := r.bucketExists(ctx, fmt.Sprintf("%s/buckets/%s", parent, bucketName))
@@ -171,6 +171,10 @@ func (r *logAdminReconciler) createLogBucketIfNotExists(ctx context.Context, env
 	}
 
 	if !exists {
+
+		/*
+			{"correlation_id":"e5426330-d67d-402b-b420-b4cc73e8d050","error":"create log bucket for team tommy, instance contests-test: check if bucket exists: rpc error: code = InvalidArgument desc = Name \"projects/nais-management-7178/location/europe-north1/buckets/dev-contests-test\" is missing the locations component. Expected the form projects/[PROJECT_ID]/locations/[ID]/buckets/[ID]","level":"error","msg":"error during team reconciler","reconciler":"google:gcp:audit","team":"tommy","time":"2025-10-14T13:21:04Z"}
+		*/
 		bucketReq := &loggingpb.CreateBucketRequest{
 			Parent:   parent,
 			BucketId: bucketName,
