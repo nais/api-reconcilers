@@ -198,6 +198,8 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 			return fmt.Errorf("create log bucket: %w", err)
 		}
 		log.Infof("Created log bucket %s", bucket.Name)
+	} else {
+		log.Debugf("Log bucket %s already exists, skipping", bucketName)
 	}
 
 	return nil
