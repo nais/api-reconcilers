@@ -52,7 +52,7 @@ func WithGcpServices(gcpServices *Services) OverrideFunc {
 }
 
 func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
-	//roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", naisAuditLogProjectID)
+	// roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", naisAuditLogProjectID)
 	reconciler := &logAdminReconciler{
 		naisAuditLogProjectID:    googleManagementProjectID,
 		tenantName:               tenantName,
