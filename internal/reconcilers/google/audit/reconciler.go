@@ -45,6 +45,12 @@ func (r *logAdminReconciler) Name() string {
 
 type OverrideFunc func(reconciler *logAdminReconciler)
 
+func WithServices(services *Services) OverrideFunc {
+	return func(reconciler *logAdminReconciler) {
+		reconciler.services = services
+	}
+}
+
 func New(ctx context.Context, serviceAccountEmail, googleManagementProjectID, tenantName string, workloadIdentityPoolName string, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	// roleID := fmt.Sprintf("projects/%s/roles/cdnCacheInvalidator", naisAuditLogProjectID)
 	reconciler := &logAdminReconciler{
@@ -140,7 +146,7 @@ func (r *logAdminReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 	}
 
-	return nil
+	return it.Err()
 }
 
 func (r *logAdminReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
