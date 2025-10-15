@@ -270,7 +270,8 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 
 	if !exists {
 		sinkReq := &loggingpb.CreateSinkRequest{
-			Parent: parent,
+			Parent:               parent,
+			UniqueWriterIdentity: true, // Required for cross-project exports
 			Sink: &loggingpb.LogSink{
 				Name:        sinkName,
 				Destination: destination,
