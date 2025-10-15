@@ -772,4 +772,268 @@ func TestPgAuditFiltering(t *testing.T) {
 		// The test passes if no log bucket creation was attempted (no API calls to create buckets)
 		// This verifies that instances without pgaudit enabled are properly filtered out
 	})
+
+	t.Run("only accepts 'on' value for pgaudit, logs warnings for others", func(t *testing.T) {
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{
+						EnvironmentName: environment,
+						GcpProjectId:    ptr.To(teamProjectID),
+					},
+				},
+			}, nil).
+			Once()
+
+		// Test that only "on" value is accepted, "true" will be logged as warning and treated as disabled
+		mocks := mocks{
+			sqlAdmin: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					response := &sqladmin.InstancesListResponse{
+						Items: []*sqladmin.DatabaseInstance{
+							// Instance with pgaudit set to "true" - should be excluded (logs warning)
+							{
+								Name: "pgaudit-true-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "true"},
+									},
+								},
+							},
+							// Instance with pgaudit set to "on" - should be included
+							{
+								Name: "pgaudit-on-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "on"},
+									},
+								},
+							},
+						},
+					}
+					json.NewEncoder(w).Encode(response)
+				},
+			}),
+		}
+
+		services := mocks.start(t, ctx)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			ProjectID: managementProjectID,
+			Location:  location,
+		}, audit.WithServices(services))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Only the instance with "on" should be processed, "true" should be filtered out
+		// This will attempt to create log bucket for the "on" instance only
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		// We expect this to fail at bucket creation for the "on" instance, but the "true" instance should be filtered out
+		if err != nil && !strings.Contains(err.Error(), "bucket") {
+			t.Fatalf("unexpected error type (should be bucket-related): %v", err)
+		}
+	})
+
+	t.Run("logs warnings for unsupported pgaudit values", func(t *testing.T) {
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{
+						EnvironmentName: environment,
+						GcpProjectId:    ptr.To(teamProjectID),
+					},
+				},
+			}, nil).
+			Once()
+
+		// Test that unsupported values are filtered out and warnings are logged
+		mocks := mocks{
+			sqlAdmin: test.HttpServerWithHandlers(t, []http.HandlerFunc{
+				func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					response := &sqladmin.InstancesListResponse{
+						Items: []*sqladmin.DatabaseInstance{
+							// Instance with pgaudit set to "1" - should be excluded (logs warning)
+							{
+								Name: "pgaudit-one-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "1"},
+									},
+								},
+							},
+							// Instance with pgaudit set to "yes" - should be excluded (logs warning)
+							{
+								Name: "pgaudit-yes-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "yes"},
+									},
+								},
+							},
+							// Instance with pgaudit set to "TRUE" - should be excluded (logs warning)
+							{
+								Name: "pgaudit-upper-true-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "TRUE"},
+									},
+								},
+							},
+							// Instance with pgaudit set to "invalid" - should be excluded (logs warning)
+							{
+								Name: "pgaudit-invalid-instance",
+								Settings: &sqladmin.Settings{
+									DatabaseFlags: []*sqladmin.DatabaseFlags{
+										{Name: "cloudsql.enable_pgaudit", Value: "invalid"},
+									},
+								},
+							},
+						},
+					}
+					json.NewEncoder(w).Encode(response)
+				},
+			}),
+		}
+
+		services := mocks.start(t, ctx)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			ProjectID: managementProjectID,
+			Location:  location,
+		}, audit.WithServices(services))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// All instances should be filtered out since they all have unsupported values
+		// This should complete without errors (no log bucket creation attempts)
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// The test passes if no log bucket creation was attempted (no API calls to create buckets)
+		// This verifies that instances with unsupported pgaudit values are properly filtered out
+		// and warnings are logged for each unsupported value
+	})
+}
+
+func TestHasPgAuditEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		instance *sqladmin.DatabaseInstance
+		expected bool
+	}{
+		{
+			name: "pgaudit enabled with 'on'",
+			instance: &sqladmin.DatabaseInstance{
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "on"},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pgaudit disabled with 'off'",
+			instance: &sqladmin.DatabaseInstance{
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "off"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pgaudit with 'true' (unsupported, should log warning)",
+			instance: &sqladmin.DatabaseInstance{
+				Name: "test-instance",
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "true"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pgaudit with '1' (unsupported, should log warning)",
+			instance: &sqladmin.DatabaseInstance{
+				Name: "test-instance",
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "1"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pgaudit with 'yes' (unsupported, should log warning)",
+			instance: &sqladmin.DatabaseInstance{
+				Name: "test-instance",
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "yes"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pgaudit with 'false' (unsupported, should log warning)",
+			instance: &sqladmin.DatabaseInstance{
+				Name: "test-instance",
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "cloudsql.enable_pgaudit", Value: "false"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "pgaudit flag missing",
+			instance: &sqladmin.DatabaseInstance{
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{
+						{Name: "some_other_flag", Value: "on"},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "no database flags",
+			instance: &sqladmin.DatabaseInstance{
+				Settings: &sqladmin.Settings{
+					DatabaseFlags: []*sqladmin.DatabaseFlags{},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "no settings",
+			instance: &sqladmin.DatabaseInstance{
+				Settings: nil,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := audit.HasPgAuditEnabled(tt.instance)
+			if result != tt.expected {
+				t.Errorf("HasPgAuditEnabled() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
 }

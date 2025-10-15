@@ -142,7 +142,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 
 	for it.Next() {
 		env := it.Value()
-		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
+		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId, log)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
@@ -158,23 +158,21 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return it.Err()
 }
 
-func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
+func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string, log logrus.FieldLogger) ([]string, error) {
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
 		return nil, fmt.Errorf("list sql instances for team %s: %w", teamSlug, err)
 	}
 	for _, i := range response.Items {
-		// Only include instances with pgaudit enabled
-		if hasPgAuditEnabled(i) {
+		if HasPgAuditEnabled(i) {
 			sqlInstances = append(sqlInstances, i.Name)
 		}
 	}
 	return sqlInstances, nil
 }
 
-// hasPgAuditEnabled checks if a SQL instance has the cloudsql.enable_pgaudit flag enabled
-func hasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
+func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	if instance.Settings == nil || instance.Settings.DatabaseFlags == nil {
 		return false
 	}
