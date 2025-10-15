@@ -116,8 +116,8 @@ type Config struct {
 		// Location The GCP location where audit log buckets are created.
 		Location string `env:"NAIS_AUDIT_LOG_LOCATION"`
 
-		// RetentionDays The number of days to retain audit logs. Defaults to 365 days if not set.
-		RetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=365"`
+		// RetentionDays The number of days to retain audit logs. Defaults to 90 days if not set.
+		RetentionDays int32 `env:"NAIS_AUDIT_LOG_RETENTION_DAYS,default=90"`
 	}
 
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.

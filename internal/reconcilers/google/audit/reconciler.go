@@ -236,7 +236,7 @@ func (r *auditLogReconciler) getRetentionDays() int32 {
 	if r.config.RetentionDays > 0 {
 		return r.config.RetentionDays
 	}
-	return 365
+	return 90
 }
 
 func GenerateLogBucketName(teamSlug, envName, sqlInstance string) string {
