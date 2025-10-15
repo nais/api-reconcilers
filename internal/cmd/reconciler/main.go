@@ -212,7 +212,9 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
-	reconcilerManager.AddReconciler(auditLogReconciler)
+	if auditLogReconciler != nil {
+		reconcilerManager.AddReconciler(auditLogReconciler)
+	}
 	reconcilerManager.AddReconciler(grafanaReconciler)
 
 	if dependencyTrackReconciler != nil {
