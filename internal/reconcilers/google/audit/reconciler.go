@@ -165,9 +165,26 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 		return nil, fmt.Errorf("list sql instances for team %s: %w", teamSlug, err)
 	}
 	for _, i := range response.Items {
-		sqlInstances = append(sqlInstances, i.Name)
+		// Only include instances with pgaudit enabled
+		if hasPgAuditEnabled(i) {
+			sqlInstances = append(sqlInstances, i.Name)
+		}
 	}
 	return sqlInstances, nil
+}
+
+// hasPgAuditEnabled checks if a SQL instance has the cloudsql.enable_pgaudit flag enabled
+func hasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
+	if instance.Settings == nil || instance.Settings.DatabaseFlags == nil {
+		return false
+	}
+
+	for _, flag := range instance.Settings.DatabaseFlags {
+		if flag.Name == "cloudsql.enable_pgaudit" && flag.Value == "on" {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) error {
