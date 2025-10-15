@@ -17,7 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
-	"google.golang.org/api/iam/v2"
+	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
 	"k8s.io/utils/ptr"
@@ -43,8 +44,9 @@ var (
 )
 
 type mocks struct {
-	sqlAdmin *httptest.Server
-	iam      *httptest.Server
+	sqlAdmin             *httptest.Server
+	iam                  *httptest.Server
+	cloudResourceManager *httptest.Server
 }
 
 func (m *mocks) start(t *testing.T, ctx context.Context) *audit.Services {
@@ -68,6 +70,15 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *audit.Services {
 		}
 	}
 
+	var cloudResourceManagerService *cloudresourcemanager.Service
+	if m.cloudResourceManager != nil {
+		var err error
+		cloudResourceManagerService, err = cloudresourcemanager.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(m.cloudResourceManager.URL))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
 	// For the logging services, we'll create minimal clients that won't be called in most tests
 	logAdminService, err := logging.NewClient(ctx, option.WithoutAuthentication())
 	if err != nil {
@@ -80,10 +91,11 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *audit.Services {
 	}
 
 	return &audit.Services{
-		LogAdminService:  logAdminService,
-		LogConfigService: logConfigService,
-		IAMService:       iamService,
-		SQLAdminService:  sqlAdminService,
+		LogAdminService:             logAdminService,
+		LogConfigService:            logConfigService,
+		IAMService:                  iamService,
+		SQLAdminService:             sqlAdminService,
+		CloudResourceManagerService: cloudResourceManagerService,
 	}
 }
 

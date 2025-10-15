@@ -14,7 +14,8 @@ import (
 	"github.com/nais/api/pkg/apiclient/iterator"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
-	"google.golang.org/api/iam/v2"
+	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
 	"google.golang.org/grpc/codes"
@@ -28,10 +29,11 @@ const (
 )
 
 type Services struct {
-	LogAdminService  *logging.Client
-	LogConfigService *logging.ConfigClient
-	IAMService       *iam.Service
-	SQLAdminService  *sqladmin.Service
+	LogAdminService             *logging.Client
+	LogConfigService            *logging.ConfigClient
+	IAMService                  *iam.Service
+	SQLAdminService             *sqladmin.Service
+	CloudResourceManagerService *cloudresourcemanager.Service
 }
 
 type auditLogReconciler struct {
@@ -114,11 +116,17 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 		return nil, fmt.Errorf("retrieve SQL admin service: %w", err)
 	}
 
+	cloudResourceManagerService, err := cloudresourcemanager.NewService(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Cloud Resource Manager service: %w", err)
+	}
+
 	return &Services{
-		LogAdminService:  logAdminService,
-		LogConfigService: logConfigService,
-		IAMService:       iamService,
-		SQLAdminService:  sqlAdminService,
+		LogAdminService:             logAdminService,
+		LogConfigService:            logConfigService,
+		IAMService:                  iamService,
+		SQLAdminService:             sqlAdminService,
+		CloudResourceManagerService: cloudResourceManagerService,
 	}, nil
 }
 
@@ -154,9 +162,19 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 				return fmt.Errorf("create log bucket for team %s, instance %s: %w", naisTeam.Slug, instance, err)
 			}
 
-			err = r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, instance, bucketName, log)
+			_, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, instance, bucketName, log)
 			if err != nil {
 				return fmt.Errorf("create log sink for team %s, instance %s: %w", naisTeam.Slug, instance, err)
+			}
+
+			if writerIdentity != "" {
+				log.Debugf("Granting bucket write permission for sink writer identity: %s", writerIdentity)
+				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					return fmt.Errorf("grant bucket write permission for team %s, instance %s: %w", naisTeam.Slug, instance, err)
+				}
+			} else {
+				log.Debugf("No writer identity found for sink, skipping permission grant")
 			}
 		}
 	}
@@ -245,7 +263,7 @@ func (r *auditLogReconciler) getRetentionDays() int32 {
 	return 90
 }
 
-func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, sqlInstance, bucketName string, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, sqlInstance, bucketName string, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 	sinkName := GenerateLogSinkName(teamSlug, envName, sqlInstance)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
@@ -253,21 +271,22 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 	// Get application users for this SQL instance
 	appUser, err := r.getApplicationUser(ctx, teamProjectID, sqlInstance, log)
 	if err != nil {
-		return fmt.Errorf("get application users for instance %s: %w", sqlInstance, err)
+		return "", "", fmt.Errorf("get application users for instance %s: %w", sqlInstance, err)
 	}
 
 	// Build the filter with exclusions for application users
 	filter := r.BuildLogFilter(teamProjectID, sqlInstance, appUser)
 
 	if err := ValidateLogSinkName(sinkName); err != nil {
-		return fmt.Errorf("invalid sink name %q: %w", sinkName, err)
+		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)
 	}
 
 	exists, err := r.sinkExists(ctx, fmt.Sprintf("%s/sinks/%s", parent, sinkName))
 	if err != nil {
-		return fmt.Errorf("check if sink exists: %w", err)
+		return "", "", fmt.Errorf("check if sink exists: %w", err)
 	}
 
+	var writerIdentity string
 	if !exists {
 		sinkReq := &loggingpb.CreateSinkRequest{
 			Parent:               parent,
@@ -282,13 +301,76 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 
 		sink, err := r.services.LogConfigService.CreateSink(ctx, sinkReq)
 		if err != nil {
-			return fmt.Errorf("create log sink: %w", err)
+			return "", "", fmt.Errorf("create log sink: %w", err)
 		}
 		log.Infof("Created log sink %s -> %s", sink.Name, destination)
+		writerIdentity = sink.WriterIdentity
 	} else {
 		log.Debugf("Log sink %s already exists, skipping", sinkName)
+		// For existing sinks, we need to get the writer identity by retrieving the sink
+		existingSink, err := r.services.LogConfigService.GetSink(ctx, &loggingpb.GetSinkRequest{
+			SinkName: fmt.Sprintf("%s/sinks/%s", parent, sinkName),
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("get existing sink writer identity: %w", err)
+		}
+		writerIdentity = existingSink.WriterIdentity
 	}
 
+	return sinkName, writerIdentity, nil
+}
+
+func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, bucketName, writerIdentity string, log logrus.FieldLogger) error {
+	// For log buckets, we need to grant the "roles/logging.bucketWriter" role to the sink's writer identity
+	// Use Cloud Resource Manager API to manage IAM policies on the project level
+
+	// Get current IAM policy for the project
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("get project IAM policy: %w", err)
+	}
+
+	// Check if the writer identity already has the required role
+	bucketWriterRole := "roles/logging.bucketWriter"
+	hasPermission := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == bucketWriterRole {
+			for _, member := range binding.Members {
+				if member == writerIdentity {
+					hasPermission = true
+					break
+				}
+			}
+			if !hasPermission {
+				// Add the writer identity to existing binding
+				binding.Members = append(binding.Members, writerIdentity)
+				hasPermission = true
+			}
+			break
+		}
+	}
+
+	// If no existing binding for the role, create a new one
+	if !hasPermission {
+		newBinding := &cloudresourcemanager.Binding{
+			Role:    bucketWriterRole,
+			Members: []string{writerIdentity},
+		}
+		policy.Bindings = append(policy.Bindings, newBinding)
+	}
+
+	// Update the IAM policy
+	setRequest := &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}
+
+	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, setRequest).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("set project IAM policy: %w", err)
+	}
+
+	log.Infof("Granted %s permission to writer identity %s for bucket %s", bucketWriterRole, writerIdentity, bucketName)
 	return nil
 }
 
