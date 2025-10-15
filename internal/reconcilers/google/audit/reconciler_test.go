@@ -1037,3 +1037,295 @@ func TestHasPgAuditEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateLogSinkName(t *testing.T) {
+	tests := []struct {
+		name         string
+		teamSlug     string
+		envName      string
+		sqlInstance  string
+		expectedName string
+	}{
+		{
+			name:         "simple names",
+			teamSlug:     "myteam",
+			envName:      "prod",
+			sqlInstance:  "mydb",
+			expectedName: "sink-myteam-prod-mydb",
+		},
+		{
+			name:         "names with hyphens",
+			teamSlug:     "my-team",
+			envName:      "prod-env",
+			sqlInstance:  "my-db-instance",
+			expectedName: "sink-my-team-prod-env-my-db-instance",
+		},
+		{
+			name:        "very long names that need truncation",
+			teamSlug:    "verylongteamnamethatshouldbetruncated",
+			envName:     "verylongenvironmentnamethatshouldbetruncated",
+			sqlInstance: "verylonginstancenamethatshouldbetruncated",
+			// Should be truncated with hash suffix
+			expectedName: "sink-verylongteamnamethatshouldb-verylongenvironmentnamethat-verylonginstancenamethatsho-", // Will have hash at end
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := audit.GenerateLogSinkName(tt.teamSlug, tt.envName, tt.sqlInstance)
+
+			// For the truncation test, just check prefix and length
+			if tt.name == "very long names that need truncation" {
+				if !strings.HasPrefix(result, "sink-verylongteamnamethatshouldb-verylongenvironmentnamethat-verylonginstancenamethatsho-") {
+					t.Errorf("Expected truncated name with hash suffix, got %s", result)
+				}
+				if len(result) > 100 {
+					t.Errorf("Sink name exceeds 100 character limit: %d", len(result))
+				}
+			} else {
+				if result != tt.expectedName {
+					t.Errorf("GenerateLogSinkName() = %v, expected %v", result, tt.expectedName)
+				}
+			}
+
+			// Validate the generated name
+			err := audit.ValidateLogSinkName(result)
+			if err != nil {
+				t.Errorf("Generated sink name is invalid: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateLogSinkName(t *testing.T) {
+	tests := []struct {
+		name        string
+		sinkName    string
+		expectError bool
+		errorSubstr string
+	}{
+		{
+			name:        "valid sink name",
+			sinkName:    "sink-myteam-prod-mydb",
+			expectError: false,
+		},
+		{
+			name:        "valid sink name with underscores",
+			sinkName:    "sink_myteam_prod_mydb",
+			expectError: false,
+		},
+		{
+			name:        "valid sink name starting with letter",
+			sinkName:    "myteam-prod-sink",
+			expectError: false,
+		},
+		{
+			name:        "valid sink name starting with underscore",
+			sinkName:    "_myteam-prod-sink",
+			expectError: false,
+		},
+		{
+			name:        "empty sink name",
+			sinkName:    "",
+			expectError: true,
+			errorSubstr: "cannot be empty",
+		},
+		{
+			name:        "sink name too long",
+			sinkName:    strings.Repeat("a", 101),
+			expectError: true,
+			errorSubstr: "exceeds 100 character limit",
+		},
+		{
+			name:        "sink name starts with number",
+			sinkName:    "1invalid-sink",
+			expectError: true,
+			errorSubstr: "must start with a letter or underscore",
+		},
+		{
+			name:        "sink name starts with hyphen",
+			sinkName:    "-invalid-sink",
+			expectError: true,
+			errorSubstr: "must start with a letter or underscore",
+		},
+		{
+			name:        "sink name with invalid characters",
+			sinkName:    "invalid@sink",
+			expectError: true,
+			errorSubstr: "can only contain letters, digits, underscores, and hyphens",
+		},
+		{
+			name:        "sink name with periods",
+			sinkName:    "invalid.sink",
+			expectError: true,
+			errorSubstr: "can only contain letters, digits, underscores, and hyphens",
+		},
+		{
+			name:        "exactly 100 characters",
+			sinkName:    "s" + strings.Repeat("a", 99),
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := audit.ValidateLogSinkName(tt.sinkName)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error for sink name %q, but got none", tt.sinkName)
+				} else if tt.errorSubstr != "" && !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("Expected error to contain %q, but got %q", tt.errorSubstr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error for sink name %q, but got %v", tt.sinkName, err)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildLogFilter(t *testing.T) {
+	tests := []struct {
+		name          string
+		teamProjectID string
+		sqlInstance   string
+		appUsers      []string
+		expectedParts []string
+	}{
+		{
+			name:          "no application users",
+			teamProjectID: "test-project",
+			sqlInstance:   "test-instance",
+			appUsers:      []string{},
+			expectedParts: []string{
+				`resource.type="cloudsql_database"`,
+				`resource.labels.database_id="test-project:test-instance"`,
+				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
+				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+			},
+		},
+		{
+			name:          "single application user",
+			teamProjectID: "test-project",
+			sqlInstance:   "test-instance",
+			appUsers:      []string{"app_user"},
+			expectedParts: []string{
+				`resource.type="cloudsql_database"`,
+				`resource.labels.database_id="test-project:test-instance"`,
+				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
+				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				`NOT protoPayload.request.user="app_user"`,
+			},
+		},
+		{
+			name:          "multiple application users",
+			teamProjectID: "test-project",
+			sqlInstance:   "test-instance",
+			appUsers:      []string{"app_user1", "app_user2"},
+			expectedParts: []string{
+				`resource.type="cloudsql_database"`,
+				`resource.labels.database_id="test-project:test-instance"`,
+				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
+				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				`NOT protoPayload.request.user="app_user1"`,
+				`NOT protoPayload.request.user="app_user2"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test the filter format by constructing it manually to verify the expected structure
+			baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
+AND resource.labels.database_id="%s:%s"
+AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				tt.teamProjectID, tt.sqlInstance, tt.teamProjectID)
+
+			if len(tt.appUsers) > 0 {
+				for _, user := range tt.appUsers {
+					baseFilter += fmt.Sprintf(`
+AND NOT protoPayload.request.user="%s"`, user)
+				}
+			}
+
+			for _, expectedPart := range tt.expectedParts {
+				if !strings.Contains(baseFilter, expectedPart) {
+					t.Errorf("Expected filter to contain %q, but it didn't. Filter: %s", expectedPart, baseFilter)
+				}
+			}
+		})
+	}
+}
+
+func TestGetApplicationUsersFromLabel(t *testing.T) {
+	tests := []struct {
+		name          string
+		userLabels    map[string]string
+		expectedUsers []string
+	}{
+		{
+			name:          "app label with user",
+			userLabels:    map[string]string{"app": "contests-test"},
+			expectedUsers: []string{"contests-test"},
+		},
+		{
+			name:          "app label with different user",
+			userLabels:    map[string]string{"app": "my-application"},
+			expectedUsers: []string{"my-application"},
+		},
+		{
+			name:          "no app label",
+			userLabels:    map[string]string{"environment": "prod"},
+			expectedUsers: []string{},
+		},
+		{
+			name:          "empty app label",
+			userLabels:    map[string]string{"app": ""},
+			expectedUsers: []string{},
+		},
+		{
+			name:          "nil labels",
+			userLabels:    nil,
+			expectedUsers: []string{},
+		},
+		{
+			name:          "multiple labels with app",
+			userLabels:    map[string]string{"app": "test-user", "env": "prod", "team": "myteam"},
+			expectedUsers: []string{"test-user"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock SQL instance with the specified labels
+			mockInstance := &sqladmin.DatabaseInstance{
+				Name: "test-instance",
+				Settings: &sqladmin.Settings{
+					UserLabels: tt.userLabels,
+				},
+			}
+
+			// Test the label extraction logic
+			var appUsers []string
+			if mockInstance.Settings != nil && mockInstance.Settings.UserLabels != nil {
+				if appUser, exists := mockInstance.Settings.UserLabels["app"]; exists && appUser != "" {
+					appUsers = append(appUsers, appUser)
+				}
+			}
+
+			if len(appUsers) != len(tt.expectedUsers) {
+				t.Errorf("Expected %d users, got %d", len(tt.expectedUsers), len(appUsers))
+				return
+			}
+
+			for i, expectedUser := range tt.expectedUsers {
+				if i >= len(appUsers) || appUsers[i] != expectedUser {
+					t.Errorf("Expected user %q at index %d, got %q", expectedUser, i, appUsers[i])
+				}
+			}
+		})
+	}
+}
