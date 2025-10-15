@@ -26,6 +26,8 @@ values:
     config:
       type: bool
 
+
+
   googleManagementProjectID:
     displayName: Google management project ID
     computed:
@@ -182,3 +184,9 @@ values:
     displayName: Log level
     config:
       type: string
+
+  naisAuditLogProjectID:
+    displayName: NAIS audit log project ID
+    computed:
+      template: |
+        {{ .Env.nais_audit_log_project | quote }}

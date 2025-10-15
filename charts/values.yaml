@@ -16,6 +16,7 @@ auditLog:
   retentionDays: 365
 
 tenantDomain: # mapped in fasit
+naisAuditLogProjectID: # mapped in fasit
 clusterAlias: [ ]
 reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,google:gcp:audit,grafana"
 fasit:
