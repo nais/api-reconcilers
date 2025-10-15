@@ -63,9 +63,9 @@ spec:
               value: {{ .Values.reconcilersToEnable | quote }}
             - name: GOOGLE_MANAGEMENT_PROJECT_ID
               value: {{ .Values.googleManagementProjectID | quote }}
+            # Audit log
             - name: NAIS_AUDIT_LOG_PROJECT_ID
               value: {{ .Values.auditLog.projectID | quote }}
-            # Audit log
             - name: NAIS_AUDIT_LOG_LOCATION
               value: {{ .Values.auditLog.location | quote }}
             - name: NAIS_AUDIT_LOG_RETENTION_DAYS
