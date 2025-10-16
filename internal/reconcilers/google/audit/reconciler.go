@@ -228,7 +228,7 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
 				RetentionDays: r.getRetentionDays(),
-				Locked:        true,
+				Locked:        false, // Buckets can be modified later if needed
 			},
 		}
 
