@@ -196,6 +196,7 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 	return sqlInstances, nil
 }
 
+// HasPgAuditEnabled checks if a SQL instance has the pgaudit flag enabled
 func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	if instance.Settings == nil || instance.Settings.DatabaseFlags == nil {
 		return false
@@ -228,7 +229,7 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
 				RetentionDays: r.getRetentionDays(),
-				Locked:        false, // Buckets can be modified later if needed
+				Locked:        false,
 			},
 		}
 
@@ -268,13 +269,11 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 	sinkName := GenerateLogSinkName(teamSlug, envName, sqlInstance)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
 
-	// Get application users for this SQL instance
 	appUser, err := r.getApplicationUser(ctx, teamProjectID, sqlInstance, log)
 	if err != nil {
 		return "", "", fmt.Errorf("get application users for instance %s: %w", sqlInstance, err)
 	}
 
-	// Build the filter with exclusions for application users
 	filter := r.BuildLogFilter(teamProjectID, sqlInstance, appUser)
 
 	if err := ValidateLogSinkName(sinkName); err != nil {
@@ -290,7 +289,7 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 	if !exists {
 		sinkReq := &loggingpb.CreateSinkRequest{
 			Parent:               parent,
-			UniqueWriterIdentity: true, // Required for cross-project exports
+			UniqueWriterIdentity: true,
 			Sink: &loggingpb.LogSink{
 				Name:        sinkName,
 				Destination: destination,
@@ -307,7 +306,6 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 		writerIdentity = sink.WriterIdentity
 	} else {
 		log.Debugf("Log sink %s already exists, skipping", sinkName)
-		// For existing sinks, we need to get the writer identity by retrieving the sink
 		existingSink, err := r.services.LogConfigService.GetSink(ctx, &loggingpb.GetSinkRequest{
 			SinkName: fmt.Sprintf("%s/sinks/%s", parent, sinkName),
 		})
@@ -320,17 +318,13 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 	return sinkName, writerIdentity, nil
 }
 
+// grantBucketWritePermission grants the logging.bucketWriter role to the sink's writer identity
 func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, bucketName, writerIdentity string, log logrus.FieldLogger) error {
-	// For log buckets, we need to grant the "roles/logging.bucketWriter" role to the sink's writer identity
-	// Use Cloud Resource Manager API to manage IAM policies on the project level
-
-	// Get current IAM policy for the project
 	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("get project IAM policy: %w", err)
 	}
 
-	// Check if the writer identity already has the required role
 	bucketWriterRole := "roles/logging.bucketWriter"
 	hasPermission := false
 
@@ -342,16 +336,23 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 					break
 				}
 			}
-			if !hasPermission {
-				// Add the writer identity to existing binding
-				binding.Members = append(binding.Members, writerIdentity)
-				hasPermission = true
-			}
 			break
 		}
 	}
 
-	// If no existing binding for the role, create a new one
+	if hasPermission {
+		log.Debugf("Writer identity %s already has %s permission, skipping grant", writerIdentity, bucketWriterRole)
+		return nil
+	}
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == bucketWriterRole {
+			binding.Members = append(binding.Members, writerIdentity)
+			hasPermission = true
+			break
+		}
+	}
+
 	if !hasPermission {
 		newBinding := &cloudresourcemanager.Binding{
 			Role:    bucketWriterRole,
@@ -360,7 +361,6 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 		policy.Bindings = append(policy.Bindings, newBinding)
 	}
 
-	// Update the IAM policy
 	setRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
 	}
@@ -386,14 +386,13 @@ func (r *auditLogReconciler) sinkExists(ctx context.Context, sinkID string) (boo
 	return true, nil
 }
 
+// getApplicationUser extracts the application user from SQL instance labels
 func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProjectID, sqlInstance string, log logrus.FieldLogger) (string, error) {
-	// Get the SQL instance details to extract the application user from labels
 	instance, err := r.services.SQLAdminService.Instances.Get(teamProjectID, sqlInstance).Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("get SQL instance %s: %w", sqlInstance, err)
 	}
 
-	// Check for "app" label which contains the application user name
 	if instance.Settings != nil && instance.Settings.UserLabels != nil {
 		if appUser, exists := instance.Settings.UserLabels["app"]; exists && appUser != "" {
 			log.Debugf("Found application user from 'app' label for SQL instance %s: %s", sqlInstance, appUser)
@@ -404,8 +403,8 @@ func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProject
 	return "", nil
 }
 
+// BuildLogFilter constructs a Cloud SQL audit log filter excluding application users
 func (r *auditLogReconciler) BuildLogFilter(teamProjectID, sqlInstance string, appUser string) string {
-	// Base filter for Cloud SQL audit logs
 	baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
 AND resource.labels.database_id="%s:%s"
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
@@ -416,6 +415,7 @@ AND NOT protoPayload.request.user="%s"`,
 	return baseFilter
 }
 
+// GenerateLogBucketName generates a unique bucket name with hash collision resistance
 func GenerateLogBucketName(teamSlug, envName, sqlInstance string) string {
 	naturalName := fmt.Sprintf("%s-%s-%s", teamSlug, envName, sqlInstance)
 
@@ -437,6 +437,7 @@ func GenerateLogBucketName(teamSlug, envName, sqlInstance string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", shortTeam, shortEnv, shortInstance, hashSuffix)
 }
 
+// truncateToLength truncates a string to the specified maximum length
 func truncateToLength(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
@@ -453,11 +454,10 @@ func truncateToLength(s string, maxLen int) string {
 	return s[:maxLen]
 }
 
+// GenerateLogSinkName generates a unique sink name with hash collision resistance
 func GenerateLogSinkName(teamSlug, envName, sqlInstance string) string {
-	// Similar to bucket name generation but with "sink-" prefix
 	naturalName := fmt.Sprintf("sink-%s-%s-%s", teamSlug, envName, sqlInstance)
 
-	// Log sink names have a 100 character limit like buckets
 	if len(naturalName) <= 100 {
 		return naturalName
 	}
@@ -466,7 +466,6 @@ func GenerateLogSinkName(teamSlug, envName, sqlInstance string) string {
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
-	// Account for "sink-" prefix (5 chars), hash suffix (8 chars), and separators (4 chars)
 	availableForComponents := 100 - 5 - 8 - 4
 	maxComponentLen := availableForComponents / 3
 
@@ -477,6 +476,7 @@ func GenerateLogSinkName(teamSlug, envName, sqlInstance string) string {
 	return fmt.Sprintf("sink-%s-%s-%s-%s", shortTeam, shortEnv, shortInstance, hashSuffix)
 }
 
+// ValidateLogBucketName validates a log bucket name against Google Cloud naming rules
 func ValidateLogBucketName(name string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("bucket name cannot be empty")
@@ -497,6 +497,7 @@ func ValidateLogBucketName(name string) error {
 	return nil
 }
 
+// ValidateLogSinkName validates a log sink name against Google Cloud naming rules
 func ValidateLogSinkName(name string) error {
 	if len(name) == 0 {
 		return fmt.Errorf("sink name cannot be empty")
@@ -506,12 +507,10 @@ func ValidateLogSinkName(name string) error {
 		return fmt.Errorf("sink name exceeds 100 character limit (got %d characters)", len(name))
 	}
 
-	// Log sink names must start with a letter or underscore
 	if !regexp.MustCompile(`^[a-zA-Z_]`).MatchString(name) {
 		return fmt.Errorf("sink name must start with a letter or underscore")
 	}
 
-	// Log sink names can contain letters, digits, underscores, and hyphens
 	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(name) {
 		return fmt.Errorf("sink name can only contain letters, digits, underscores, and hyphens")
 	}
