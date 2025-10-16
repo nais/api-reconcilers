@@ -23,9 +23,7 @@ import (
 )
 
 const (
-	managedByLabelName  = "managed-by"
-	managedByLabelValue = "api-reconcilers"
-	reconcilerName      = "google:gcp:audit"
+	reconcilerName = "google:gcp:audit"
 )
 
 type Services struct {
@@ -228,6 +226,7 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 			Parent:   parent,
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
+				Description:   fmt.Sprintf("Audit log bucket for SQL instance %s in team %s environment %s (created by api-reconcilers)", sqlInstance, teamSlug, envName),
 				RetentionDays: r.getRetentionDays(),
 				Locked:        false,
 			},
@@ -294,7 +293,7 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 				Name:        sinkName,
 				Destination: destination,
 				Filter:      filter,
-				Description: fmt.Sprintf("Audit logs for SQL instance %s in team %s environment %s", sqlInstance, teamSlug, envName),
+				Description: fmt.Sprintf("Audit log sink for SQL instance %s in team %s environment %s (created by api-reconcilers)", sqlInstance, teamSlug, envName),
 			},
 		}
 
