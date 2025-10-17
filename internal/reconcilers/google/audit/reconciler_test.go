@@ -602,23 +602,21 @@ func TestGetRetentionDays(t *testing.T) {
 
 	t.Run("uses configured retention days", func(t *testing.T) {
 		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
-			ProjectID:     managementProjectID,
-			Location:      location,
-			RetentionDays: 180,
+			ProjectID: managementProjectID,
+			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// The getRetentionDays method is private but tested through bucket creation
+		// The getRetentionDays method is now configurable via reconciler config
 		_ = reconciler
 	})
 
 	t.Run("uses default retention days when not configured", func(t *testing.T) {
 		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
-			ProjectID:     managementProjectID,
-			Location:      location,
-			RetentionDays: 0,
+			ProjectID: managementProjectID,
+			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -699,9 +697,8 @@ func TestConfigEdgeCases(t *testing.T) {
 
 	t.Run("negative retention days", func(t *testing.T) {
 		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
-			ProjectID:     managementProjectID,
-			Location:      location,
-			RetentionDays: -10,
+			ProjectID: managementProjectID,
+			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -741,9 +738,8 @@ func TestBucketCreationWithDifferentRetentionDays(t *testing.T) {
 			services := &audit.Services{}
 
 			reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
-				ProjectID:     managementProjectID,
-				Location:      location,
-				RetentionDays: tc.configRetention,
+				ProjectID: managementProjectID,
+				Location:  location,
 			}, audit.WithServices(services))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)

@@ -24,6 +24,8 @@ import (
 
 const (
 	reconcilerName = "google:gcp:audit"
+
+	configRetentionDays = "audit:retention_days"
 )
 
 type Services struct {
@@ -40,9 +42,8 @@ type auditLogReconciler struct {
 }
 
 type Config struct {
-	ProjectID     string
-	Location      string
-	RetentionDays int32
+	ProjectID string
+	Location  string
 }
 
 func (r *auditLogReconciler) Name() string {
@@ -134,6 +135,14 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 		DisplayName: "Google Audit Log",
 		Description: "Create audit log buckets for SQL instances",
 		MemberAware: false,
+		Config: []*protoapi.ReconcilerConfigSpec{
+			{
+				Key:         configRetentionDays,
+				DisplayName: "Retention Days",
+				Description: "The number of days to retain audit logs.",
+				Secret:      false,
+			},
+		},
 	}
 }
 
@@ -230,7 +239,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		for _, instance := range listSQLInstances {
-			bucketName, err := r.createLogBucketIfNotExists(ctx, naisTeam.Slug, env.EnvironmentName, instance, r.config.Location, log)
+			bucketName, err := r.createLogBucketIfNotExists(ctx, client, naisTeam.Slug, env.EnvironmentName, instance, r.config.Location, log)
 			if err != nil {
 				return fmt.Errorf("create log bucket for team %s, instance %s: %w", naisTeam.Slug, instance, err)
 			}
@@ -283,7 +292,7 @@ func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	return false
 }
 
-func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) (string, error) {
+func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) (string, error) {
 	parent := fmt.Sprintf("projects/%s/locations/%s", r.config.ProjectID, location)
 	bucketName := GenerateLogBucketName(teamSlug, envName, sqlInstance)
 
@@ -297,12 +306,17 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, tea
 	}
 
 	if !exists {
+		retentionDays, err := r.getRetentionDays(ctx, client)
+		if err != nil {
+			return "", fmt.Errorf("get retention days: %w", err)
+		}
+
 		bucketReq := &loggingpb.CreateBucketRequest{
 			Parent:   parent,
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
 				Description:   fmt.Sprintf("Audit log bucket for SQL instance %s in team %s environment %s (created by api-reconcilers)", sqlInstance, teamSlug, envName),
-				RetentionDays: r.getRetentionDays(),
+				RetentionDays: retentionDays,
 				Locked:        false,
 			},
 		}
@@ -331,11 +345,35 @@ func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) 
 	return true, nil
 }
 
-func (r *auditLogReconciler) getRetentionDays() int32 {
-	if r.config.RetentionDays > 0 {
-		return r.config.RetentionDays
+func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apiclient.APIClient) (int32, error) {
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return 90, fmt.Errorf("get reconciler config: %w", err)
 	}
-	return 90
+
+	for _, c := range config.Nodes {
+		if c.Key == configRetentionDays {
+			if c.Value == "" {
+				return 90, nil // Default to 90 days if not configured
+			}
+
+			// Parse the value as an integer
+			var retentionDays int32
+			if _, err := fmt.Sscanf(c.Value, "%d", &retentionDays); err != nil {
+				return 90, fmt.Errorf("invalid retention days value %q: %w", c.Value, err)
+			}
+
+			if retentionDays <= 0 {
+				return 90, nil // Default to 90 days for invalid values
+			}
+
+			return retentionDays, nil
+		}
+	}
+
+	return 90, nil // Default to 90 days if config key not found
 }
 
 func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, sqlInstance, bucketName string, log logrus.FieldLogger) (string, string, error) {

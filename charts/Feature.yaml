@@ -46,12 +46,6 @@ values:
     config:
       type: string
 
-  auditLog.retentionDays:
-    displayName: NAIS audit log retention days
-    description: The number of days to retain audit logs (defaults to 90 days). Not possible to decrease retention period on existing buckets.
-    config:
-      type: int
-
   tenantDomain:
     displayName: Tenant domain
     computed:

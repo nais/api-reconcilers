@@ -194,9 +194,8 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	log.WithField("duration", time.Since(start).String()).Debug("Created CDN reconciler")
 
 	auditLogReconciler, err := google_audit_reconciler.New(ctx, cfg.GCP.ServiceAccountEmail, google_audit_reconciler.Config{
-		ProjectID:     cfg.AuditLog.ProjectID,
-		Location:      cfg.AuditLog.Location,
-		RetentionDays: cfg.AuditLog.RetentionDays,
+		ProjectID: cfg.AuditLog.ProjectID,
+		Location:  cfg.AuditLog.Location,
 	})
 	if err != nil {
 		log.WithField("reconciler", "audit_log").WithError(err).Errorf("error when creating reconciler")
