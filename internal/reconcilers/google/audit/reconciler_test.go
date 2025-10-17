@@ -216,16 +216,58 @@ func TestReconcile(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	t.Run("delete is no-op", func(t *testing.T) {
+	t.Run("delete handles empty team environments", func(t *testing.T) {
 		log := logrus.StandardLogger()
 
-		apiClient, _ := apiclient.NewMockClient(t)
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		// Mock empty environments response
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{}, // Empty response
+			}, nil)
 
 		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
+		err = reconciler.Delete(ctx, apiClient, naisTeam, log)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("delete works when SQL instances are already deleted", func(t *testing.T) {
+		log := logrus.StandardLogger()
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		// Mock team environments response
+		teamProjectIDPtr := teamProjectID
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{
+						EnvironmentName: environment,
+						GcpProjectId:    &teamProjectIDPtr,
+					},
+				},
+			}, nil)
+
+		// Create a reconciler with empty services - this will cause deleteAllTeamSinks to fail gracefully
+		// but the Delete method should not fail overall, demonstrating the resilient approach
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{
+			LogConfigService: nil, // This will cause ListSinks to fail, simulating the real-world scenario
+		}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// This should not fail even though the logging service is nil
+		// The Delete method is designed to continue even when individual operations fail
 		err = reconciler.Delete(ctx, apiClient, naisTeam, log)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

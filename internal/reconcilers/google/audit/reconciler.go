@@ -138,6 +138,81 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 }
 
 func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
+		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
+	})
+
+	for it.Next() {
+		env := it.Value()
+		teamProjectID := env.GetGcpProjectId()
+
+		// Since SQL instances may already be deleted when a team is deleted,
+		// we need to find all existing sinks for this team/environment
+		// instead of relying on the existence of SQL instances
+		err := r.deleteAllTeamSinks(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, log)
+		if err != nil {
+			log.WithError(err).Warn("Failed to delete all team sinks")
+			// Continue with other environments instead of failing completely
+		}
+	}
+
+	return it.Err()
+}
+
+// deleteAllTeamSinks finds and deletes all sinks created by this reconciler for a specific team/environment
+func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProjectID, teamSlug, envName string, log logrus.FieldLogger) error {
+	// Check if we have a valid logging service
+	if r.services == nil || r.services.LogConfigService == nil {
+		log.Warn("No logging service available, cannot list or delete sinks")
+		return nil // Return nil to not fail the overall deletion process
+	}
+
+	// List all sinks in the project
+	parent := fmt.Sprintf("projects/%s", teamProjectID)
+	req := &loggingpb.ListSinksRequest{
+		Parent: parent,
+	}
+
+	it := r.services.LogConfigService.ListSinks(ctx, req)
+
+	for {
+		sink, err := it.Next()
+		if err != nil {
+			if err.Error() == "no more items in iterator" {
+				break
+			}
+			return fmt.Errorf("failed to iterate sinks: %w", err)
+		}
+
+		// Check if this sink was created by our reconciler for this team/environment
+		if r.isManagedSink(sink, teamSlug, envName) {
+			log.WithField("sink", sink.Name).Info("Found managed sink for deletion")
+
+			// Get the sink's writer identity before deleting it
+			writerIdentity := sink.WriterIdentity
+
+			// Extract bucket name from destination to remove IAM permissions
+			bucketName := r.extractBucketNameFromDestination(sink.Destination)
+
+			// Delete the log sink
+			err = r.deleteSink(ctx, teamProjectID, sink.Name, log)
+			if err != nil {
+				log.WithError(err).WithField("sink", sink.Name).Error("Failed to delete log sink")
+				// Continue with other sinks instead of failing completely
+				continue
+			}
+
+			// Remove IAM permissions from bucket if we have a writer identity and bucket name
+			if writerIdentity != "" && bucketName != "" {
+				err = r.removeBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					log.WithError(err).WithField("bucket", bucketName).WithField("identity", writerIdentity).Warn("Failed to remove bucket write permission")
+					// Continue with other permissions instead of failing completely
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -515,4 +590,113 @@ func ValidateLogSinkName(name string) error {
 	}
 
 	return nil
+}
+
+// deleteSink removes a log sink
+func (r *auditLogReconciler) deleteSink(ctx context.Context, teamProjectID, sinkName string, log logrus.FieldLogger) error {
+	parent := fmt.Sprintf("projects/%s", teamProjectID)
+	sinkPath := fmt.Sprintf("%s/sinks/%s", parent, sinkName)
+
+	req := &loggingpb.DeleteSinkRequest{
+		SinkName: sinkPath,
+	}
+
+	err := r.services.LogConfigService.DeleteSink(ctx, req)
+	if err != nil {
+		// Check if the sink was already deleted
+		if status.Code(err) == codes.NotFound {
+			log.WithField("sink", sinkName).Debug("Sink already deleted")
+			return nil
+		}
+		return fmt.Errorf("delete sink %s: %w", sinkName, err)
+	}
+
+	log.WithField("sink", sinkName).Info("Successfully deleted log sink")
+	return nil
+}
+
+// removeBucketWritePermission removes write permission for a service account from a bucket
+func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bucketName, writerIdentity string, log logrus.FieldLogger) error {
+	// Get current project IAM policy
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("get project IAM policy: %w", err)
+	}
+
+	// Remove the member from logging.bucketWriter role
+	role := "roles/logging.bucketWriter"
+	modified := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == role {
+			// Filter out the writer identity
+			var newMembers []string
+			for _, member := range binding.Members {
+				if member != writerIdentity {
+					newMembers = append(newMembers, member)
+				} else {
+					modified = true
+					log.WithFields(logrus.Fields{
+						"bucket":   bucketName,
+						"identity": writerIdentity,
+						"role":     role,
+					}).Info("Removing bucket write permission")
+				}
+			}
+			binding.Members = newMembers
+			break
+		}
+	}
+
+	if !modified {
+		log.WithField("identity", writerIdentity).Debug("Writer identity not found in bucket permissions")
+		return nil
+	}
+
+	// Set the updated policy
+	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("set project IAM policy: %w", err)
+	}
+
+	log.WithFields(logrus.Fields{
+		"bucket":   bucketName,
+		"identity": writerIdentity,
+		"role":     role,
+	}).Info("Successfully removed bucket write permission")
+
+	return nil
+}
+
+// isManagedSink checks if a sink was created by this reconciler for the given team and environment
+func (r *auditLogReconciler) isManagedSink(sink *loggingpb.LogSink, teamSlug, envName string) bool {
+	// Check if the sink name follows our naming convention
+	expectedPrefix := fmt.Sprintf("%s-%s-", teamSlug, envName)
+	if !regexp.MustCompile("^" + regexp.QuoteMeta(expectedPrefix)).MatchString(sink.Name) {
+		return false
+	}
+
+	// Check if the destination points to our audit log project
+	expectedDestinationPattern := fmt.Sprintf(`logging\.googleapis\.com/projects/%s/locations/%s/buckets/.*`,
+		regexp.QuoteMeta(r.config.ProjectID), regexp.QuoteMeta(r.config.Location))
+	matched, _ := regexp.MatchString(expectedDestinationPattern, sink.Destination)
+
+	return matched
+}
+
+// extractBucketNameFromDestination extracts the bucket name from a log sink destination
+func (r *auditLogReconciler) extractBucketNameFromDestination(destination string) string {
+	// Expected format: logging.googleapis.com/projects/PROJECT/locations/LOCATION/buckets/BUCKET
+	pattern := fmt.Sprintf(`logging\.googleapis\.com/projects/%s/locations/%s/buckets/(.+)`,
+		regexp.QuoteMeta(r.config.ProjectID), regexp.QuoteMeta(r.config.Location))
+
+	re := regexp.MustCompile(pattern)
+	matches := re.FindStringSubmatch(destination)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	return ""
 }
