@@ -535,7 +535,6 @@ func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProject
 // BuildLogFilter constructs a Cloud SQL audit log filter for all SQL instances in the project
 func (r *auditLogReconciler) BuildLogFilter(teamProjectID string, appUsers []string) string {
 	baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
-AND protoPayload.resource.service_name="sqladmin.googleapis.com"
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
 AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
 
