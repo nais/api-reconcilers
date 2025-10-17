@@ -13,7 +13,6 @@ googleManagementProjectID: # mapped in fasit
 auditLog:
   projectID: # mapped in fasit
   location: # must be configured
-  retentionDays: 90
 
 tenantDomain: # mapped in fasit
 naisAuditLogProjectID: # mapped in fasit
