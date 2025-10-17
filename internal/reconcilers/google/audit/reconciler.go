@@ -641,12 +641,12 @@ func ValidateLogSinkName(name string) error {
 		return fmt.Errorf("sink name exceeds 100 character limit (got %d characters)", len(name))
 	}
 
-	if !regexp.MustCompile(`^[a-zA-Z_]`).MatchString(name) {
-		return fmt.Errorf("sink name must start with a letter or underscore")
+	if !regexp.MustCompile(`^[a-zA-Z0-9]`).MatchString(name) {
+		return fmt.Errorf("sink name must start with an alphanumeric character")
 	}
 
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(name) {
-		return fmt.Errorf("sink name can only contain letters, digits, underscores, and hyphens")
+	if !regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`).MatchString(name) {
+		return fmt.Errorf("sink name can only contain letters, digits, underscores, hyphens, and periods")
 	}
 
 	return nil

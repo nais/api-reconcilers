@@ -1179,7 +1179,8 @@ func TestValidateLogSinkName(t *testing.T) {
 		{
 			name:        "valid sink name starting with underscore",
 			sinkName:    "_myteam-prod-sink",
-			expectError: false,
+			expectError: true,
+			errorSubstr: "must start with an alphanumeric character",
 		},
 		{
 			name:        "empty sink name",
@@ -1195,27 +1196,25 @@ func TestValidateLogSinkName(t *testing.T) {
 		},
 		{
 			name:        "sink name starts with number",
-			sinkName:    "1invalid-sink",
-			expectError: true,
-			errorSubstr: "must start with a letter or underscore",
+			sinkName:    "1valid-sink",
+			expectError: false,
 		},
 		{
 			name:        "sink name starts with hyphen",
 			sinkName:    "-invalid-sink",
 			expectError: true,
-			errorSubstr: "must start with a letter or underscore",
+			errorSubstr: "must start with an alphanumeric character",
 		},
 		{
 			name:        "sink name with invalid characters",
 			sinkName:    "invalid@sink",
 			expectError: true,
-			errorSubstr: "can only contain letters, digits, underscores, and hyphens",
+			errorSubstr: "can only contain letters, digits, underscores, hyphens, and periods",
 		},
 		{
 			name:        "sink name with periods",
-			sinkName:    "invalid.sink",
-			expectError: true,
-			errorSubstr: "can only contain letters, digits, underscores, and hyphens",
+			sinkName:    "valid.sink",
+			expectError: false,
 		},
 		{
 			name:        "exactly 100 characters",
