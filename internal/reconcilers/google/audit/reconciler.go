@@ -592,7 +592,7 @@ func truncateToLength(s string, maxLen int) string {
 // GenerateLogSinkName generates a unique sink name with hash collision resistance
 // Creates one sink per team environment (not per SQL instance)
 func GenerateLogSinkName(teamSlug, envName string) string {
-	naturalName := fmt.Sprintf("sink-%s-%s", teamSlug, envName)
+	naturalName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
 
 	if len(naturalName) <= 100 {
 		return naturalName
@@ -602,13 +602,13 @@ func GenerateLogSinkName(teamSlug, envName string) string {
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
-	availableForComponents := 100 - 5 - 8 - 1 // 5 for "sink-", 8 for hash, 1 for separator
+	availableForComponents := 100 - 15 - 8 - 2 // 15 for "sql-audit-sink-", 8 for hash, 2 for separators
 	maxComponentLen := availableForComponents / 2
 
 	shortTeam := truncateToLength(teamSlug, maxComponentLen)
 	shortEnv := truncateToLength(envName, maxComponentLen)
 
-	return fmt.Sprintf("sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
+	return fmt.Sprintf("sql-audit-sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
 }
 
 // ValidateLogBucketName validates a log bucket name against Google Cloud naming rules
@@ -733,16 +733,16 @@ func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bu
 
 // isManagedSink checks if a sink was created by this reconciler for the given team and environment
 func (r *auditLogReconciler) isManagedSink(sink *loggingpb.LogSink, teamSlug, envName string) bool {
-	// Check if the sink name follows our naming convention (sink-<team>-<env>)
-	expectedPrefix := fmt.Sprintf("sink-%s-%s", teamSlug, envName)
+	// Check if the sink name follows our naming convention (sql-audit-sink-<team>-<env>)
+	expectedName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
 
-	// For exact match or hash-based names, check if it starts with the prefix
-	if sink.Name == expectedPrefix {
+	// For exact match
+	if sink.Name == expectedName {
 		return true
 	}
 
-	// For hash-based names, check if it matches the pattern sink-<team>-<env>-<hash>
-	expectedPrefixWithHash := fmt.Sprintf("sink-%s-%s-", teamSlug, envName)
+	// For hash-based names, check if it matches the pattern sql-audit-sink-<team>-<env>-<hash>
+	expectedPrefixWithHash := fmt.Sprintf("sql-audit-sink-%s-%s-", teamSlug, envName)
 	if strings.HasPrefix(sink.Name, expectedPrefixWithHash) && len(sink.Name) > len(expectedPrefixWithHash) {
 		return true
 	}

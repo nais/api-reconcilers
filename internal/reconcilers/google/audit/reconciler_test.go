@@ -1091,13 +1091,13 @@ func TestGenerateLogSinkName(t *testing.T) {
 			name:         "simple names",
 			teamSlug:     "myteam",
 			envName:      "prod",
-			expectedName: "sink-myteam-prod",
+			expectedName: "sql-audit-sink-myteam-prod",
 		},
 		{
 			name:         "names with hyphens",
 			teamSlug:     "my-team",
 			envName:      "prod-env",
-			expectedName: "sink-my-team-prod-env",
+			expectedName: "sql-audit-sink-my-team-prod-env",
 		},
 	}
 
@@ -1119,8 +1119,13 @@ func TestGenerateLogSinkName(t *testing.T) {
 
 	// Test long names that require truncation
 	t.Run("very long names that need truncation", func(t *testing.T) {
-		teamSlug := "verylongteamnamethatshouldbetruncated"
-		envName := "verylongenvironmentnamethatshouldbetruncated"
+		// These inputs will definitely exceed 100 characters when combined with "sql-audit-sink-"
+		teamSlug := "verylongteamnamethatshouldbetruncatedandhashed"
+		envName := "verylongenvironmentnamethatshouldbetruncatedandhashed"
+
+		// Calculate what the natural name would be (without truncation)
+		naturalName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
+		t.Logf("Natural name would be: %s (len=%d)", naturalName, len(naturalName))
 
 		result := audit.GenerateLogSinkName(teamSlug, envName)
 
@@ -1129,15 +1134,20 @@ func TestGenerateLogSinkName(t *testing.T) {
 			t.Errorf("Sink name exceeds 100 character limit: %d", len(result))
 		}
 
+		// Since the natural name exceeds 100 chars, we should get a hash-based name
+		if len(naturalName) > 100 && !strings.Contains(result, "-") {
+			t.Errorf("Expected hash-based name for long inputs, but got: %s", result)
+		}
+
 		// Validate the generated name
 		err := audit.ValidateLogSinkName(result)
 		if err != nil {
 			t.Errorf("Generated sink name is invalid: %v", err)
 		}
 
-		// Should start with "sink-"
-		if !strings.HasPrefix(result, "sink-") {
-			t.Errorf("Expected sink name to start with 'sink-', got %s", result)
+		// Should start with "sql-audit-sink-"
+		if !strings.HasPrefix(result, "sql-audit-sink-") {
+			t.Errorf("Expected sink name to start with 'sql-audit-sink-', got %s", result)
 		}
 
 		t.Logf("Generated sink name for long inputs: %s (len=%d)", result, len(result))
@@ -1152,13 +1162,13 @@ func TestValidateLogSinkName(t *testing.T) {
 		errorSubstr string
 	}{
 		{
-			name:        "valid sink name",
-			sinkName:    "sink-myteam-prod-mydb",
+			name:        "valid sql audit sink name",
+			sinkName:    "sql-audit-sink-myteam-prod",
 			expectError: false,
 		},
 		{
 			name:        "valid sink name with underscores",
-			sinkName:    "sink_myteam_prod_mydb",
+			sinkName:    "sql_audit_sink_myteam_prod",
 			expectError: false,
 		},
 		{
