@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"regexp"
+	"strings"
 
 	logging "cloud.google.com/go/logging/apiv2"
 	"cloud.google.com/go/logging/apiv2/loggingpb"
@@ -233,31 +234,52 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	for it.Next() {
 		env := it.Value()
 		teamProjectID := env.GetGcpProjectId()
+
+		// Get SQL instances for this team/environment
 		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId, log)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
 
+		// Skip if no SQL instances with pgaudit enabled
+		if len(listSQLInstances) == 0 {
+			log.Debugf("No SQL instances with pgaudit enabled found for team %s environment %s", naisTeam.Slug, env.EnvironmentName)
+			continue
+		}
+
+		// Create one log bucket per team environment (shared by all SQL instances)
+		bucketName, err := r.createLogBucketIfNotExists(ctx, client, naisTeam.Slug, env.EnvironmentName, r.config.Location, log)
+		if err != nil {
+			return fmt.Errorf("create log bucket for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		// Collect application users from all SQL instances
+		var appUsers []string
 		for _, instance := range listSQLInstances {
-			bucketName, err := r.createLogBucketIfNotExists(ctx, client, naisTeam.Slug, env.EnvironmentName, instance, r.config.Location, log)
+			appUser, err := r.getApplicationUser(ctx, teamProjectID, instance, log)
 			if err != nil {
-				return fmt.Errorf("create log bucket for team %s, instance %s: %w", naisTeam.Slug, instance, err)
+				log.WithError(err).Warnf("Failed to get application user for instance %s, continuing", instance)
+				continue
 			}
+			if appUser != "" {
+				appUsers = append(appUsers, appUser)
+			}
+		}
 
-			_, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, instance, bucketName, log)
+		// Create one log sink per team environment covering all SQL instances
+		_, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
+		if err != nil {
+			return fmt.Errorf("create log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		if writerIdentity != "" {
+			log.Debugf("Granting bucket write permission for sink writer identity: %s", writerIdentity)
+			err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
 			if err != nil {
-				return fmt.Errorf("create log sink for team %s, instance %s: %w", naisTeam.Slug, instance, err)
+				return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
-
-			if writerIdentity != "" {
-				log.Debugf("Granting bucket write permission for sink writer identity: %s", writerIdentity)
-				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
-				if err != nil {
-					return fmt.Errorf("grant bucket write permission for team %s, instance %s: %w", naisTeam.Slug, instance, err)
-				}
-			} else {
-				log.Debugf("No writer identity found for sink, skipping permission grant")
-			}
+		} else {
+			log.Debugf("No writer identity found for sink, skipping permission grant")
 		}
 	}
 
@@ -292,9 +314,9 @@ func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	return false
 }
 
-func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, sqlInstance, location string, log logrus.FieldLogger) (string, error) {
+func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, location string, log logrus.FieldLogger) (string, error) {
 	parent := fmt.Sprintf("projects/%s/locations/%s", r.config.ProjectID, location)
-	bucketName := GenerateLogBucketName(teamSlug, envName, sqlInstance)
+	bucketName := GenerateLogBucketName(teamSlug, envName)
 
 	if err := ValidateLogBucketName(bucketName); err != nil {
 		return "", fmt.Errorf("invalid bucket name %q: %w", bucketName, err)
@@ -315,7 +337,7 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, cli
 			Parent:   parent,
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
-				Description:   fmt.Sprintf("Audit log bucket for SQL instance %s in team %s environment %s (created by api-reconcilers)", sqlInstance, teamSlug, envName),
+				Description:   fmt.Sprintf("Audit log bucket for team %s environment %s (created by api-reconcilers)", teamSlug, envName),
 				RetentionDays: retentionDays,
 				Locked:        false,
 			},
@@ -325,7 +347,7 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, cli
 		if err != nil {
 			return "", fmt.Errorf("create log bucket: %w", err)
 		}
-		log.Infof("Created log bucket %s", bucket.Name)
+		log.Infof("Created log bucket %s for team %s environment %s", bucket.Name, teamSlug, envName)
 	} else {
 		log.Debugf("Log bucket %s already exists, skipping", bucketName)
 	}
@@ -376,17 +398,12 @@ func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apicl
 	return 90, nil // Default to 90 days if config key not found
 }
 
-func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, sqlInstance, bucketName string, log logrus.FieldLogger) (string, string, error) {
+func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
-	sinkName := GenerateLogSinkName(teamSlug, envName, sqlInstance)
+	sinkName := GenerateLogSinkName(teamSlug, envName)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
 
-	appUser, err := r.getApplicationUser(ctx, teamProjectID, sqlInstance, log)
-	if err != nil {
-		return "", "", fmt.Errorf("get application users for instance %s: %w", sqlInstance, err)
-	}
-
-	filter := r.BuildLogFilter(teamProjectID, sqlInstance, appUser)
+	filter := r.BuildLogFilter(teamProjectID, appUsers)
 
 	if err := ValidateLogSinkName(sinkName); err != nil {
 		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)
@@ -406,7 +423,7 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 				Name:        sinkName,
 				Destination: destination,
 				Filter:      filter,
-				Description: fmt.Sprintf("Audit log sink for SQL instance %s in team %s environment %s (created by api-reconcilers)", sqlInstance, teamSlug, envName),
+				Description: fmt.Sprintf("Audit log sink for team %s environment %s (created by api-reconcilers)", teamSlug, envName),
 			},
 		}
 
@@ -515,38 +532,44 @@ func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProject
 	return "", nil
 }
 
-// BuildLogFilter constructs a Cloud SQL audit log filter excluding application users
-func (r *auditLogReconciler) BuildLogFilter(teamProjectID, sqlInstance string, appUser string) string {
+// BuildLogFilter constructs a Cloud SQL audit log filter for all SQL instances in the project
+func (r *auditLogReconciler) BuildLogFilter(teamProjectID string, appUsers []string) string {
 	baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
-AND resource.labels.database_id="%s:%s"
+AND protoPayload.resource.service_name="sqladmin.googleapis.com"
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
-AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"
-AND NOT protoPayload.request.user="%s"`,
-		teamProjectID, sqlInstance, teamProjectID, appUser)
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
+
+	// Exclude application users if any are specified
+	for _, appUser := range appUsers {
+		if appUser != "" {
+			baseFilter += fmt.Sprintf(`
+AND NOT protoPayload.request.user="%s"`, appUser)
+		}
+	}
 
 	return baseFilter
 }
 
 // GenerateLogBucketName generates a unique bucket name with hash collision resistance
-func GenerateLogBucketName(teamSlug, envName, sqlInstance string) string {
-	naturalName := fmt.Sprintf("%s-%s-%s", teamSlug, envName, sqlInstance)
+// Creates one bucket per team environment (not per SQL instance)
+func GenerateLogBucketName(teamSlug, envName string) string {
+	naturalName := fmt.Sprintf("%s-%s", teamSlug, envName)
 
 	if len(naturalName) <= 100 {
 		return naturalName
 	}
 
-	fullIdentifier := fmt.Sprintf("%s/%s/%s", teamSlug, envName, sqlInstance)
+	fullIdentifier := fmt.Sprintf("%s/%s", teamSlug, envName)
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
-	availableForComponents := 100 - 8 - 4
-	maxComponentLen := availableForComponents / 3
+	availableForComponents := 100 - 8 - 1 // 1 for separator
+	maxComponentLen := availableForComponents / 2
 
 	shortTeam := truncateToLength(teamSlug, maxComponentLen)
 	shortEnv := truncateToLength(envName, maxComponentLen)
-	shortInstance := truncateToLength(sqlInstance, maxComponentLen)
 
-	return fmt.Sprintf("%s-%s-%s-%s", shortTeam, shortEnv, shortInstance, hashSuffix)
+	return fmt.Sprintf("%s-%s-%s", shortTeam, shortEnv, hashSuffix)
 }
 
 // truncateToLength truncates a string to the specified maximum length
@@ -567,25 +590,25 @@ func truncateToLength(s string, maxLen int) string {
 }
 
 // GenerateLogSinkName generates a unique sink name with hash collision resistance
-func GenerateLogSinkName(teamSlug, envName, sqlInstance string) string {
-	naturalName := fmt.Sprintf("sink-%s-%s-%s", teamSlug, envName, sqlInstance)
+// Creates one sink per team environment (not per SQL instance)
+func GenerateLogSinkName(teamSlug, envName string) string {
+	naturalName := fmt.Sprintf("sink-%s-%s", teamSlug, envName)
 
 	if len(naturalName) <= 100 {
 		return naturalName
 	}
 
-	fullIdentifier := fmt.Sprintf("%s/%s/%s", teamSlug, envName, sqlInstance)
+	fullIdentifier := fmt.Sprintf("%s/%s", teamSlug, envName)
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
-	availableForComponents := 100 - 5 - 8 - 4
-	maxComponentLen := availableForComponents / 3
+	availableForComponents := 100 - 5 - 8 - 1 // 5 for "sink-", 8 for hash, 1 for separator
+	maxComponentLen := availableForComponents / 2
 
 	shortTeam := truncateToLength(teamSlug, maxComponentLen)
 	shortEnv := truncateToLength(envName, maxComponentLen)
-	shortInstance := truncateToLength(sqlInstance, maxComponentLen)
 
-	return fmt.Sprintf("sink-%s-%s-%s-%s", shortTeam, shortEnv, shortInstance, hashSuffix)
+	return fmt.Sprintf("sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
 }
 
 // ValidateLogBucketName validates a log bucket name against Google Cloud naming rules
@@ -710,18 +733,21 @@ func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bu
 
 // isManagedSink checks if a sink was created by this reconciler for the given team and environment
 func (r *auditLogReconciler) isManagedSink(sink *loggingpb.LogSink, teamSlug, envName string) bool {
-	// Check if the sink name follows our naming convention
-	expectedPrefix := fmt.Sprintf("%s-%s-", teamSlug, envName)
-	if !regexp.MustCompile("^" + regexp.QuoteMeta(expectedPrefix)).MatchString(sink.Name) {
-		return false
+	// Check if the sink name follows our naming convention (sink-<team>-<env>)
+	expectedPrefix := fmt.Sprintf("sink-%s-%s", teamSlug, envName)
+
+	// For exact match or hash-based names, check if it starts with the prefix
+	if sink.Name == expectedPrefix {
+		return true
 	}
 
-	// Check if the destination points to our audit log project
-	expectedDestinationPattern := fmt.Sprintf(`logging\.googleapis\.com/projects/%s/locations/%s/buckets/.*`,
-		regexp.QuoteMeta(r.config.ProjectID), regexp.QuoteMeta(r.config.Location))
-	matched, _ := regexp.MatchString(expectedDestinationPattern, sink.Destination)
+	// For hash-based names, check if it matches the pattern sink-<team>-<env>-<hash>
+	expectedPrefixWithHash := fmt.Sprintf("sink-%s-%s-", teamSlug, envName)
+	if strings.HasPrefix(sink.Name, expectedPrefixWithHash) && len(sink.Name) > len(expectedPrefixWithHash) {
+		return true
+	}
 
-	return matched
+	return false
 }
 
 // extractBucketNameFromDestination extracts the bucket name from a log sink destination

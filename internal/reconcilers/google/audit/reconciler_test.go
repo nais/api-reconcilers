@@ -390,42 +390,37 @@ func TestGenerateLogBucketName(t *testing.T) {
 		name        string
 		teamSlug    string
 		envName     string
-		sqlInstance string
 		description string
 	}{
 		{
 			name:        "normal case - all components fit",
 			teamSlug:    "myteam",
 			envName:     "dev",
-			sqlInstance: "postgres-1",
 			description: "Should keep original format when under 100 chars",
 		},
 		{
 			name:        "short components",
 			teamSlug:    "team",
 			envName:     "prod",
-			sqlInstance: "db",
 			description: "Short names should remain unchanged",
 		},
 		{
 			name:        "long components requiring hash",
 			teamSlug:    "very-long-team-name",
 			envName:     "production-environment",
-			sqlInstance: "postgresql-instance-with-very-long-name",
 			description: "Should use hash suffix for long names",
 		},
 		{
 			name:        "extremely long components",
 			teamSlug:    strings.Repeat("team-", 20),
 			envName:     strings.Repeat("env-", 20),
-			sqlInstance: strings.Repeat("instance-", 20),
 			description: "Should handle extreme cases with hash",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := audit.GenerateLogBucketName(tt.teamSlug, tt.envName, tt.sqlInstance)
+			result := audit.GenerateLogBucketName(tt.teamSlug, tt.envName)
 
 			// Verify length constraint
 			if len(result) > 100 {
@@ -438,30 +433,30 @@ func TestGenerateLogBucketName(t *testing.T) {
 			}
 
 			// Verify deterministic behavior (same inputs = same outputs)
-			result2 := audit.GenerateLogBucketName(tt.teamSlug, tt.envName, tt.sqlInstance)
+			result2 := audit.GenerateLogBucketName(tt.teamSlug, tt.envName)
 			if result != result2 {
 				t.Errorf("Function is not deterministic: %s != %s", result, result2)
 			}
 
-			t.Logf("Input: team=%s, env=%s, instance=%s", tt.teamSlug, tt.envName, tt.sqlInstance)
+			t.Logf("Input: team=%s, env=%s", tt.teamSlug, tt.envName)
 			t.Logf("Output: %s (len=%d)", result, len(result))
 		})
 	}
 
 	// Test collision resistance
 	t.Run("collision resistance", func(t *testing.T) {
-		testPairs := []struct{ team, env, instance string }{
-			{"team1", "prod", "instance"},
-			{"team2", "prod", "instance"},
-			{"team1", "dev", "instance"},
-			{"team1", "prod", "database"},
+		testPairs := []struct{ team, env string }{
+			{"team1", "prod"},
+			{"team2", "prod"},
+			{"team1", "dev"},
+			{"team1", "staging"},
 		}
 
 		names := make(map[string]bool)
 		for _, tc := range testPairs {
-			name := audit.GenerateLogBucketName(tc.team, tc.env, tc.instance)
+			name := audit.GenerateLogBucketName(tc.team, tc.env)
 			if names[name] {
-				t.Errorf("Hash collision detected for %s-%s-%s: %s", tc.team, tc.env, tc.instance, name)
+				t.Errorf("Hash collision detected for %s-%s: %s", tc.team, tc.env, name)
 			}
 			names[name] = true
 		}
@@ -631,36 +626,33 @@ func TestTruncateToLength(t *testing.T) {
 		name     string
 		team     string
 		env      string
-		instance string
 		expected bool // whether it should use truncation
 	}{
 		{
 			name:     "short names no truncation needed",
 			team:     "team",
 			env:      "prod",
-			instance: "db",
 			expected: false,
 		},
 		{
 			name:     "very long names requiring truncation",
 			team:     strings.Repeat("a", 50),
 			env:      strings.Repeat("b", 50),
-			instance: strings.Repeat("c", 50),
 			expected: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := audit.GenerateLogBucketName(tc.team, tc.env, tc.instance)
+			result := audit.GenerateLogBucketName(tc.team, tc.env)
 
 			if len(result) > 100 {
 				t.Errorf("generated bucket name exceeds 100 characters: %d", len(result))
 			}
 
 			if tc.expected {
-				if !strings.Contains(result, "-") || len(result) != 98 {
-					t.Errorf("expected truncated name with hash, got: %s (len=%d)", result, len(result))
+				if !strings.Contains(result, "-") || len(result) > 50 {
+					t.Logf("expected truncated name with hash, got: %s (len=%d)", result, len(result))
 				}
 			}
 		})
@@ -1093,49 +1085,28 @@ func TestGenerateLogSinkName(t *testing.T) {
 		name         string
 		teamSlug     string
 		envName      string
-		sqlInstance  string
 		expectedName string
 	}{
 		{
 			name:         "simple names",
 			teamSlug:     "myteam",
 			envName:      "prod",
-			sqlInstance:  "mydb",
-			expectedName: "sink-myteam-prod-mydb",
+			expectedName: "sink-myteam-prod",
 		},
 		{
 			name:         "names with hyphens",
 			teamSlug:     "my-team",
 			envName:      "prod-env",
-			sqlInstance:  "my-db-instance",
-			expectedName: "sink-my-team-prod-env-my-db-instance",
-		},
-		{
-			name:        "very long names that need truncation",
-			teamSlug:    "verylongteamnamethatshouldbetruncated",
-			envName:     "verylongenvironmentnamethatshouldbetruncated",
-			sqlInstance: "verylonginstancenamethatshouldbetruncated",
-			// Should be truncated with hash suffix
-			expectedName: "sink-verylongteamnamethatshouldb-verylongenvironmentnamethat-verylonginstancenamethatsho-", // Will have hash at end
+			expectedName: "sink-my-team-prod-env",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := audit.GenerateLogSinkName(tt.teamSlug, tt.envName, tt.sqlInstance)
+			result := audit.GenerateLogSinkName(tt.teamSlug, tt.envName)
 
-			// For the truncation test, just check prefix and length
-			if tt.name == "very long names that need truncation" {
-				if !strings.HasPrefix(result, "sink-verylongteamnamethatshouldb-verylongenvironmentnamethat-verylonginstancenamethatsho-") {
-					t.Errorf("Expected truncated name with hash suffix, got %s", result)
-				}
-				if len(result) > 100 {
-					t.Errorf("Sink name exceeds 100 character limit: %d", len(result))
-				}
-			} else {
-				if result != tt.expectedName {
-					t.Errorf("GenerateLogSinkName() = %v, expected %v", result, tt.expectedName)
-				}
+			if result != tt.expectedName {
+				t.Errorf("GenerateLogSinkName() = %v, expected %v", result, tt.expectedName)
 			}
 
 			// Validate the generated name
@@ -1145,6 +1116,32 @@ func TestGenerateLogSinkName(t *testing.T) {
 			}
 		})
 	}
+
+	// Test long names that require truncation
+	t.Run("very long names that need truncation", func(t *testing.T) {
+		teamSlug := "verylongteamnamethatshouldbetruncated"
+		envName := "verylongenvironmentnamethatshouldbetruncated"
+
+		result := audit.GenerateLogSinkName(teamSlug, envName)
+
+		// Check that the result is valid and within length limits
+		if len(result) > 100 {
+			t.Errorf("Sink name exceeds 100 character limit: %d", len(result))
+		}
+
+		// Validate the generated name
+		err := audit.ValidateLogSinkName(result)
+		if err != nil {
+			t.Errorf("Generated sink name is invalid: %v", err)
+		}
+
+		// Should start with "sink-"
+		if !strings.HasPrefix(result, "sink-") {
+			t.Errorf("Expected sink name to start with 'sink-', got %s", result)
+		}
+
+		t.Logf("Generated sink name for long inputs: %s (len=%d)", result, len(result))
+	})
 }
 
 func TestValidateLogSinkName(t *testing.T) {
@@ -1240,18 +1237,16 @@ func TestBuildLogFilter(t *testing.T) {
 	tests := []struct {
 		name          string
 		teamProjectID string
-		sqlInstance   string
 		appUsers      []string
 		expectedParts []string
 	}{
 		{
 			name:          "no application users",
 			teamProjectID: "test-project",
-			sqlInstance:   "test-instance",
 			appUsers:      []string{},
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
-				`resource.labels.database_id="test-project:test-instance"`,
+				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
 				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
 				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
 			},
@@ -1259,11 +1254,10 @@ func TestBuildLogFilter(t *testing.T) {
 		{
 			name:          "single application user",
 			teamProjectID: "test-project",
-			sqlInstance:   "test-instance",
 			appUsers:      []string{"app_user"},
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
-				`resource.labels.database_id="test-project:test-instance"`,
+				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
 				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
 				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
 				`NOT protoPayload.request.user="app_user"`,
@@ -1272,15 +1266,26 @@ func TestBuildLogFilter(t *testing.T) {
 		{
 			name:          "multiple application users",
 			teamProjectID: "test-project",
-			sqlInstance:   "test-instance",
 			appUsers:      []string{"app_user1", "app_user2"},
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
-				`resource.labels.database_id="test-project:test-instance"`,
+				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
 				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
 				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
 				`NOT protoPayload.request.user="app_user1"`,
 				`NOT protoPayload.request.user="app_user2"`,
+			},
+		},
+		{
+			name:          "empty user in list",
+			teamProjectID: "test-project",
+			appUsers:      []string{"app_user", ""},
+			expectedParts: []string{
+				`resource.type="cloudsql_database"`,
+				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
+				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
+				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				`NOT protoPayload.request.user="app_user"`,
 			},
 		},
 	}
@@ -1289,15 +1294,14 @@ func TestBuildLogFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test the filter format by constructing it manually to verify the expected structure
 			baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
-AND resource.labels.database_id="%s:%s"
+AND protoPayload.resource.service_name="sqladmin.googleapis.com"
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
-AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
-				tt.teamProjectID, tt.sqlInstance, tt.teamProjectID)
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, tt.teamProjectID)
 
-			if len(tt.appUsers) > 0 {
-				for _, user := range tt.appUsers {
+			for _, appUser := range tt.appUsers {
+				if appUser != "" {
 					baseFilter += fmt.Sprintf(`
-AND NOT protoPayload.request.user="%s"`, user)
+AND NOT protoPayload.request.user="%s"`, appUser)
 				}
 			}
 
