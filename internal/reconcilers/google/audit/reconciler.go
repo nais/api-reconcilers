@@ -372,30 +372,30 @@ func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apicl
 		ReconcilerName: r.Name(),
 	})
 	if err != nil {
-		return 90, fmt.Errorf("get reconciler config: %w", err)
+		return 0, fmt.Errorf("get reconciler config: %w", err)
 	}
 
 	for _, c := range config.Nodes {
 		if c.Key == configRetentionDays {
 			if c.Value == "" {
-				return 90, nil // Default to 90 days if not configured
+				return 0, fmt.Errorf("retention days config value is empty: %s must be configured", configRetentionDays)
 			}
 
 			// Parse the value as an integer
 			var retentionDays int32
 			if _, err := fmt.Sscanf(c.Value, "%d", &retentionDays); err != nil {
-				return 90, fmt.Errorf("invalid retention days value %q: %w", c.Value, err)
+				return 0, fmt.Errorf("invalid retention days value %q: %w", c.Value, err)
 			}
 
 			if retentionDays <= 0 {
-				return 90, nil // Default to 90 days for invalid values
+				return 0, fmt.Errorf("retention days must be greater than 0, got %d", retentionDays)
 			}
 
 			return retentionDays, nil
 		}
 	}
 
-	return 90, nil // Default to 90 days if config key not found
+	return 0, fmt.Errorf("retention days config not found: %s must be configured", configRetentionDays)
 }
 
 func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
