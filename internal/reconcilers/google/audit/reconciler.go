@@ -27,8 +27,9 @@ import (
 const (
 	reconcilerName = "google:gcp:audit"
 
-	configRetentionDays = "audit:retention_days"
-	configLocked        = "audit:locked"
+	configRetentionDays        = "audit:retention_days"
+	configLocked               = "audit:locked"
+	configNotificationChannels = "audit:notification_channels"
 )
 
 type Services struct {
@@ -165,6 +166,12 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 				Description: "Whether to lock audit log buckets to prevent deletion.",
 				Secret:      false,
 			},
+			{
+				Key:         configNotificationChannels,
+				DisplayName: "Notification Channels",
+				Description: "Comma-separated list of notification channel resource names for alert policies (e.g., projects/PROJECT_ID/notificationChannels/CHANNEL_ID).",
+				Secret:      false,
+			},
 		},
 	}
 }
@@ -295,7 +302,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create log alert for sink change monitoring
-		if err := r.createSinkChangeAlert(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, sinkName, log); err != nil {
+		if err := r.createSinkChangeAlert(ctx, client, teamProjectID, naisTeam.Slug, env.EnvironmentName, sinkName, log); err != nil {
 			return fmt.Errorf("create sink change alert for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -459,6 +466,38 @@ func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apicli
 
 	// Default to false if config not found
 	return false, nil
+}
+
+func (r *auditLogReconciler) getNotificationChannels(ctx context.Context, client *apiclient.APIClient) ([]string, error) {
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get reconciler config: %w", err)
+	}
+
+	for _, c := range config.Nodes {
+		if c.Key == configNotificationChannels {
+			if c.Value == "" {
+				// Default to empty list if not configured
+				return []string{}, nil
+			}
+
+			// Split by comma and trim whitespace
+			channels := strings.Split(c.Value, ",")
+			var trimmedChannels []string
+			for _, channel := range channels {
+				trimmed := strings.TrimSpace(channel)
+				if trimmed != "" {
+					trimmedChannels = append(trimmedChannels, trimmed)
+				}
+			}
+			return trimmedChannels, nil
+		}
+	}
+
+	// Default to empty list if config not found
+	return []string{}, nil
 }
 
 func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
@@ -828,7 +867,7 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 }
 
 // createSinkChangeAlert creates a log-based metric and alert to monitor for changes to the specified sink
-func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, client *apiclient.APIClient, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
 	// First create a log-based metric for sink deletions
 	metricName := r.generateLogMetricName(teamSlug, envName)
 	if err := r.createLogMetricIfNotExists(ctx, teamProjectID, sinkName, metricName, log); err != nil {
@@ -837,7 +876,7 @@ func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, teamProj
 
 	// Then create an alert policy based on this metric
 	alertPolicyName := r.generateAlertPolicyName(teamSlug, envName)
-	if err := r.createAlertPolicyIfNotExists(ctx, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
+	if err := r.createAlertPolicyIfNotExists(ctx, client, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
 		return fmt.Errorf("create alert policy: %w", err)
 	}
 
@@ -891,7 +930,7 @@ protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName)
 }
 
 // createAlertPolicyIfNotExists creates an alert policy for the log metric
-func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, client *apiclient.APIClient, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 
 	// Check if alert policy already exists
@@ -907,6 +946,12 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, t
 			log.Debugf("Alert policy %s already exists, skipping creation", alertPolicyName)
 			return nil
 		}
+	}
+
+	// Get notification channels configuration
+	notificationChannels, err := r.getNotificationChannels(ctx, client)
+	if err != nil {
+		return fmt.Errorf("get notification channels: %w", err)
 	}
 
 	// Create the alert policy
@@ -934,7 +979,7 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, t
 			},
 		},
 		Enabled:              true,
-		NotificationChannels: []string{}, // Add notification channels as needed
+		NotificationChannels: notificationChannels,
 		AlertStrategy: &monitoring.AlertStrategy{
 			AutoClose: "604800s", // 7 days
 		},
