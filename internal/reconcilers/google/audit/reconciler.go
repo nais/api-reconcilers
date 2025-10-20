@@ -894,7 +894,6 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 	if err != nil {
 		return fmt.Errorf("get notification channels: %w", err)
 	}
-
 	// Create the alert policy
 	alertPolicy := &monitoring.AlertPolicy{
 		DisplayName: alertPolicyName,
@@ -902,6 +901,7 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 			Content:  fmt.Sprintf("Alert triggered when the audit log sink '%s' is changed (deleted or updated) for team %s in environment %s", sinkName, teamSlug, envName),
 			MimeType: "text/markdown",
 		},
+		Combiner: "OR",
 		Conditions: []*monitoring.Condition{
 			{
 				DisplayName: fmt.Sprintf("Sink change detected: %s", sinkName),
