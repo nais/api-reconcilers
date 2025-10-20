@@ -150,19 +150,19 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 			{
 				Key:         configRetentionDays,
 				DisplayName: "Retention Days",
-				Description: "The number of days to retain audit logs.",
+				Description: "The number of days to retain audit logs. Must be a positive integer greater than 0. Examples: 30, 90, 365. Can only be modified if bucket is not locked.",
 				Secret:      false,
 			},
 			{
 				Key:         configLocked,
 				DisplayName: "Lock Buckets",
-				Description: "Whether to lock audit log buckets to prevent deletion.",
+				Description: "Set to true for immutable log buckets for auditing purposes. Not possible to revert once set to true. False if not specified.",
 				Secret:      false,
 			},
 			{
 				Key:         configNotificationChannels,
 				DisplayName: "Notification Channels",
-				Description: "Comma-separated list of notification channel resource names for alert policies (e.g., projects/PROJECT_ID/notificationChannels/CHANNEL_ID).",
+				Description: "Comma-separated list of notification channel resource names for alert policies. Format: projects/TEAM_PROJECT_ID/notificationChannels/CHANNEL_ID. Multiple channels separated by commas.",
 				Secret:      false,
 			},
 		},
