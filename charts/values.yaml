@@ -17,7 +17,7 @@ auditLog:
 tenantDomain: # mapped in fasit
 naisAuditLogProjectID: # mapped in fasit
 clusterAlias: [ ]
-reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,google:gcp:audit,grafana"
+reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,grafana"
 fasit:
   tenant:
     name: # mapped in fasit
