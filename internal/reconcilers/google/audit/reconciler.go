@@ -899,7 +899,8 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 	alertPolicy := &monitoring.AlertPolicy{
 		DisplayName: alertPolicyName,
 		Documentation: &monitoring.Documentation{
-			Content: fmt.Sprintf("Alert triggered when the audit log sink '%s' is changed (deleted or updated) for team %s in environment %s", sinkName, teamSlug, envName),
+			Content:  fmt.Sprintf("Alert triggered when the audit log sink '%s' is changed (deleted or updated) for team %s in environment %s", sinkName, teamSlug, envName),
+			MimeType: "text/markdown",
 		},
 		Conditions: []*monitoring.Condition{
 			{
