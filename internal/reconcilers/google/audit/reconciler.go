@@ -290,9 +290,9 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create one log sink per team environment covering all SQL instances
-		sinkName, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
+		sinkName, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
 		if err != nil {
-			return fmt.Errorf("create log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		// Create log alert for sink change monitoring
@@ -546,7 +546,7 @@ func (r *auditLogReconciler) getNotificationChannels(ctx context.Context, client
 	return []string{}, nil
 }
 
-func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
+func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 	sinkName := GenerateLogSinkName(teamSlug, envName)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
@@ -557,13 +557,15 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)
 	}
 
-	exists, err := r.sinkExists(ctx, fmt.Sprintf("%s/sinks/%s", parent, sinkName))
+	sinkPath := fmt.Sprintf("%s/sinks/%s", parent, sinkName)
+	exists, err := r.sinkExists(ctx, sinkPath)
 	if err != nil {
 		return "", "", fmt.Errorf("check if sink exists: %w", err)
 	}
 
 	var writerIdentity string
 	if !exists {
+		// Create new sink
 		sinkReq := &loggingpb.CreateSinkRequest{
 			Parent:               parent,
 			UniqueWriterIdentity: true,
@@ -582,14 +584,56 @@ func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamP
 		log.Infof("Created log sink %s -> %s", sink.Name, destination)
 		writerIdentity = sink.WriterIdentity
 	} else {
-		log.Debugf("Log sink %s already exists, skipping", sinkName)
+		// Check if existing sink needs updates
 		existingSink, err := r.services.LogConfigService.GetSink(ctx, &loggingpb.GetSinkRequest{
-			SinkName: fmt.Sprintf("%s/sinks/%s", parent, sinkName),
+			SinkName: sinkPath,
 		})
 		if err != nil {
-			return "", "", fmt.Errorf("get existing sink writer identity: %w", err)
+			return "", "", fmt.Errorf("get existing sink: %w", err)
 		}
-		writerIdentity = existingSink.WriterIdentity
+
+		needsUpdate := false
+		updateMask := []string{}
+
+		// Check if filter needs updating
+		if existingSink.Filter != filter {
+			needsUpdate = true
+			updateMask = append(updateMask, "filter")
+			log.Debugf("Sink %s filter will be updated", sinkName)
+		}
+
+		// Check if destination needs updating (less common but possible)
+		if existingSink.Destination != destination {
+			needsUpdate = true
+			updateMask = append(updateMask, "destination")
+			log.Debugf("Sink %s destination will be updated from %s to %s", sinkName, existingSink.Destination, destination)
+		}
+
+		if needsUpdate {
+			// Update the sink
+			updateReq := &loggingpb.UpdateSinkRequest{
+				SinkName: sinkPath,
+				Sink: &loggingpb.LogSink{
+					Name:        existingSink.Name,
+					Destination: destination,
+					Filter:      filter,
+					Description: existingSink.Description,
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: updateMask,
+				},
+			}
+
+			updatedSink, err := r.services.LogConfigService.UpdateSink(ctx, updateReq)
+			if err != nil {
+				return "", "", fmt.Errorf("update log sink: %w", err)
+			}
+			log.Infof("Updated log sink %s for team %s environment %s", updatedSink.Name, teamSlug, envName)
+			writerIdentity = updatedSink.WriterIdentity
+		} else {
+			log.Debugf("Log sink %s already exists with correct configuration, skipping", sinkName)
+			writerIdentity = existingSink.WriterIdentity
+		}
 	}
 
 	return sinkName, writerIdentity, nil
