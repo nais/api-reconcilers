@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iam/v1"
+	monitoring "google.golang.org/api/monitoring/v3"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
 	"google.golang.org/grpc/codes"
@@ -27,14 +28,17 @@ const (
 	reconcilerName = "google:gcp:audit"
 
 	configRetentionDays = "audit:retention_days"
+	configLocked        = "audit:locked"
 )
 
 type Services struct {
 	LogAdminService             *logging.Client
 	LogConfigService            *logging.ConfigClient
+	LogMetricsService           *logging.MetricsClient
 	IAMService                  *iam.Service
 	SQLAdminService             *sqladmin.Service
 	CloudResourceManagerService *cloudresourcemanager.Service
+	MonitoringService           *monitoring.Service
 }
 
 type auditLogReconciler struct {
@@ -106,6 +110,11 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 		return nil, fmt.Errorf("retrieve Log Config service: %w", err)
 	}
 
+	logMetricsService, err := logging.NewMetricsClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Log Metrics service: %w", err)
+	}
+
 	iamService, err := iam.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve IAM service service: %w", err)
@@ -121,12 +130,19 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 		return nil, fmt.Errorf("retrieve Cloud Resource Manager service: %w", err)
 	}
 
+	monitoringService, err := monitoring.NewService(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("retrieve Monitoring service: %w", err)
+	}
+
 	return &Services{
 		LogAdminService:             logAdminService,
 		LogConfigService:            logConfigService,
+		LogMetricsService:           logMetricsService,
 		IAMService:                  iamService,
 		SQLAdminService:             sqlAdminService,
 		CloudResourceManagerService: cloudResourceManagerService,
+		MonitoringService:           monitoringService,
 	}, nil
 }
 
@@ -141,6 +157,12 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 				Key:         configRetentionDays,
 				DisplayName: "Retention Days",
 				Description: "The number of days to retain audit logs.",
+				Secret:      false,
+			},
+			{
+				Key:         configLocked,
+				DisplayName: "Lock Buckets",
+				Description: "Whether to lock audit log buckets to prevent deletion.",
 				Secret:      false,
 			},
 		},
@@ -267,9 +289,14 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create one log sink per team environment covering all SQL instances
-		_, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
+		sinkName, writerIdentity, err := r.createLogSinkIfNotExists(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
 		if err != nil {
 			return fmt.Errorf("create log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
+		// Create log alert for sink change monitoring
+		if err := r.createSinkChangeAlert(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, sinkName, log); err != nil {
+			return fmt.Errorf("create sink change alert for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if writerIdentity != "" {
@@ -333,13 +360,18 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, cli
 			return "", fmt.Errorf("get retention days: %w", err)
 		}
 
+		locked, err := r.getBucketLocked(ctx, client)
+		if err != nil {
+			return "", fmt.Errorf("get bucket locked: %w", err)
+		}
+
 		bucketReq := &loggingpb.CreateBucketRequest{
 			Parent:   parent,
 			BucketId: bucketName,
 			Bucket: &loggingpb.LogBucket{
 				Description:   fmt.Sprintf("Audit log bucket for team %s environment %s (created by api-reconcilers)", teamSlug, envName),
 				RetentionDays: retentionDays,
-				Locked:        false,
+				Locked:        locked,
 			},
 		}
 
@@ -396,6 +428,37 @@ func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apicl
 	}
 
 	return 0, fmt.Errorf("retention days config not found: %s must be configured", configRetentionDays)
+}
+
+func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apiclient.APIClient) (bool, error) {
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return false, fmt.Errorf("get reconciler config: %w", err)
+	}
+
+	for _, c := range config.Nodes {
+		if c.Key == configLocked {
+			if c.Value == "" {
+				// Default to false if not configured
+				return false, nil
+			}
+
+			// Parse the value as a boolean
+			switch strings.ToLower(c.Value) {
+			case "true", "1", "yes", "on":
+				return true, nil
+			case "false", "0", "no", "off":
+				return false, nil
+			default:
+				return false, fmt.Errorf("invalid locked value %q: must be true/false", c.Value)
+			}
+		}
+	}
+
+	// Default to false if config not found
+	return false, nil
 }
 
 func (r *auditLogReconciler) createLogSinkIfNotExists(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
@@ -762,4 +825,138 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 	}
 
 	return ""
+}
+
+// createSinkChangeAlert creates a log-based metric and alert to monitor for changes to the specified sink
+func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+	// First create a log-based metric for sink deletions
+	metricName := r.generateLogMetricName(teamSlug, envName)
+	if err := r.createLogMetricIfNotExists(ctx, teamProjectID, sinkName, metricName, log); err != nil {
+		return fmt.Errorf("create log metric: %w", err)
+	}
+
+	// Then create an alert policy based on this metric
+	alertPolicyName := r.generateAlertPolicyName(teamSlug, envName)
+	if err := r.createAlertPolicyIfNotExists(ctx, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
+		return fmt.Errorf("create alert policy: %w", err)
+	}
+
+	return nil
+}
+
+// createLogMetricIfNotExists creates a log-based metric for sink change detection
+func (r *auditLogReconciler) createLogMetricIfNotExists(ctx context.Context, teamProjectID, sinkName, metricName string, log logrus.FieldLogger) error {
+	parent := fmt.Sprintf("projects/%s", teamProjectID)
+
+	// Check if metric already exists by trying to get it
+	getReq := &loggingpb.GetLogMetricRequest{
+		MetricName: fmt.Sprintf("%s/metrics/%s", parent, metricName),
+	}
+
+	_, err := r.services.LogMetricsService.GetLogMetric(ctx, getReq)
+	if err == nil {
+		log.Debugf("Log metric %s already exists, skipping creation", metricName)
+		return nil
+	}
+
+	// If error is not NotFound, return the error
+	if status.Code(err) != codes.NotFound {
+		return fmt.Errorf("check if metric exists: %w", err)
+	}
+
+	// Create the log filter for sink change detection (deletions and updates)
+	logFilter := fmt.Sprintf(`resource.type="logging_sink"
+(protoPayload.methodName="google.logging.v2.ConfigServiceV2.DeleteSink" OR protoPayload.methodName="google.logging.v2.ConfigServiceV2.UpdateSink")
+protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName)
+
+	// Create the log metric
+	logMetric := &loggingpb.LogMetric{
+		Name:        fmt.Sprintf("%s/metrics/%s", parent, metricName),
+		Description: fmt.Sprintf("Counts changes (deletions and updates) of audit sink %s", sinkName),
+		Filter:      logFilter,
+	}
+
+	createReq := &loggingpb.CreateLogMetricRequest{
+		Parent: parent,
+		Metric: logMetric,
+	}
+
+	createdMetric, err := r.services.LogMetricsService.CreateLogMetric(ctx, createReq)
+	if err != nil {
+		return fmt.Errorf("create log metric: %w", err)
+	}
+
+	log.Infof("Created log metric %s for sink change monitoring", createdMetric.Name)
+	return nil
+}
+
+// createAlertPolicyIfNotExists creates an alert policy for the log metric
+func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+	parent := fmt.Sprintf("projects/%s", teamProjectID)
+
+	// Check if alert policy already exists
+	listCall := r.services.MonitoringService.Projects.AlertPolicies.List(parent)
+	existingPolicies, err := listCall.Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("list existing alert policies: %w", err)
+	}
+
+	// Check if our alert policy already exists
+	for _, policy := range existingPolicies.AlertPolicies {
+		if policy.DisplayName == alertPolicyName {
+			log.Debugf("Alert policy %s already exists, skipping creation", alertPolicyName)
+			return nil
+		}
+	}
+
+	// Create the alert policy
+	alertPolicy := &monitoring.AlertPolicy{
+		DisplayName: alertPolicyName,
+		Documentation: &monitoring.Documentation{
+			Content: fmt.Sprintf("Alert triggered when the audit log sink '%s' is changed (deleted or updated) for team %s in environment %s", sinkName, teamSlug, envName),
+		},
+		Conditions: []*monitoring.Condition{
+			{
+				DisplayName: fmt.Sprintf("Sink change detected: %s", sinkName),
+				ConditionThreshold: &monitoring.MetricThreshold{
+					Filter:         fmt.Sprintf(`resource.type="global" AND metric.type="logging.googleapis.com/user/%s"`, metricName),
+					Comparison:     "COMPARISON_GREATER_THAN",
+					ThresholdValue: 0,
+					Duration:       "0s",
+					Aggregations: []*monitoring.Aggregation{
+						{
+							AlignmentPeriod:    "60s",
+							PerSeriesAligner:   "ALIGN_RATE",
+							CrossSeriesReducer: "REDUCE_SUM",
+						},
+					},
+				},
+			},
+		},
+		Enabled:              true,
+		NotificationChannels: []string{}, // Add notification channels as needed
+		AlertStrategy: &monitoring.AlertStrategy{
+			AutoClose: "604800s", // 7 days
+		},
+	}
+
+	// Create the alert policy
+	createCall := r.services.MonitoringService.Projects.AlertPolicies.Create(parent, alertPolicy)
+	createdPolicy, err := createCall.Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("create alert policy: %w", err)
+	}
+
+	log.Infof("Created sink change alert policy %s for team %s environment %s", createdPolicy.Name, teamSlug, envName)
+	return nil
+}
+
+// generateLogMetricName generates a consistent name for the log metric
+func (r *auditLogReconciler) generateLogMetricName(teamSlug, envName string) string {
+	return fmt.Sprintf("audit_sink_changes_%s_%s", teamSlug, envName)
+}
+
+// generateAlertPolicyName generates a consistent name for the alert policy
+func (r *auditLogReconciler) generateAlertPolicyName(teamSlug, envName string) string {
+	return fmt.Sprintf("audit-sink-changes-alert-%s-%s", teamSlug, envName)
 }
