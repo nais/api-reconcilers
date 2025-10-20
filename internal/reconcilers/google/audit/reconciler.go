@@ -35,7 +35,6 @@ const (
 type Services struct {
 	LogAdminService             *logging.Client
 	LogConfigService            *logging.ConfigClient
-	LogMetricsService           *logging.MetricsClient
 	IAMService                  *iam.Service
 	SQLAdminService             *sqladmin.Service
 	CloudResourceManagerService *cloudresourcemanager.Service
@@ -111,11 +110,6 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 		return nil, fmt.Errorf("retrieve Log Config service: %w", err)
 	}
 
-	logMetricsService, err := logging.NewMetricsClient(ctx, opts...)
-	if err != nil {
-		return nil, fmt.Errorf("retrieve Log Metrics service: %w", err)
-	}
-
 	iamService, err := iam.NewService(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("retrieve IAM service service: %w", err)
@@ -139,7 +133,6 @@ func gcpServices(ctx context.Context, serviceAccountEmail string) (*Services, er
 	return &Services{
 		LogAdminService:             logAdminService,
 		LogConfigService:            logConfigService,
-		LogMetricsService:           logMetricsService,
 		IAMService:                  iamService,
 		SQLAdminService:             sqlAdminService,
 		CloudResourceManagerService: cloudResourceManagerService,
@@ -868,69 +861,17 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 
 // createSinkChangeAlert creates a log-based metric and alert to monitor for changes to the specified sink
 func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, client *apiclient.APIClient, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
-	// First create a log-based metric for sink deletions
-	metricName := r.generateLogMetricName(teamSlug, envName)
-	if err := r.createLogMetricIfNotExists(ctx, teamProjectID, sinkName, metricName, log); err != nil {
-		return fmt.Errorf("create log metric: %w", err)
-	}
-
-	// Then create an alert policy based on this metric
+	// Create an alert policy based on log matching (no metric needed)
 	alertPolicyName := r.generateAlertPolicyName(teamSlug, envName)
-	if err := r.createAlertPolicyIfNotExists(ctx, client, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
+	if err := r.createAlertPolicyIfNotExists(ctx, client, teamProjectID, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
 		return fmt.Errorf("create alert policy: %w", err)
 	}
 
 	return nil
 }
 
-// createLogMetricIfNotExists creates a log-based metric for sink change detection
-func (r *auditLogReconciler) createLogMetricIfNotExists(ctx context.Context, teamProjectID, sinkName, metricName string, log logrus.FieldLogger) error {
-	parent := fmt.Sprintf("projects/%s", teamProjectID)
-
-	// Check if metric already exists by trying to get it
-	getReq := &loggingpb.GetLogMetricRequest{
-		MetricName: fmt.Sprintf("%s/metrics/%s", parent, metricName),
-	}
-
-	_, err := r.services.LogMetricsService.GetLogMetric(ctx, getReq)
-	if err == nil {
-		log.Debugf("Log metric %s already exists, skipping creation", metricName)
-		return nil
-	}
-
-	// If error is not NotFound, return the error
-	if status.Code(err) != codes.NotFound {
-		return fmt.Errorf("check if metric exists: %w", err)
-	}
-
-	// Create the log filter for sink change detection (deletions and updates)
-	logFilter := fmt.Sprintf(`resource.type="logging_sink"
-(protoPayload.methodName="google.logging.v2.ConfigServiceV2.DeleteSink" OR protoPayload.methodName="google.logging.v2.ConfigServiceV2.UpdateSink")
-protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName)
-
-	// Create the log metric
-	logMetric := &loggingpb.LogMetric{
-		Name:        fmt.Sprintf("%s/metrics/%s", parent, metricName),
-		Description: fmt.Sprintf("Counts changes (deletions and updates) of audit sink %s", sinkName),
-		Filter:      logFilter,
-	}
-
-	createReq := &loggingpb.CreateLogMetricRequest{
-		Parent: parent,
-		Metric: logMetric,
-	}
-
-	createdMetric, err := r.services.LogMetricsService.CreateLogMetric(ctx, createReq)
-	if err != nil {
-		return fmt.Errorf("create log metric: %w", err)
-	}
-
-	log.Infof("Created log metric %s for sink change monitoring", createdMetric.Name)
-	return nil
-}
-
-// createAlertPolicyIfNotExists creates an alert policy for the log metric
-func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, client *apiclient.APIClient, teamProjectID, metricName, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+// createAlertPolicyIfNotExists creates an alert policy for log matching
+func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, client *apiclient.APIClient, teamProjectID, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 
 	// Check if alert policy already exists
@@ -963,18 +904,10 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 		Conditions: []*monitoring.Condition{
 			{
 				DisplayName: fmt.Sprintf("Sink change detected: %s", sinkName),
-				ConditionThreshold: &monitoring.MetricThreshold{
-					Filter:         fmt.Sprintf(`resource.type="global" AND metric.type="logging.googleapis.com/user/%s"`, metricName),
-					Comparison:     "COMPARISON_GREATER_THAN",
-					ThresholdValue: 0,
-					Duration:       "0s",
-					Aggregations: []*monitoring.Aggregation{
-						{
-							AlignmentPeriod:    "60s",
-							PerSeriesAligner:   "ALIGN_RATE",
-							CrossSeriesReducer: "REDUCE_SUM",
-						},
-					},
+				ConditionMatchedLog: &monitoring.LogMatch{
+					Filter: fmt.Sprintf(`resource.type="logging_sink"
+(protoPayload.methodName="google.logging.v2.ConfigServiceV2.DeleteSink" OR protoPayload.methodName="google.logging.v2.ConfigServiceV2.UpdateSink")
+protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName),
 				},
 			},
 		},
@@ -994,11 +927,6 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 
 	log.Infof("Created sink change alert policy %s for team %s environment %s", createdPolicy.Name, teamSlug, envName)
 	return nil
-}
-
-// generateLogMetricName generates a consistent name for the log metric
-func (r *auditLogReconciler) generateLogMetricName(teamSlug, envName string) string {
-	return fmt.Sprintf("audit_sink_changes_%s_%s", teamSlug, envName)
 }
 
 // generateAlertPolicyName generates a consistent name for the alert policy
