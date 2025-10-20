@@ -162,7 +162,7 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 			{
 				Key:         configNotificationChannels,
 				DisplayName: "Notification Channels",
-				Description: "Comma-separated list of notification channel resource names for alert policies. Format: projects/TEAM_PROJECT_ID/notificationChannels/CHANNEL_ID. Multiple channels separated by commas.",
+				Description: "Comma-separated list of notification channel resource names for creating or updating alert policies. Format: projects/TEAM_PROJECT_ID/notificationChannels/CHANNEL_ID. Multiple channels separated by commas.",
 				Secret:      false,
 			},
 		},
@@ -863,15 +863,15 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, client *apiclient.APIClient, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
 	// Create an alert policy based on log matching (no metric needed)
 	alertPolicyName := r.generateAlertPolicyName(teamSlug, envName)
-	if err := r.createAlertPolicyIfNotExists(ctx, client, teamProjectID, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
-		return fmt.Errorf("create alert policy: %w", err)
+	if err := r.createOrUpdateAlertPolicyIfNeeded(ctx, client, teamProjectID, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
+		return fmt.Errorf("create or update alert policy: %w", err)
 	}
 
 	return nil
 }
 
-// createAlertPolicyIfNotExists creates an alert policy for log matching
-func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, client *apiclient.APIClient, teamProjectID, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
+// createOrUpdateAlertPolicyIfNeeded creates an alert policy for log matching or updates it if needed
+func (r *auditLogReconciler) createOrUpdateAlertPolicyIfNeeded(ctx context.Context, client *apiclient.APIClient, teamProjectID, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 
 	// Check if alert policy already exists
@@ -881,20 +881,22 @@ func (r *auditLogReconciler) createAlertPolicyIfNotExists(ctx context.Context, c
 		return fmt.Errorf("list existing alert policies: %w", err)
 	}
 
-	// Check if our alert policy already exists
-	for _, policy := range existingPolicies.AlertPolicies {
-		if policy.DisplayName == alertPolicyName {
-			log.Debugf("Alert policy %s already exists, skipping creation", alertPolicyName)
-			return nil
-		}
-	}
-
 	// Get notification channels configuration
 	notificationChannels, err := r.getNotificationChannels(ctx, client)
 	if err != nil {
 		return fmt.Errorf("get notification channels: %w", err)
 	}
-	// Create the alert policy
+
+	// Check if our alert policy already exists
+	var existingPolicy *monitoring.AlertPolicy
+	for _, policy := range existingPolicies.AlertPolicies {
+		if policy.DisplayName == alertPolicyName {
+			existingPolicy = policy
+			break
+		}
+	}
+
+	// Create the alert policy structure
 	alertPolicy := &monitoring.AlertPolicy{
 		DisplayName: alertPolicyName,
 		Documentation: &monitoring.Documentation{
@@ -922,14 +924,53 @@ protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName),
 		},
 	}
 
-	// Create the alert policy
-	createCall := r.services.MonitoringService.Projects.AlertPolicies.Create(parent, alertPolicy)
-	createdPolicy, err := createCall.Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("create alert policy: %w", err)
+	if existingPolicy != nil {
+		// Update existing policy if notification channels have changed
+		needsUpdate := false
+
+		// Check if notification channels have changed
+		if len(existingPolicy.NotificationChannels) != len(notificationChannels) {
+			needsUpdate = true
+		} else {
+			// Check if the channels are different
+			existingChannelsMap := make(map[string]bool)
+			for _, channel := range existingPolicy.NotificationChannels {
+				existingChannelsMap[channel] = true
+			}
+			for _, channel := range notificationChannels {
+				if !existingChannelsMap[channel] {
+					needsUpdate = true
+					break
+				}
+			}
+		}
+
+		if needsUpdate {
+			// Set the name and other required fields for update
+			alertPolicy.Name = existingPolicy.Name
+			alertPolicy.CreationRecord = existingPolicy.CreationRecord
+			alertPolicy.MutationRecord = existingPolicy.MutationRecord
+
+			// Update the alert policy
+			updateCall := r.services.MonitoringService.Projects.AlertPolicies.Patch(existingPolicy.Name, alertPolicy)
+			updatedPolicy, err := updateCall.Context(ctx).Do()
+			if err != nil {
+				return fmt.Errorf("update alert policy: %w", err)
+			}
+			log.Infof("Updated sink change alert policy %s for team %s environment %s", updatedPolicy.Name, teamSlug, envName)
+		} else {
+			log.Debugf("Alert policy %s already exists with correct configuration, skipping", alertPolicyName)
+		}
+	} else {
+		// Create new alert policy
+		createCall := r.services.MonitoringService.Projects.AlertPolicies.Create(parent, alertPolicy)
+		createdPolicy, err := createCall.Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("create alert policy: %w", err)
+		}
+		log.Infof("Created sink change alert policy %s for team %s environment %s", createdPolicy.Name, teamSlug, envName)
 	}
 
-	log.Infof("Created sink change alert policy %s for team %s environment %s", createdPolicy.Name, teamSlug, envName)
 	return nil
 }
 
