@@ -916,6 +916,9 @@ protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName),
 		NotificationChannels: notificationChannels,
 		AlertStrategy: &monitoring.AlertStrategy{
 			AutoClose: "604800s", // 7 days
+			NotificationRateLimit: &monitoring.NotificationRateLimit{
+				Period: "300s", // 5 minutes
+			},
 		},
 	}
 
