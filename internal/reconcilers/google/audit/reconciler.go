@@ -22,6 +22,7 @@ import (
 	"google.golang.org/api/sqladmin/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -270,9 +271,9 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create one log bucket per team environment (shared by all SQL instances)
-		bucketName, err := r.createLogBucketIfNotExists(ctx, client, naisTeam.Slug, env.EnvironmentName, r.config.Location, log)
+		bucketName, err := r.createOrUpdateLogBucketIfNeeded(ctx, client, naisTeam.Slug, env.EnvironmentName, r.config.Location, log)
 		if err != nil {
-			return fmt.Errorf("create log bucket for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			return fmt.Errorf("create or update log bucket for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		// Collect application users from all SQL instances
@@ -341,7 +342,7 @@ func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	return false
 }
 
-func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, location string, log logrus.FieldLogger) (string, error) {
+func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, location string, log logrus.FieldLogger) (string, error) {
 	parent := fmt.Sprintf("projects/%s/locations/%s", r.config.ProjectID, location)
 	bucketName := GenerateLogBucketName(teamSlug, envName)
 
@@ -349,22 +350,25 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, cli
 		return "", fmt.Errorf("invalid bucket name %q: %w", bucketName, err)
 	}
 
-	exists, err := r.bucketExists(ctx, fmt.Sprintf("%s/buckets/%s", parent, bucketName))
+	bucketPath := fmt.Sprintf("%s/buckets/%s", parent, bucketName)
+	exists, err := r.bucketExists(ctx, bucketPath)
 	if err != nil {
 		return "", fmt.Errorf("check if bucket exists: %w", err)
 	}
 
+	// Get current configuration values
+	retentionDays, err := r.getRetentionDays(ctx, client)
+	if err != nil {
+		return "", fmt.Errorf("get retention days: %w", err)
+	}
+
+	locked, err := r.getBucketLocked(ctx, client)
+	if err != nil {
+		return "", fmt.Errorf("get bucket locked: %w", err)
+	}
+
 	if !exists {
-		retentionDays, err := r.getRetentionDays(ctx, client)
-		if err != nil {
-			return "", fmt.Errorf("get retention days: %w", err)
-		}
-
-		locked, err := r.getBucketLocked(ctx, client)
-		if err != nil {
-			return "", fmt.Errorf("get bucket locked: %w", err)
-		}
-
+		// Create new bucket
 		bucketReq := &loggingpb.CreateBucketRequest{
 			Parent:   parent,
 			BucketId: bucketName,
@@ -381,7 +385,56 @@ func (r *auditLogReconciler) createLogBucketIfNotExists(ctx context.Context, cli
 		}
 		log.Infof("Created log bucket %s for team %s environment %s", bucket.Name, teamSlug, envName)
 	} else {
-		log.Debugf("Log bucket %s already exists, skipping", bucketName)
+		// Check if existing bucket needs updates
+		existingBucket, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketPath})
+		if err != nil {
+			return "", fmt.Errorf("get existing bucket: %w", err)
+		}
+
+		needsUpdate := false
+		updateMask := []string{}
+
+		// Check if retention days need updating (only if bucket is not locked)
+		if !existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
+			needsUpdate = true
+			updateMask = append(updateMask, "retention_days")
+			log.Debugf("Bucket %s retention days will be updated from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+		} else if existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
+			log.Warnf("Bucket %s is locked, cannot update retention days from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+		}
+
+		// Check if locked status needs updating (can only go from false to true)
+		if !existingBucket.Locked && locked {
+			needsUpdate = true
+			updateMask = append(updateMask, "locked")
+			log.Debugf("Bucket %s will be locked", bucketName)
+		} else if existingBucket.Locked && !locked {
+			log.Warnf("Bucket %s is already locked, cannot unlock it", bucketName)
+		}
+
+		if needsUpdate {
+			// Update the bucket
+			updateReq := &loggingpb.UpdateBucketRequest{
+				Name: bucketPath,
+				Bucket: &loggingpb.LogBucket{
+					Name:          existingBucket.Name,
+					Description:   existingBucket.Description,
+					RetentionDays: retentionDays,
+					Locked:        locked,
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: updateMask,
+				},
+			}
+
+			updatedBucket, err := r.services.LogConfigService.UpdateBucket(ctx, updateReq)
+			if err != nil {
+				return "", fmt.Errorf("update log bucket: %w", err)
+			}
+			log.Infof("Updated log bucket %s for team %s environment %s", updatedBucket.Name, teamSlug, envName)
+		} else {
+			log.Debugf("Log bucket %s already exists with correct configuration, skipping", bucketName)
+		}
 	}
 
 	return bucketName, nil
