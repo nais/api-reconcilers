@@ -28,9 +28,8 @@ import (
 const (
 	reconcilerName = "google:gcp:audit"
 
-	configRetentionDays        = "audit:retention_days"
-	configLocked               = "audit:locked"
-	configNotificationChannels = "audit:notification_channels"
+	configRetentionDays = "audit:retention_days"
+	configLocked        = "audit:locked"
 )
 
 type Services struct {
@@ -160,12 +159,6 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 				Description: "Set to true for immutable log buckets for auditing purposes. Not possible to revert once set to true. False if not specified.",
 				Secret:      false,
 			},
-			{
-				Key:         configNotificationChannels,
-				DisplayName: "Notification Channels",
-				Description: "Comma-separated list of notification channel resource names for creating or updating alert policies. Format: projects/TEAM_PROJECT_ID/notificationChannels/CHANNEL_ID. Multiple channels separated by commas.",
-				Secret:      false,
-			},
 		},
 	}
 }
@@ -259,7 +252,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		teamProjectID := env.GetGcpProjectId()
 
 		// Get SQL instances for this team/environment
-		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId, log)
+		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
@@ -290,14 +283,9 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create one log sink per team environment covering all SQL instances
-		sinkName, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
+		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
 		if err != nil {
 			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
-		}
-
-		// Create log alert for sink change monitoring
-		if err := r.createSinkChangeAlert(ctx, client, teamProjectID, naisTeam.Slug, env.EnvironmentName, sinkName, log); err != nil {
-			return fmt.Errorf("create sink change alert for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if writerIdentity != "" {
@@ -314,7 +302,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return it.Err()
 }
 
-func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string, log logrus.FieldLogger) ([]string, error) {
+func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
@@ -512,38 +500,6 @@ func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apicli
 
 	// Default to false if config not found
 	return false, nil
-}
-
-func (r *auditLogReconciler) getNotificationChannels(ctx context.Context, client *apiclient.APIClient) ([]string, error) {
-	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
-		ReconcilerName: r.Name(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get reconciler config: %w", err)
-	}
-
-	for _, c := range config.Nodes {
-		if c.Key == configNotificationChannels {
-			if c.Value == "" {
-				// Default to empty list if not configured
-				return []string{}, nil
-			}
-
-			// Split by comma and trim whitespace
-			channels := strings.Split(c.Value, ",")
-			var trimmedChannels []string
-			for _, channel := range channels {
-				trimmed := strings.TrimSpace(channel)
-				if trimmed != "" {
-					trimmedChannels = append(trimmedChannels, trimmed)
-				}
-			}
-			return trimmedChannels, nil
-		}
-	}
-
-	// Default to empty list if config not found
-	return []string{}, nil
 }
 
 func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, appUsers []string, log logrus.FieldLogger) (string, string, error) {
@@ -954,124 +910,4 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 	}
 
 	return ""
-}
-
-// createSinkChangeAlert creates a log-based metric and alert to monitor for changes to the specified sink
-func (r *auditLogReconciler) createSinkChangeAlert(ctx context.Context, client *apiclient.APIClient, teamProjectID, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
-	// Create an alert policy based on log matching (no metric needed)
-	alertPolicyName := r.generateAlertPolicyName(teamSlug, envName)
-	if err := r.createOrUpdateAlertPolicyIfNeeded(ctx, client, teamProjectID, alertPolicyName, teamSlug, envName, sinkName, log); err != nil {
-		return fmt.Errorf("create or update alert policy: %w", err)
-	}
-
-	return nil
-}
-
-// createOrUpdateAlertPolicyIfNeeded creates an alert policy for log matching or updates it if needed
-func (r *auditLogReconciler) createOrUpdateAlertPolicyIfNeeded(ctx context.Context, client *apiclient.APIClient, teamProjectID, alertPolicyName, teamSlug, envName, sinkName string, log logrus.FieldLogger) error {
-	parent := fmt.Sprintf("projects/%s", teamProjectID)
-
-	// Check if alert policy already exists
-	listCall := r.services.MonitoringService.Projects.AlertPolicies.List(parent)
-	existingPolicies, err := listCall.Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("list existing alert policies: %w", err)
-	}
-
-	// Get notification channels configuration
-	notificationChannels, err := r.getNotificationChannels(ctx, client)
-	if err != nil {
-		return fmt.Errorf("get notification channels: %w", err)
-	}
-
-	// Check if our alert policy already exists
-	var existingPolicy *monitoring.AlertPolicy
-	for _, policy := range existingPolicies.AlertPolicies {
-		if policy.DisplayName == alertPolicyName {
-			existingPolicy = policy
-			break
-		}
-	}
-
-	// Create the alert policy structure
-	alertPolicy := &monitoring.AlertPolicy{
-		DisplayName: alertPolicyName,
-		Documentation: &monitoring.Documentation{
-			Content:  fmt.Sprintf("Alert triggered when the audit log sink '%s' is changed (deleted or updated) for team %s in environment %s", sinkName, teamSlug, envName),
-			MimeType: "text/markdown",
-		},
-		Combiner: "OR",
-		Conditions: []*monitoring.Condition{
-			{
-				DisplayName: fmt.Sprintf("Sink change detected: %s", sinkName),
-				ConditionMatchedLog: &monitoring.LogMatch{
-					Filter: fmt.Sprintf(`resource.type="logging_sink"
-(protoPayload.methodName="google.logging.v2.ConfigServiceV2.DeleteSink" OR protoPayload.methodName="google.logging.v2.ConfigServiceV2.UpdateSink")
-protoPayload.resourceName="projects/%s/sinks/%s"`, teamProjectID, sinkName),
-				},
-			},
-		},
-		Enabled:              true,
-		NotificationChannels: notificationChannels,
-		AlertStrategy: &monitoring.AlertStrategy{
-			AutoClose: "604800s", // 7 days
-			NotificationRateLimit: &monitoring.NotificationRateLimit{
-				Period: "300s", // 5 minutes
-			},
-		},
-	}
-
-	if existingPolicy != nil {
-		// Update existing policy if notification channels have changed
-		needsUpdate := false
-
-		// Check if notification channels have changed
-		if len(existingPolicy.NotificationChannels) != len(notificationChannels) {
-			needsUpdate = true
-		} else {
-			// Check if the channels are different
-			existingChannelsMap := make(map[string]bool)
-			for _, channel := range existingPolicy.NotificationChannels {
-				existingChannelsMap[channel] = true
-			}
-			for _, channel := range notificationChannels {
-				if !existingChannelsMap[channel] {
-					needsUpdate = true
-					break
-				}
-			}
-		}
-
-		if needsUpdate {
-			// Set the name and other required fields for update
-			alertPolicy.Name = existingPolicy.Name
-			alertPolicy.CreationRecord = existingPolicy.CreationRecord
-			alertPolicy.MutationRecord = existingPolicy.MutationRecord
-
-			// Update the alert policy
-			updateCall := r.services.MonitoringService.Projects.AlertPolicies.Patch(existingPolicy.Name, alertPolicy)
-			updatedPolicy, err := updateCall.Context(ctx).Do()
-			if err != nil {
-				return fmt.Errorf("update alert policy: %w", err)
-			}
-			log.Infof("Updated sink change alert policy %s for team %s environment %s", updatedPolicy.Name, teamSlug, envName)
-		} else {
-			log.Debugf("Alert policy %s already exists with correct configuration, skipping", alertPolicyName)
-		}
-	} else {
-		// Create new alert policy
-		createCall := r.services.MonitoringService.Projects.AlertPolicies.Create(parent, alertPolicy)
-		createdPolicy, err := createCall.Context(ctx).Do()
-		if err != nil {
-			return fmt.Errorf("create alert policy: %w", err)
-		}
-		log.Infof("Created sink change alert policy %s for team %s environment %s", createdPolicy.Name, teamSlug, envName)
-	}
-
-	return nil
-}
-
-// generateAlertPolicyName generates a consistent name for the alert policy
-func (r *auditLogReconciler) generateAlertPolicyName(teamSlug, envName string) string {
-	return fmt.Sprintf("audit-sink-changes-alert-%s-%s", teamSlug, envName)
 }
