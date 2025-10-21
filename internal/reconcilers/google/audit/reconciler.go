@@ -182,6 +182,18 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 		}
 	}
 
+	// Remove team log view permission after all sinks are deleted
+	if naisTeam.GoogleGroupEmail != nil {
+		log.Debugf("Removing log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
+		err := r.removeTeamLogViewPermission(ctx, *naisTeam.GoogleGroupEmail, log)
+		if err != nil {
+			log.WithError(err).Warn("Failed to remove team log view permission")
+			// Don't fail the deletion process if permission removal fails
+		}
+	} else {
+		log.Debugf("No Google Group email found for team %s, skipping team log view permission removal", naisTeam.Slug)
+	}
+
 	return it.Err()
 }
 
@@ -296,6 +308,17 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			}
 		} else {
 			log.Debugf("No writer identity found for sink, skipping permission grant")
+		}
+
+		// Grant log view permission to team members
+		if naisTeam.GoogleGroupEmail != nil {
+			log.Debugf("Granting log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
+			err = r.grantTeamLogViewPermission(ctx, *naisTeam.GoogleGroupEmail, log)
+			if err != nil {
+				return fmt.Errorf("grant team log view permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			}
+		} else {
+			log.Debugf("No Google Group email found for team %s, skipping team log view permission grant", naisTeam.Slug)
 		}
 	}
 
@@ -651,6 +674,69 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 	return nil
 }
 
+// grantTeamLogViewPermission grants the logging.viewAccessor role to the team's Google Group
+func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, teamGoogleGroup string, log logrus.FieldLogger) error {
+	// Check if we have a valid Cloud Resource Manager service
+	if r.services == nil || r.services.CloudResourceManagerService == nil {
+		log.Warn("No Cloud Resource Manager service available, cannot grant team log view permission")
+		return nil // Return nil to not fail the overall reconciliation process
+	}
+
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("get project IAM policy: %w", err)
+	}
+
+	logViewAccessorRole := "roles/logging.viewAccessor"
+	teamGroupMember := fmt.Sprintf("group:%s", teamGoogleGroup)
+	hasPermission := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == logViewAccessorRole {
+			for _, member := range binding.Members {
+				if member == teamGroupMember {
+					hasPermission = true
+					break
+				}
+			}
+			break
+		}
+	}
+
+	if hasPermission {
+		log.Debugf("Team group %s already has %s permission, skipping grant", teamGoogleGroup, logViewAccessorRole)
+		return nil
+	}
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == logViewAccessorRole {
+			binding.Members = append(binding.Members, teamGroupMember)
+			hasPermission = true
+			break
+		}
+	}
+
+	if !hasPermission {
+		newBinding := &cloudresourcemanager.Binding{
+			Role:    logViewAccessorRole,
+			Members: []string{teamGroupMember},
+		}
+		policy.Bindings = append(policy.Bindings, newBinding)
+	}
+
+	setRequest := &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}
+
+	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, setRequest).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("set project IAM policy: %w", err)
+	}
+
+	log.Infof("Granted %s permission to team group %s for audit log viewing", logViewAccessorRole, teamGoogleGroup)
+	return nil
+}
+
 func (r *auditLogReconciler) sinkExists(ctx context.Context, sinkID string) (bool, error) {
 	_, err := r.services.LogConfigService.GetSink(ctx, &loggingpb.GetSinkRequest{SinkName: sinkID})
 	if err != nil {
@@ -874,6 +960,66 @@ func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bu
 		"identity": writerIdentity,
 		"role":     role,
 	}).Info("Successfully removed bucket write permission")
+
+	return nil
+}
+
+// removeTeamLogViewPermission removes the logging.viewAccessor role from the team's Google Group
+func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, teamGoogleGroup string, log logrus.FieldLogger) error {
+	// Check if we have a valid Cloud Resource Manager service
+	if r.services == nil || r.services.CloudResourceManagerService == nil {
+		log.Warn("No Cloud Resource Manager service available, cannot remove team log view permission")
+		return nil // Return nil to not fail the overall deletion process
+	}
+
+	// Get current project IAM policy
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("get project IAM policy: %w", err)
+	}
+
+	// Remove the member from logging.viewAccessor role
+	role := "roles/logging.viewAccessor"
+	teamGroupMember := fmt.Sprintf("group:%s", teamGoogleGroup)
+	modified := false
+
+	for _, binding := range policy.Bindings {
+		if binding.Role == role {
+			// Filter out the team group
+			var newMembers []string
+			for _, member := range binding.Members {
+				if member != teamGroupMember {
+					newMembers = append(newMembers, member)
+				} else {
+					modified = true
+					log.WithFields(logrus.Fields{
+						"group": teamGoogleGroup,
+						"role":  role,
+					}).Info("Removing team log view permission")
+				}
+			}
+			binding.Members = newMembers
+			break
+		}
+	}
+
+	if !modified {
+		log.WithField("group", teamGoogleGroup).Debug("Team group not found in log view permissions")
+		return nil
+	}
+
+	// Set the updated policy
+	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("set project IAM policy: %w", err)
+	}
+
+	log.WithFields(logrus.Fields{
+		"group": teamGoogleGroup,
+		"role":  role,
+	}).Info("Successfully removed team log view permission")
 
 	return nil
 }
