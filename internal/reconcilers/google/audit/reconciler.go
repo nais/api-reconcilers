@@ -705,7 +705,11 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 		return nil // Return nil to not fail the overall reconciliation process
 	}
 
-	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{
+		Options: &cloudresourcemanager.GetPolicyOptions{
+			RequestedPolicyVersion: 3,
+		},
+	}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("get project IAM policy: %w", err)
 	}
@@ -771,6 +775,11 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 
 	setRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
+	}
+
+	// Ensure we use policy version 3 for IAM conditions
+	if setRequest.Policy != nil {
+		setRequest.Policy.Version = 3
 	}
 
 	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, setRequest).Context(ctx).Do()
@@ -1017,7 +1026,11 @@ func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, te
 	}
 
 	// Get current project IAM policy
-	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
+	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{
+		Options: &cloudresourcemanager.GetPolicyOptions{
+			RequestedPolicyVersion: 3,
+		},
+	}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("get project IAM policy: %w", err)
 	}
@@ -1074,9 +1087,16 @@ func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, te
 	}
 
 	// Set the updated policy
-	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, &cloudresourcemanager.SetIamPolicyRequest{
+	setRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
-	}).Context(ctx).Do()
+	}
+
+	// Ensure we use policy version 3 for IAM conditions
+	if setRequest.Policy != nil {
+		setRequest.Policy.Version = 3
+	}
+
+	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, setRequest).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("set project IAM policy: %w", err)
 	}
