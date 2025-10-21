@@ -313,7 +313,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		// Grant log view permission to team members
 		if naisTeam.GoogleGroupEmail != nil {
 			log.Debugf("Granting log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
-			err = r.grantTeamLogViewPermission(ctx, *naisTeam.GoogleGroupEmail, log)
+			err = r.grantTeamLogViewPermission(ctx, bucketName, *naisTeam.GoogleGroupEmail, log)
 			if err != nil {
 				return fmt.Errorf("grant team log view permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
@@ -674,8 +674,9 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 	return nil
 }
 
-// grantTeamLogViewPermission grants the logging.viewAccessor role to the team's Google Group
-func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, teamGoogleGroup string, log logrus.FieldLogger) error {
+// grantTeamLogViewPermission grants the logging.viewAccessor role to the team's Google Group with IAM condition
+// restricting access to only their specific log bucket
+func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, bucketName, teamGoogleGroup string, log logrus.FieldLogger) error {
 	// Check if we have a valid Cloud Resource Manager service
 	if r.services == nil || r.services.CloudResourceManagerService == nil {
 		log.Warn("No Cloud Resource Manager service available, cannot grant team log view permission")
@@ -689,37 +690,63 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, tea
 
 	logViewAccessorRole := "roles/logging.viewAccessor"
 	teamGroupMember := fmt.Sprintf("group:%s", teamGoogleGroup)
-	hasPermission := false
 
+	// Create IAM condition to restrict access to only this team's bucket
+	bucketPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
+	conditionTitle := fmt.Sprintf("Access to %s bucket only", bucketName)
+	conditionDescription := fmt.Sprintf("Restricts logging.viewAccessor access to bucket %s for team %s", bucketName, teamGoogleGroup)
+
+	// IAM condition expression to limit access to logs stored in the specific bucket
+	// This condition allows access to log entries that are associated with the specific bucket
+	conditionExpression := fmt.Sprintf(`(
+		resource.name.startsWith("%s") ||
+		(resource.type == "logging.googleapis.com/LogEntry" &&
+		 resource.labels.bucket_name == "%s")
+	)`, bucketPath, bucketName)
+
+	targetCondition := &cloudresourcemanager.Expr{
+		Title:       conditionTitle,
+		Description: conditionDescription,
+		Expression:  conditionExpression,
+	}
+
+	// Check if this team already has conditional access to this bucket
+	hasPermission := false
 	for _, binding := range policy.Bindings {
-		if binding.Role == logViewAccessorRole {
-			for _, member := range binding.Members {
-				if member == teamGroupMember {
-					hasPermission = true
-					break
+		if binding.Role == logViewAccessorRole && binding.Condition != nil {
+			if binding.Condition.Title == conditionTitle {
+				for _, member := range binding.Members {
+					if member == teamGroupMember {
+						hasPermission = true
+						break
+					}
 				}
 			}
-			break
 		}
 	}
 
 	if hasPermission {
-		log.Debugf("Team group %s already has %s permission, skipping grant", teamGoogleGroup, logViewAccessorRole)
+		log.Debugf("Team group %s already has conditional %s permission for bucket %s, skipping grant", teamGoogleGroup, logViewAccessorRole, bucketName)
 		return nil
 	}
 
+	// Look for existing conditional binding with the same condition or create new one
+	foundBinding := false
 	for _, binding := range policy.Bindings {
-		if binding.Role == logViewAccessorRole {
+		if binding.Role == logViewAccessorRole && binding.Condition != nil && binding.Condition.Title == conditionTitle {
+			// Add team to existing conditional binding
 			binding.Members = append(binding.Members, teamGroupMember)
-			hasPermission = true
+			foundBinding = true
 			break
 		}
 	}
 
-	if !hasPermission {
+	if !foundBinding {
+		// Create new conditional binding
 		newBinding := &cloudresourcemanager.Binding{
-			Role:    logViewAccessorRole,
-			Members: []string{teamGroupMember},
+			Role:      logViewAccessorRole,
+			Members:   []string{teamGroupMember},
+			Condition: targetCondition,
 		}
 		policy.Bindings = append(policy.Bindings, newBinding)
 	}
@@ -730,10 +757,11 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, tea
 
 	_, err = r.services.CloudResourceManagerService.Projects.SetIamPolicy(r.config.ProjectID, setRequest).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("set project IAM policy: %w", err)
+		return fmt.Errorf("set project IAM policy with condition: %w", err)
 	}
 
-	log.Infof("Granted %s permission to team group %s for audit log viewing", logViewAccessorRole, teamGoogleGroup)
+	log.Infof("Granted conditional %s permission to team group %s for bucket %s only", logViewAccessorRole, teamGoogleGroup, bucketName)
+	log.Infof("Team can view their logs using: gcloud logging read 'logName:\"projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access\"' --project=%s", r.config.ProjectID, r.config.ProjectID)
 	return nil
 }
 
@@ -964,7 +992,7 @@ func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bu
 	return nil
 }
 
-// removeTeamLogViewPermission removes the logging.viewAccessor role from the team's Google Group
+// removeTeamLogViewPermission removes the conditional logging.viewAccessor role from the team's Google Group
 func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, teamGoogleGroup string, log logrus.FieldLogger) error {
 	// Check if we have a valid Cloud Resource Manager service
 	if r.services == nil || r.services.CloudResourceManagerService == nil {
@@ -978,33 +1006,54 @@ func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, te
 		return fmt.Errorf("get project IAM policy: %w", err)
 	}
 
-	// Remove the member from logging.viewAccessor role
+	// Remove the member from conditional logging.viewAccessor role bindings
 	role := "roles/logging.viewAccessor"
 	teamGroupMember := fmt.Sprintf("group:%s", teamGoogleGroup)
 	modified := false
 
-	for _, binding := range policy.Bindings {
-		if binding.Role == role {
-			// Filter out the team group
+	// We need to remove the team from any conditional bindings for this role
+	// Since we don't know the specific bucket name in delete context, we look for any conditional binding with this team
+	var bindingsToRemove []int
+	for i, binding := range policy.Bindings {
+		if binding.Role == role && binding.Condition != nil {
+			// Look for conditional bindings that contain this team
 			var newMembers []string
+			teamFound := false
 			for _, member := range binding.Members {
 				if member != teamGroupMember {
 					newMembers = append(newMembers, member)
 				} else {
+					teamFound = true
 					modified = true
 					log.WithFields(logrus.Fields{
-						"group": teamGoogleGroup,
-						"role":  role,
-					}).Info("Removing team log view permission")
+						"group":     teamGoogleGroup,
+						"role":      role,
+						"condition": binding.Condition.Title,
+					}).Info("Removing team from conditional log view permission")
 				}
 			}
-			binding.Members = newMembers
-			break
+
+			if teamFound {
+				if len(newMembers) == 0 {
+					// If no members left, mark binding for removal
+					bindingsToRemove = append(bindingsToRemove, i)
+				} else {
+					// Update binding with remaining members
+					binding.Members = newMembers
+				}
+			}
 		}
 	}
 
+	// Remove empty conditional bindings (in reverse order to maintain indices)
+	for i := len(bindingsToRemove) - 1; i >= 0; i-- {
+		bindingIndex := bindingsToRemove[i]
+		policy.Bindings = append(policy.Bindings[:bindingIndex], policy.Bindings[bindingIndex+1:]...)
+		log.Debugf("Removed empty conditional binding for %s", role)
+	}
+
 	if !modified {
-		log.WithField("group", teamGoogleGroup).Debug("Team group not found in log view permissions")
+		log.WithField("group", teamGoogleGroup).Debug("Team group not found in conditional log view permissions")
 		return nil
 	}
 
@@ -1019,7 +1068,7 @@ func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, te
 	log.WithFields(logrus.Fields{
 		"group": teamGoogleGroup,
 		"role":  role,
-	}).Info("Successfully removed team log view permission")
+	}).Info("Successfully removed team from conditional log view permissions")
 
 	return nil
 }
