@@ -1,0 +1,72 @@
+package audit
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/sirupsen/logrus"
+	"google.golang.org/api/sqladmin/v1"
+)
+
+// getSQLInstancesForTeam retrieves SQL instances for a team that have pgaudit enabled.
+func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
+	sqlInstances := make([]string, 0)
+	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("list sql instances for team %s: %w", teamSlug, err)
+	}
+	for _, i := range response.Items {
+		if HasPgAuditEnabled(i) {
+			sqlInstances = append(sqlInstances, i.Name)
+		}
+	}
+	return sqlInstances, nil
+}
+
+// HasPgAuditEnabled checks if a SQL instance has the pgaudit flag enabled.
+func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
+	if instance.Settings == nil || instance.Settings.DatabaseFlags == nil {
+		return false
+	}
+
+	for _, flag := range instance.Settings.DatabaseFlags {
+		if flag.Name == "cloudsql.enable_pgaudit" && flag.Value == "on" {
+			return true
+		}
+	}
+	return false
+}
+
+// getApplicationUser extracts the application user from SQL instance labels.
+func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProjectID, sqlInstance string, log logrus.FieldLogger) (string, error) {
+	instance, err := r.services.SQLAdminService.Instances.Get(teamProjectID, sqlInstance).Context(ctx).Do()
+	if err != nil {
+		return "", fmt.Errorf("get SQL instance %s: %w", sqlInstance, err)
+	}
+
+	if instance.Settings != nil && instance.Settings.UserLabels != nil {
+		if appUser, exists := instance.Settings.UserLabels["app"]; exists && appUser != "" {
+			log.Debugf("Found application user from 'app' label for SQL instance %s: %s", sqlInstance, appUser)
+			return appUser, nil
+		}
+	}
+	log.Warningf("No 'app' found for label for SQL instance %s", sqlInstance)
+	return "", nil
+}
+
+// BuildLogFilter constructs a Cloud SQL audit log filter for all SQL instances in the project.
+func (r *auditLogReconciler) BuildLogFilter(teamProjectID string, appUsers []string) string {
+	baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
+AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
+
+	// Exclude application users if any are specified
+	for _, appUser := range appUsers {
+		if appUser != "" {
+			baseFilter += fmt.Sprintf(`
+AND NOT protoPayload.request.user="%s"`, appUser)
+		}
+	}
+
+	return baseFilter
+}

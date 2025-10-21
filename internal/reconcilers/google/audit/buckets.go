@@ -1,0 +1,208 @@
+package audit
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"cloud.google.com/go/logging/apiv2/loggingpb"
+	"github.com/nais/api/pkg/apiclient"
+	"github.com/nais/api/pkg/apiclient/protoapi"
+	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+)
+
+// createOrUpdateLogBucketIfNeeded creates or updates a log bucket based on configuration.
+func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context, client *apiclient.APIClient, teamSlug, envName, location string, log logrus.FieldLogger) (string, error) {
+	parent := fmt.Sprintf("projects/%s/locations/%s", r.config.ProjectID, location)
+	bucketName := GenerateLogBucketName(teamSlug, envName)
+
+	if err := ValidateLogBucketName(bucketName); err != nil {
+		return "", fmt.Errorf("invalid bucket name %q: %w", bucketName, err)
+	}
+
+	bucketPath := fmt.Sprintf("%s/buckets/%s", parent, bucketName)
+	exists, err := r.bucketExists(ctx, bucketPath)
+	if err != nil {
+		return "", fmt.Errorf("check if bucket exists: %w", err)
+	}
+
+	// Get current configuration values
+	retentionDays, err := r.getRetentionDays(ctx, client)
+	if err != nil {
+		return "", fmt.Errorf("get retention days: %w", err)
+	}
+
+	locked, err := r.getBucketLocked(ctx, client)
+	if err != nil {
+		return "", fmt.Errorf("get bucket locked: %w", err)
+	}
+
+	if !exists {
+		// Create new bucket
+		bucketReq := &loggingpb.CreateBucketRequest{
+			Parent:   parent,
+			BucketId: bucketName,
+			Bucket: &loggingpb.LogBucket{
+				Description:   fmt.Sprintf("Audit log bucket for team %s environment %s (created by api-reconcilers)", teamSlug, envName),
+				RetentionDays: retentionDays,
+				Locked:        locked,
+			},
+		}
+
+		bucket, err := r.services.LogConfigService.CreateBucket(ctx, bucketReq)
+		if err != nil {
+			return "", fmt.Errorf("create log bucket: %w", err)
+		}
+		log.Infof("Created log bucket %s for team %s environment %s", bucket.Name, teamSlug, envName)
+	} else {
+		// Check if existing bucket needs updates
+		existingBucket, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketPath})
+		if err != nil {
+			return "", fmt.Errorf("get existing bucket: %w", err)
+		}
+
+		needsUpdate := false
+		updateMask := []string{}
+
+		// Check if retention days need updating (only if bucket is not locked)
+		if !existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
+			needsUpdate = true
+			updateMask = append(updateMask, "retention_days")
+			log.Debugf("Bucket %s retention days will be updated from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+		} else if existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
+			log.Warnf("Bucket %s is locked, cannot update retention days from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+		}
+
+		// Check if locked status needs updating (can only go from false to true)
+		if !existingBucket.Locked && locked {
+			needsUpdate = true
+			updateMask = append(updateMask, "locked")
+			log.Debugf("Bucket %s will be locked", bucketName)
+		} else if existingBucket.Locked && !locked {
+			log.Warnf("Bucket %s is already locked, cannot unlock it", bucketName)
+		}
+
+		if needsUpdate {
+			// Update the bucket
+			updateReq := &loggingpb.UpdateBucketRequest{
+				Name: bucketPath,
+				Bucket: &loggingpb.LogBucket{
+					Name:          existingBucket.Name,
+					Description:   existingBucket.Description,
+					RetentionDays: retentionDays,
+					Locked:        locked,
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: updateMask,
+				},
+			}
+
+			updatedBucket, err := r.services.LogConfigService.UpdateBucket(ctx, updateReq)
+			if err != nil {
+				return "", fmt.Errorf("update log bucket: %w", err)
+			}
+			log.Infof("Updated log bucket %s for team %s environment %s", updatedBucket.Name, teamSlug, envName)
+		} else {
+			log.Debugf("Log bucket %s already exists with correct configuration, skipping", bucketName)
+		}
+	}
+
+	return bucketName, nil
+}
+
+// verifyLogViewExists checks that the specified log view exists on the bucket (as a precaution).
+func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName, viewName string, log logrus.FieldLogger) error {
+	logViewPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s/views/%s", r.config.ProjectID, r.config.Location, bucketName, viewName)
+
+	_, err := r.services.LogConfigService.GetView(ctx, &loggingpb.GetViewRequest{Name: logViewPath})
+	if err != nil {
+		s, ok := status.FromError(err)
+		if ok && s.Code() == codes.NotFound {
+			return fmt.Errorf("log view %s does not exist on bucket %s (this should be automatically created by Google Cloud)", viewName, bucketName)
+		}
+		return fmt.Errorf("failed to verify log view %s exists: %w", viewName, err)
+	}
+
+	log.Debugf("Verified that log view %s exists on bucket %s", viewName, bucketName)
+	return nil
+}
+
+// bucketExists checks if a log bucket exists.
+func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) (bool, error) {
+	_, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketID})
+	if err != nil {
+		s, ok := status.FromError(err)
+		if ok && s.Code() == codes.NotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// getRetentionDays retrieves the retention days configuration.
+func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apiclient.APIClient) (int32, error) {
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("get reconciler config: %w", err)
+	}
+
+	for _, c := range config.Nodes {
+		if c.Key == configRetentionDays {
+			if c.Value == "" {
+				return 0, fmt.Errorf("retention days config value is empty: %s must be configured", configRetentionDays)
+			}
+
+			// Parse the value as an integer
+			var retentionDays int32
+			if _, err := fmt.Sscanf(c.Value, "%d", &retentionDays); err != nil {
+				return 0, fmt.Errorf("invalid retention days value %q: %w", c.Value, err)
+			}
+
+			if retentionDays <= 0 {
+				return 0, fmt.Errorf("retention days must be greater than 0, got %d", retentionDays)
+			}
+
+			return retentionDays, nil
+		}
+	}
+
+	return 0, fmt.Errorf("retention days config not found: %s must be configured", configRetentionDays)
+}
+
+// getBucketLocked retrieves the bucket locked configuration.
+func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apiclient.APIClient) (bool, error) {
+	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
+		ReconcilerName: r.Name(),
+	})
+	if err != nil {
+		return false, fmt.Errorf("get reconciler config: %w", err)
+	}
+
+	for _, c := range config.Nodes {
+		if c.Key == configLocked {
+			if c.Value == "" {
+				// Default to false if not configured
+				return false, nil
+			}
+
+			// Parse the value as a boolean
+			switch strings.ToLower(c.Value) {
+			case "true", "1", "yes", "on":
+				return true, nil
+			case "false", "0", "no", "off":
+				return false, nil
+			default:
+				return false, fmt.Errorf("invalid locked value %q: must be true/false", c.Value)
+			}
+		}
+	}
+
+	// Default to false if config not found
+	return false, nil
+}
