@@ -1365,7 +1365,6 @@ func TestGetApplicationUsersFromLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock SQL instance with the specified labels
 			mockInstance := &sqladmin.DatabaseInstance{
-				Name: "test-instance",
 				Settings: &sqladmin.Settings{
 					UserLabels: tt.userLabels,
 				},

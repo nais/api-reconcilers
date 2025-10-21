@@ -294,6 +294,12 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			}
 		}
 
+		// Verify that the _AllLogs view exists on the bucket (should be automatic, but check as precaution)
+		err = r.verifyLogViewExists(ctx, bucketName, "_AllLogs", log)
+		if err != nil {
+			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
 		// Create one log sink per team environment covering all SQL instances
 		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
 		if err != nil {
@@ -313,7 +319,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		// Grant log view permission to team members
 		if naisTeam.GoogleGroupEmail != nil {
 			log.Debugf("Granting log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
-			err = r.grantTeamLogViewPermission(ctx, bucketName, *naisTeam.GoogleGroupEmail, log)
+			err = r.grantTeamLogViewPermission(ctx, bucketName, "_AllLogs", *naisTeam.GoogleGroupEmail, log)
 			if err != nil {
 				return fmt.Errorf("grant team log view permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
@@ -449,6 +455,23 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 	}
 
 	return bucketName, nil
+}
+
+// verifyLogViewExists checks that the specified log view exists on the bucket (as a precaution)
+func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName, viewName string, log logrus.FieldLogger) error {
+	logViewPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s/views/%s", r.config.ProjectID, r.config.Location, bucketName, viewName)
+
+	_, err := r.services.LogConfigService.GetView(ctx, &loggingpb.GetViewRequest{Name: logViewPath})
+	if err != nil {
+		s, ok := status.FromError(err)
+		if ok && s.Code() == codes.NotFound {
+			return fmt.Errorf("log view %s does not exist on bucket %s (this should be automatically created by Google Cloud)", viewName, bucketName)
+		}
+		return fmt.Errorf("failed to verify log view %s exists: %w", viewName, err)
+	}
+
+	log.Debugf("Verified that log view %s exists on bucket %s", viewName, bucketName)
+	return nil
 }
 
 func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) (bool, error) {
@@ -674,9 +697,8 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 	return nil
 }
 
-// grantTeamLogViewPermission grants the logging.viewAccessor role to the team's Google Group with IAM condition
-// restricting access to only their specific log bucket
-func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, bucketName, teamGoogleGroup string, log logrus.FieldLogger) error {
+// grantTeamLogViewPermission grants the logging.viewAccessor role to the team's Google Group with IAM condition restricting access to only their specific log view
+func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, bucketName, logViewName, teamGoogleGroup string, log logrus.FieldLogger) error {
 	// Check if we have a valid Cloud Resource Manager service
 	if r.services == nil || r.services.CloudResourceManagerService == nil {
 		log.Warn("No Cloud Resource Manager service available, cannot grant team log view permission")
@@ -691,18 +713,14 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 	logViewAccessorRole := "roles/logging.viewAccessor"
 	teamGroupMember := fmt.Sprintf("group:%s", teamGoogleGroup)
 
-	// Create IAM condition to restrict access to only this team's bucket
-	bucketPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
-	conditionTitle := fmt.Sprintf("Access to %s bucket only", bucketName)
-	conditionDescription := fmt.Sprintf("Restricts logging.viewAccessor access to bucket %s for team %s", bucketName, teamGoogleGroup)
+	// Create IAM condition to restrict access to only this team's _AllLogs view
+	logViewPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s/views/%s", r.config.ProjectID, r.config.Location, bucketName, logViewName)
+	conditionTitle := fmt.Sprintf("Access to %s %s view only", bucketName, logViewName)
+	conditionDescription := fmt.Sprintf("Restricts logging.viewAccessor access to %s view on bucket %s for team %s", logViewName, bucketName, teamGoogleGroup)
 
-	// IAM condition expression to limit access to logs stored in the specific bucket
-	// This condition allows access to log entries that are associated with the specific bucket
-	conditionExpression := fmt.Sprintf(`(
-		resource.name.startsWith("%s") ||
-		(resource.type == "logging.googleapis.com/LogEntry" &&
-		 resource.labels.bucket_name == "%s")
-	)`, bucketPath, bucketName)
+	// IAM condition expression to limit access to logs stored in the specific log view
+	// Use the correct resource name format for Cloud Logging log view access
+	conditionExpression := fmt.Sprintf(`resource.name == "%s"`, logViewPath)
 
 	targetCondition := &cloudresourcemanager.Expr{
 		Title:       conditionTitle,
@@ -726,7 +744,7 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 	}
 
 	if hasPermission {
-		log.Debugf("Team group %s already has conditional %s permission for bucket %s, skipping grant", teamGoogleGroup, logViewAccessorRole, bucketName)
+		log.Debugf("Team group %s already has conditional %s permission for log view %s, skipping grant", teamGoogleGroup, logViewAccessorRole, logViewName)
 		return nil
 	}
 
@@ -760,8 +778,8 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 		return fmt.Errorf("set project IAM policy with condition: %w", err)
 	}
 
-	log.Infof("Granted conditional %s permission to team group %s for bucket %s only", logViewAccessorRole, teamGoogleGroup, bucketName)
-	log.Infof("Team can view their logs using: gcloud logging read 'logName:\"projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access\"' --project=%s", r.config.ProjectID, r.config.ProjectID)
+	log.Infof("Granted conditional %s permission to team group %s for log view %s only", logViewAccessorRole, teamGoogleGroup, logViewName)
+	log.Infof("Team can view their logs using: gcloud logging read 'logName:\"projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access\"' --log-view='%s' --project=%s", r.config.ProjectID, logViewPath, r.config.ProjectID)
 	return nil
 }
 
@@ -811,8 +829,7 @@ AND NOT protoPayload.request.user="%s"`, appUser)
 	return baseFilter
 }
 
-// GenerateLogBucketName generates a unique bucket name with hash collision resistance
-// Creates one bucket per team environment (not per SQL instance)
+// GenerateLogBucketName generates a unique bucket name with hash collision resistance. Creates one bucket per team environment (not per SQL instance)
 func GenerateLogBucketName(teamSlug, envName string) string {
 	naturalName := fmt.Sprintf("%s-%s", teamSlug, envName)
 
@@ -850,8 +867,7 @@ func truncateToLength(s string, maxLen int) string {
 	return s[:maxLen]
 }
 
-// GenerateLogSinkName generates a unique sink name with hash collision resistance
-// Creates one sink per team environment (not per SQL instance)
+// GenerateLogSinkName generates a unique sink name with hash collision resistance. Creates one sink per team environment (not per SQL instance)
 func GenerateLogSinkName(teamSlug, envName string) string {
 	naturalName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
 
