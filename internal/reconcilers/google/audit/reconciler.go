@@ -126,7 +126,7 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 
 	// Remove team log view permission after all sinks are deleted
 	if naisTeam.GoogleGroupEmail != nil {
-		log.Debugf("Removing log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
+		log.Debugf("removing log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
 		err := r.removeTeamLogViewPermission(ctx, *naisTeam.GoogleGroupEmail, log)
 		if err != nil {
 			log.WithError(err).Warning("failed to remove team log view permission")

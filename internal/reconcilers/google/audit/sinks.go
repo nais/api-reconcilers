@@ -215,7 +215,7 @@ func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProject
 
 		// Check if this sink was created by our reconciler for this team/environment
 		if r.isManagedSink(sink, teamSlug, envName) {
-			log.WithField("sink", sink.Name).Info("Found managed sink for deletion")
+			log.WithField("sink", sink.Name).Info("found managed sink for deletion")
 
 			// Get the sink's writer identity before deleting it
 			writerIdentity := sink.WriterIdentity

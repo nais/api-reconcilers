@@ -224,7 +224,7 @@ func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bu
 		"bucket":   bucketName,
 		"identity": writerIdentity,
 		"role":     role,
-	}).Info("Successfully removed bucket write permission")
+	}).Info("successfully removed bucket write permission")
 
 	return nil
 }

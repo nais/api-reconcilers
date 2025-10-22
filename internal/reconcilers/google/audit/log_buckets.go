@@ -145,7 +145,7 @@ func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName
 	log.WithFields(logrus.Fields{
 		"view":       viewName,
 		"log_bucket": bucketName,
-	}).Debug("Verified that log view exists on bucket")
+	}).Debug("verified that log view exists on bucket")
 
 	return nil
 }
