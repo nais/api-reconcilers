@@ -57,7 +57,7 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 			return "", fmt.Errorf("create log bucket: %w", err)
 		}
 		log.WithFields(logrus.Fields{
-			"bucket":      bucket.Name,
+			"log_bucket":  bucket.Name,
 			"team":        teamSlug,
 			"environment": envName,
 		}).Info("created log bucket")
@@ -76,13 +76,13 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 			needsUpdate = true
 			updateMask = append(updateMask, "retention_days")
 			log.WithFields(logrus.Fields{
-				"bucket":        bucketName,
+				"log_bucket":    bucketName,
 				"old_retention": existingBucket.RetentionDays,
 				"new_retention": retentionDays,
 			}).Debug("updating bucket retention days")
 		} else if existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
 			log.WithFields(logrus.Fields{
-				"bucket":        bucketName,
+				"log_bucket":    bucketName,
 				"old_retention": existingBucket.RetentionDays,
 				"new_retention": retentionDays,
 			}).Warn("bucket is locked, skipping retention days update")
@@ -92,9 +92,9 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 		if !existingBucket.Locked && locked {
 			needsUpdate = true
 			updateMask = append(updateMask, "locked")
-			log.WithField("bucket", bucketName).Info("locking bucket")
+			log.WithField("log_bucket", bucketName).Info("locking bucket")
 		} else if existingBucket.Locked && !locked {
-			log.WithField("bucket", bucketName).Warn("bucket is already locked, cannot unlock it")
+			log.WithField("log_bucket", bucketName).Warn("bucket is already locked, cannot unlock it")
 		}
 
 		if needsUpdate {
@@ -117,12 +117,12 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 				return "", fmt.Errorf("update log bucket: %w", err)
 			}
 			log.WithFields(logrus.Fields{
-				"bucket":      updatedBucket.Name,
+				"log_bucket":  updatedBucket.Name,
 				"team":        teamSlug,
 				"environment": envName,
 			}).Info("updated log bucket")
 		} else {
-			log.WithField("bucket", bucketName).Debug("log bucket already exists with correct configuration, skipping")
+			log.WithField("log_bucket", bucketName).Debug("log bucket already exists with correct configuration, skipping")
 		}
 	}
 
@@ -143,8 +143,8 @@ func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName
 	}
 
 	log.WithFields(logrus.Fields{
-		"view":   viewName,
-		"bucket": bucketName,
+		"view":       viewName,
+		"log_bucket": bucketName,
 	}).Debug("Verified that log view exists on bucket")
 
 	return nil
