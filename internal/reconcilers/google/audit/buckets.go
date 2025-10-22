@@ -56,7 +56,11 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 		if err != nil {
 			return "", fmt.Errorf("create log bucket: %w", err)
 		}
-		log.Infof("Created log bucket %s for team %s environment %s", bucket.Name, teamSlug, envName)
+		log.WithFields(logrus.Fields{
+			"bucket":      bucket.Name,
+			"team":        teamSlug,
+			"environment": envName,
+		}).Info("created log bucket")
 	} else {
 		// Check if existing bucket needs updates
 		existingBucket, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketPath})
@@ -71,18 +75,26 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 		if !existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
 			needsUpdate = true
 			updateMask = append(updateMask, "retention_days")
-			log.Debugf("Bucket %s retention days will be updated from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+			log.WithFields(logrus.Fields{
+				"bucket":        bucketName,
+				"old_retention": existingBucket.RetentionDays,
+				"new_retention": retentionDays,
+			}).Debug("updating bucket retention days")
 		} else if existingBucket.Locked && existingBucket.RetentionDays != retentionDays {
-			log.Warnf("Bucket %s is locked, cannot update retention days from %d to %d", bucketName, existingBucket.RetentionDays, retentionDays)
+			log.WithFields(logrus.Fields{
+				"bucket":        bucketName,
+				"old_retention": existingBucket.RetentionDays,
+				"new_retention": retentionDays,
+			}).Warn("bucket is locked, skipping retention days update")
 		}
 
 		// Check if locked status needs updating (can only go from false to true)
 		if !existingBucket.Locked && locked {
 			needsUpdate = true
 			updateMask = append(updateMask, "locked")
-			log.Debugf("Bucket %s will be locked", bucketName)
+			log.WithField("bucket", bucketName).Info("locking bucket")
 		} else if existingBucket.Locked && !locked {
-			log.Warnf("Bucket %s is already locked, cannot unlock it", bucketName)
+			log.WithField("bucket", bucketName).Warn("bucket is already locked, cannot unlock it")
 		}
 
 		if needsUpdate {
@@ -104,9 +116,13 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 			if err != nil {
 				return "", fmt.Errorf("update log bucket: %w", err)
 			}
-			log.Infof("Updated log bucket %s for team %s environment %s", updatedBucket.Name, teamSlug, envName)
+			log.WithFields(logrus.Fields{
+				"bucket":      updatedBucket.Name,
+				"team":        teamSlug,
+				"environment": envName,
+			}).Info("updated log bucket")
 		} else {
-			log.Debugf("Log bucket %s already exists with correct configuration, skipping", bucketName)
+			log.WithField("bucket", bucketName).Debug("log bucket already exists with correct configuration, skipping")
 		}
 	}
 
@@ -126,7 +142,11 @@ func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName
 		return fmt.Errorf("failed to verify log view %s exists: %w", viewName, err)
 	}
 
-	log.Debugf("Verified that log view %s exists on bucket %s", viewName, bucketName)
+	log.WithFields(logrus.Fields{
+		"view":   viewName,
+		"bucket": bucketName,
+	}).Debug("Verified that log view exists on bucket")
+
 	return nil
 }
 

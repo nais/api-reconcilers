@@ -46,11 +46,11 @@ func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProject
 
 	if instance.Settings != nil && instance.Settings.UserLabels != nil {
 		if appUser, exists := instance.Settings.UserLabels["app"]; exists && appUser != "" {
-			log.Debugf("Found application user from 'app' label for SQL instance %s: %s", sqlInstance, appUser)
+			log.WithField("sql_instance", sqlInstance).WithField("app_user", appUser).Debug("application user from 'app' label for SQL instance")
 			return appUser, nil
 		}
 	}
-	log.Warningf("No 'app' found for label for SQL instance %s", sqlInstance)
+	log.WithField("sql_instance", sqlInstance).Warning("no 'app' label found for SQL instance")
 	return "", nil
 }
 

@@ -2,12 +2,14 @@ package audit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"cloud.google.com/go/logging/apiv2/loggingpb"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -49,7 +51,10 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 		if err != nil {
 			return "", "", fmt.Errorf("create log sink: %w", err)
 		}
-		log.Infof("Created log sink %s -> %s", sink.Name, destination)
+		log.WithFields(logrus.Fields{
+			"team":        teamSlug,
+			"environment": envName,
+		}).Info("created log sink")
 		writerIdentity = sink.WriterIdentity
 	} else {
 		// Check if existing sink needs updates
@@ -67,14 +72,17 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 		if existingSink.Filter != filter {
 			needsUpdate = true
 			updateMask = append(updateMask, "filter")
-			log.Debugf("Sink %s filter will be updated", sinkName)
+			log.WithField("sink", sinkName).Debug("sink filter will be updated")
 		}
 
 		// Check if destination needs updating (less common but possible)
 		if existingSink.Destination != destination {
 			needsUpdate = true
 			updateMask = append(updateMask, "destination")
-			log.Debugf("Sink %s destination will be updated from %s to %s", sinkName, existingSink.Destination, destination)
+			log.WithFields(logrus.Fields{
+				"old_destination": existingSink.Destination,
+				"new_destination": destination,
+			}).Debug("sink destination will be updated")
 		}
 
 		if needsUpdate {
@@ -96,10 +104,13 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 			if err != nil {
 				return "", "", fmt.Errorf("update log sink: %w", err)
 			}
-			log.Infof("Updated log sink %s for team %s environment %s", updatedSink.Name, teamSlug, envName)
+			log.WithFields(logrus.Fields{
+				"team":        teamSlug,
+				"environment": envName,
+			}).Info("updated log sink")
 			writerIdentity = updatedSink.WriterIdentity
 		} else {
-			log.Debugf("Log sink %s already exists with correct configuration, skipping", sinkName)
+			log.WithField("sink", sinkName).Debug("log sink already exists with correct configuration, skipping")
 			writerIdentity = existingSink.WriterIdentity
 		}
 	}
@@ -133,13 +144,13 @@ func (r *auditLogReconciler) deleteSink(ctx context.Context, teamProjectID, sink
 	if err != nil {
 		// Check if the sink was already deleted
 		if status.Code(err) == codes.NotFound {
-			log.WithField("sink", sinkName).Debug("Sink already deleted")
+			log.WithField("sink", sinkName).Debug("sink already deleted")
 			return nil
 		}
 		return fmt.Errorf("delete sink %s: %w", sinkName, err)
 	}
 
-	log.WithField("sink", sinkName).Info("Successfully deleted log sink")
+	log.WithField("sink", sinkName).Info("successfully deleted log sink")
 	return nil
 }
 
@@ -181,7 +192,7 @@ func (r *auditLogReconciler) extractBucketNameFromDestination(destination string
 func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProjectID, teamSlug, envName string, log logrus.FieldLogger) error {
 	// Check if we have a valid logging service
 	if r.services == nil || r.services.LogConfigService == nil {
-		log.Warn("No logging service available, cannot list or delete sinks")
+		log.Warning("no logging service available, cannot list or delete sinks")
 		return nil // Return nil to not fail the overall deletion process
 	}
 
@@ -196,7 +207,7 @@ func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProject
 	for {
 		sink, err := it.Next()
 		if err != nil {
-			if err.Error() == "no more items in iterator" {
+			if errors.Is(err, iterator.Done) {
 				break
 			}
 			return fmt.Errorf("failed to iterate sinks: %w", err)
@@ -215,7 +226,7 @@ func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProject
 			// Delete the log sink
 			err = r.deleteSink(ctx, teamProjectID, sink.Name, log)
 			if err != nil {
-				log.WithError(err).WithField("sink", sink.Name).Error("Failed to delete log sink")
+				log.WithError(err).WithField("sink", sink.Name).Error("failed to delete log sink")
 				// Continue with other sinks instead of failing completely
 				continue
 			}
@@ -224,8 +235,10 @@ func (r *auditLogReconciler) deleteAllTeamSinks(ctx context.Context, teamProject
 			if writerIdentity != "" && bucketName != "" {
 				err = r.removeBucketWritePermission(ctx, bucketName, writerIdentity, log)
 				if err != nil {
-					log.WithError(err).WithField("bucket", bucketName).WithField("identity", writerIdentity).Warn("Failed to remove bucket write permission")
-					// Continue with other permissions instead of failing completely
+					log.WithFields(logrus.Fields{
+						"bucket":   bucketName,
+						"identity": writerIdentity,
+					}).Warning("failed to remove bucket write permission")
 				}
 			}
 		}

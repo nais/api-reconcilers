@@ -119,7 +119,7 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 		// instead of relying on the existence of SQL instances
 		err := r.deleteAllTeamSinks(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, log)
 		if err != nil {
-			log.WithError(err).Warn("Failed to delete all team sinks")
+			log.WithError(err).Warning("failed to delete all team sinks")
 			// Continue with other environments instead of failing completely
 		}
 	}
@@ -129,11 +129,11 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 		log.Debugf("Removing log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
 		err := r.removeTeamLogViewPermission(ctx, *naisTeam.GoogleGroupEmail, log)
 		if err != nil {
-			log.WithError(err).Warn("Failed to remove team log view permission")
+			log.WithError(err).Warning("failed to remove team log view permission")
 			// Don't fail the deletion process if permission removal fails
 		}
 	} else {
-		log.Debugf("No Google Group email found for team %s, skipping team log view permission removal", naisTeam.Slug)
+		log.WithField("team", naisTeam.Slug).Debug("no Google Group email found, skipping team log view permission removal")
 	}
 
 	return it.Err()
@@ -157,7 +157,10 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 
 		// Skip if no SQL instances with pgaudit enabled
 		if len(listSQLInstances) == 0 {
-			log.Debugf("No SQL instances with pgaudit enabled found for team %s environment %s", naisTeam.Slug, env.EnvironmentName)
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Debug("skipping environment without SQL instances with pgaudit enabled")
 			continue
 		}
 
@@ -172,7 +175,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		for _, instance := range listSQLInstances {
 			appUser, err := r.getApplicationUser(ctx, teamProjectID, instance, log)
 			if err != nil {
-				log.WithError(err).Warnf("Failed to get application user for instance %s, continuing", instance)
+				log.WithField("sql_instance", instance).WithError(err).Warning("failed to get application user for SQL instance, continuing")
 				continue
 			}
 			if appUser != "" {
@@ -193,24 +196,24 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		if writerIdentity != "" {
-			log.Debugf("Granting bucket write permission for sink writer identity: %s", writerIdentity)
+			log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
 			err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
 			if err != nil {
 				return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
 		} else {
-			log.Debugf("No writer identity found for sink, skipping permission grant")
+			log.Debug("no writer identity found for sink, skipping permission grant")
 		}
 
 		// Grant log view permission to team members
 		if naisTeam.GoogleGroupEmail != nil {
-			log.Debugf("Granting log view permission for team group: %s", *naisTeam.GoogleGroupEmail)
+			log.WithField("team", naisTeam.Slug).Debug("granting log view permission for team group")
 			err = r.grantTeamLogViewPermission(ctx, bucketName, "_AllLogs", *naisTeam.GoogleGroupEmail, log)
 			if err != nil {
 				return fmt.Errorf("grant team log view permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
 		} else {
-			log.Debugf("No Google Group email found for team %s, skipping team log view permission grant", naisTeam.Slug)
+			log.WithField("team", naisTeam.Slug).Debug("no Google Group email found, skipping team log view permission grant")
 		}
 	}
 
