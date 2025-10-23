@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -23,9 +22,6 @@ func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, s
 	const baseDelay = 500 * time.Millisecond
 	const maxDelay = 30 * time.Second
 
-	// Create a local random generator for jitter
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		// Try to get the service account
 		_, err := r.services.IAMService.Projects.ServiceAccounts.Get(fmt.Sprintf("projects/-/serviceAccounts/%s", serviceAccount)).Context(ctx).Do()
@@ -40,14 +36,11 @@ func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, s
 				return fmt.Errorf("service account %s still does not exist after waiting %d attempts", serviceAccount, maxRetries)
 			}
 
-			// Calculate delay with exponential backoff and jitter
+			// Calculate delay with exponential backoff
 			delay := time.Duration(1<<attempt) * baseDelay
 			if delay > maxDelay {
 				delay = maxDelay
 			}
-			// Add jitter (±25%)
-			jitter := time.Duration(rng.Int63n(int64(delay / 2)))
-			delay = delay + jitter
 
 			log.WithFields(logrus.Fields{
 				"service_account": serviceAccount,
@@ -80,9 +73,6 @@ func (r *auditLogReconciler) retryIAMOperation(ctx context.Context, operation fu
 	const baseDelay = 100 * time.Millisecond
 	const maxDelay = 5 * time.Second
 
-	// Create a local random generator for jitter
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		err := operation()
 		if err == nil {
@@ -107,14 +97,11 @@ func (r *auditLogReconciler) retryIAMOperation(ctx context.Context, operation fu
 					return fmt.Errorf("IAM operation failed after %d attempts: %w", maxRetries, err)
 				}
 
-				// Calculate delay with exponential backoff and jitter
+				// Calculate delay with exponential backoff
 				delay := time.Duration(1<<attempt) * baseDelay
 				if delay > maxDelay {
 					delay = maxDelay
 				}
-				// Add jitter (±25%)
-				jitter := time.Duration(rng.Int63n(int64(delay / 2)))
-				delay = delay + jitter
 
 				var reason string
 				if googleErr.Code == 409 {
