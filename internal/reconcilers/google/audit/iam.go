@@ -11,6 +11,14 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+// ExtractServiceAccountEmail extracts the email from a writer identity that may have the format "serviceAccount:email@domain".
+func ExtractServiceAccountEmail(writerIdentity string) string {
+	if strings.HasPrefix(writerIdentity, "serviceAccount:") {
+		return strings.TrimPrefix(writerIdentity, "serviceAccount:")
+	}
+	return writerIdentity
+}
+
 // waitForServiceAccountToExist waits for a service account to be created and become available for IAM operations.
 func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, serviceAccount string, log logrus.FieldLogger) error {
 	if r.services == nil || r.services.IAMService == nil {
@@ -18,22 +26,25 @@ func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, s
 		return nil // Don't fail if we can't verify
 	}
 
+	// Extract just the email part if the service account has the "serviceAccount:" prefix
+	serviceAccountEmail := ExtractServiceAccountEmail(serviceAccount)
+
 	const maxRetries = 10
 	const baseDelay = 500 * time.Millisecond
 	const maxDelay = 30 * time.Second
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Try to get the service account
-		_, err := r.services.IAMService.Projects.ServiceAccounts.Get(fmt.Sprintf("projects/-/serviceAccounts/%s", serviceAccount)).Context(ctx).Do()
+		// Try to get the service account using just the email
+		_, err := r.services.IAMService.Projects.ServiceAccounts.Get(fmt.Sprintf("projects/-/serviceAccounts/%s", serviceAccountEmail)).Context(ctx).Do()
 		if err == nil {
-			log.WithField("service_account", serviceAccount).Debug("service account exists and is ready")
+			log.WithField("service_account", serviceAccountEmail).Debug("service account exists and is ready")
 			return nil
 		}
 
 		// Check if it's a "not found" error (expected while service account is being created)
 		if googleErr, ok := err.(*googleapi.Error); ok && googleErr.Code == 404 {
 			if attempt == maxRetries-1 {
-				return fmt.Errorf("service account %s still does not exist after waiting %d attempts", serviceAccount, maxRetries)
+				return fmt.Errorf("service account %s still does not exist after waiting %d attempts", serviceAccountEmail, maxRetries)
 			}
 
 			// Calculate delay with exponential backoff
@@ -43,7 +54,7 @@ func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, s
 			}
 
 			log.WithFields(logrus.Fields{
-				"service_account": serviceAccount,
+				"service_account": serviceAccountEmail,
 				"attempt":         attempt + 1,
 				"delay":           delay,
 			}).Debug("service account not yet available, waiting for creation")
@@ -58,7 +69,7 @@ func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, s
 
 		// For other errors (like permission issues), return immediately
 		log.WithFields(logrus.Fields{
-			"service_account": serviceAccount,
+			"service_account": serviceAccountEmail,
 			"error":           err.Error(),
 		}).Warning("unexpected error checking service account existence")
 		return nil // Don't fail the reconciliation for verification issues

@@ -1391,3 +1391,36 @@ func TestGetApplicationUsersFromLabel(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractServiceAccountEmail(t *testing.T) {
+	tests := []struct {
+		name           string
+		writerIdentity string
+		expected       string
+	}{
+		{
+			name:           "with serviceAccount prefix",
+			writerIdentity: "serviceAccount:service-617704890496@gcp-sa-logging.iam.gserviceaccount.com",
+			expected:       "service-617704890496@gcp-sa-logging.iam.gserviceaccount.com",
+		},
+		{
+			name:           "without serviceAccount prefix",
+			writerIdentity: "service-617704890496@gcp-sa-logging.iam.gserviceaccount.com",
+			expected:       "service-617704890496@gcp-sa-logging.iam.gserviceaccount.com",
+		},
+		{
+			name:           "empty string",
+			writerIdentity: "",
+			expected:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := audit.ExtractServiceAccountEmail(tt.writerIdentity)
+			if result != tt.expected {
+				t.Errorf("extractServiceAccountEmail(%q) = %q, want %q", tt.writerIdentity, result, tt.expected)
+			}
+		})
+	}
+}
