@@ -109,6 +109,14 @@ type Config struct {
 		AdminUserEmail string `env:"GOOGLE_ADMIN_USER_EMAIL"`
 	}
 
+	AuditLog struct {
+		// ProjectID The ID of the GCP project where audit log buckets are created.
+		ProjectID string `env:"NAIS_AUDIT_LOG_PROJECT_ID"`
+
+		// Location The GCP location where audit log buckets are created.
+		Location string `env:"NAIS_AUDIT_LOG_LOCATION"`
+	}
+
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
 	GoogleManagementProjectID string `env:"GOOGLE_MANAGEMENT_PROJECT_ID"`
 
