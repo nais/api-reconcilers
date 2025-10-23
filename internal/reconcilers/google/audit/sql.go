@@ -18,7 +18,7 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("list sql instances for team %s: %w", teamSlug, err)
+		return nil, fmt.Errorf("list sql instances for project ID %s: %w", teamProjectID, err)
 	}
 	for _, i := range response.Items {
 		if HasPgAuditEnabled(i) {
