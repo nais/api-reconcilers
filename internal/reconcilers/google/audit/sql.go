@@ -10,6 +10,11 @@ import (
 
 // getSQLInstancesForTeam retrieves SQL instances for a team that have pgaudit enabled.
 func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
+	// Check if we have a valid SQL admin service
+	if r.services == nil || r.services.SQLAdminService == nil {
+		return nil, fmt.Errorf("no SQL admin service available for team %s", teamSlug)
+	}
+
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
@@ -39,6 +44,12 @@ func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 
 // getApplicationUser extracts the application user from SQL instance labels.
 func (r *auditLogReconciler) getApplicationUser(ctx context.Context, teamProjectID, sqlInstance string, log logrus.FieldLogger) (string, error) {
+	// Check if we have a valid SQL admin service
+	if r.services == nil || r.services.SQLAdminService == nil {
+		log.WithField("sql_instance", sqlInstance).Warning("no SQL admin service available, cannot get application user")
+		return "", nil
+	}
+
 	instance, err := r.services.SQLAdminService.Instances.Get(teamProjectID, sqlInstance).Context(ctx).Do()
 	if err != nil {
 		return "", fmt.Errorf("get SQL instance %s: %w", sqlInstance, err)

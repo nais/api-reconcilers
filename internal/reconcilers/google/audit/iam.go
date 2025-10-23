@@ -10,6 +10,10 @@ import (
 
 // grantBucketWritePermission grants the logging.bucketWriter role to the sink's writer identity.
 func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, bucketName, writerIdentity string, log logrus.FieldLogger) error {
+	if r.services == nil || r.services.CloudResourceManagerService == nil {
+		return fmt.Errorf("CloudResourceManagerService is not available")
+	}
+
 	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("get project IAM policy: %w", err)
@@ -176,6 +180,10 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 
 // removeBucketWritePermission removes write permission for a service account from a bucket.
 func (r *auditLogReconciler) removeBucketWritePermission(ctx context.Context, bucketName, writerIdentity string, log logrus.FieldLogger) error {
+	if r.services == nil || r.services.CloudResourceManagerService == nil {
+		return fmt.Errorf("CloudResourceManagerService is not available")
+	}
+
 	// Get current project IAM policy
 	policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
 	if err != nil {

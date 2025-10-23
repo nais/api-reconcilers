@@ -181,6 +181,15 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		env := it.Value()
 		teamProjectID := env.GetGcpProjectId()
 
+		// Check if the environment has a GCP project ID
+		if env.GcpProjectId == nil {
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Warning("skipping environment without GCP project ID")
+			continue
+		}
+
 		// Get SQL instances for this team/environment
 		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
 		if err != nil {

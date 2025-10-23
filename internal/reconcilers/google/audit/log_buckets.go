@@ -131,6 +131,10 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 
 // verifyLogViewExists checks that the specified log view exists on the bucket (as a precaution).
 func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName, viewName string, log logrus.FieldLogger) error {
+	if r.services == nil || r.services.LogConfigService == nil {
+		return fmt.Errorf("LogConfigService is not available")
+	}
+
 	logViewPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s/views/%s", r.config.ProjectID, r.config.Location, bucketName, viewName)
 
 	_, err := r.services.LogConfigService.GetView(ctx, &loggingpb.GetViewRequest{Name: logViewPath})
@@ -152,6 +156,10 @@ func (r *auditLogReconciler) verifyLogViewExists(ctx context.Context, bucketName
 
 // bucketExists checks if a log bucket exists.
 func (r *auditLogReconciler) bucketExists(ctx context.Context, bucketID string) (bool, error) {
+	if r.services == nil || r.services.LogConfigService == nil {
+		return false, fmt.Errorf("LogConfigService is not available")
+	}
+
 	_, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketID})
 	if err != nil {
 		s, ok := status.FromError(err)
@@ -229,6 +237,10 @@ func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apicli
 
 // getBucketInfo retrieves information about a log bucket.
 func (r *auditLogReconciler) getBucketInfo(ctx context.Context, bucketPath string) (*loggingpb.LogBucket, error) {
+	if r.services == nil || r.services.LogConfigService == nil {
+		return nil, fmt.Errorf("LogConfigService is not available")
+	}
+
 	bucket, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketPath})
 	if err != nil {
 		return nil, err
@@ -238,6 +250,10 @@ func (r *auditLogReconciler) getBucketInfo(ctx context.Context, bucketPath strin
 
 // deleteBucket deletes a log bucket.
 func (r *auditLogReconciler) deleteBucket(ctx context.Context, bucketPath string, log logrus.FieldLogger) error {
+	if r.services == nil || r.services.LogConfigService == nil {
+		return fmt.Errorf("LogConfigService is not available")
+	}
+
 	req := &loggingpb.DeleteBucketRequest{
 		Name: bucketPath,
 	}
