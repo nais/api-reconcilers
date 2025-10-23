@@ -112,7 +112,24 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 
 	for it.Next() {
 		env := it.Value()
-		teamProjectID := env.GetGcpProjectId()
+
+		// Check if the environment has a GCP project ID
+		if env.GcpProjectId == nil {
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Warning("skipping environment without GCP project ID")
+			continue
+		}
+
+		teamProjectID := *env.GcpProjectId
+		if teamProjectID == "" {
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Warning("skipping environment with empty GCP project ID")
+			continue
+		}
 
 		// Since SQL instances may already be deleted when a team is deleted,
 		// we need to find all existing sinks for this team/environment
@@ -179,7 +196,6 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 
 	for it.Next() {
 		env := it.Value()
-		teamProjectID := env.GetGcpProjectId()
 
 		// Check if the environment has a GCP project ID
 		if env.GcpProjectId == nil {
@@ -190,8 +206,17 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			continue
 		}
 
+		teamProjectID := *env.GcpProjectId
+		if teamProjectID == "" {
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Warning("skipping environment with empty GCP project ID")
+			continue
+		}
+
 		// Get SQL instances for this team/environment
-		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, *env.GcpProjectId)
+		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, teamProjectID)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}

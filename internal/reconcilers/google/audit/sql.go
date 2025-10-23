@@ -15,10 +15,15 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 		return nil, fmt.Errorf("no SQL admin service available for team %s", teamSlug)
 	}
 
+	// Validate project ID
+	if teamProjectID == "" {
+		return nil, fmt.Errorf("team project ID is empty for team %s", teamSlug)
+	}
+
 	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("list sql instances for project ID %s: %w", teamProjectID, err)
+		return nil, fmt.Errorf("list sql instances for team %s project %s: %w", teamSlug, teamProjectID, err)
 	}
 	for _, i := range response.Items {
 		if HasPgAuditEnabled(i) {
