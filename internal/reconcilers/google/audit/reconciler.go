@@ -118,7 +118,7 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
-			}).Warning("skipping environment without GCP project ID")
+			}).Debug("skipping environment without GCP project ID")
 			continue
 		}
 
@@ -127,7 +127,7 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
-			}).Warning("skipping environment with empty GCP project ID")
+			}).Debug("skipping environment with empty GCP project ID")
 			continue
 		}
 
@@ -202,7 +202,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
-			}).Warning("skipping environment without GCP project ID")
+			}).Debug("skipping environment without GCP project ID")
 			continue
 		}
 
@@ -211,7 +211,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
-			}).Warning("skipping environment with empty GCP project ID")
+			}).Debug("skipping environment with empty GCP project ID")
 			continue
 		}
 
