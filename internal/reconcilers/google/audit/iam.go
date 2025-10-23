@@ -19,70 +19,11 @@ func ExtractServiceAccountEmail(writerIdentity string) string {
 	return writerIdentity
 }
 
-// waitForServiceAccountToExist waits for a service account to be created and become available for IAM operations.
-func (r *auditLogReconciler) waitForServiceAccountToExist(ctx context.Context, serviceAccount string, log logrus.FieldLogger) error {
-	if r.services == nil || r.services.IAMService == nil {
-		log.Warning("no IAM service available, cannot verify service account existence")
-		return nil // Don't fail if we can't verify
-	}
-
-	// Extract just the email part if the service account has the "serviceAccount:" prefix
-	serviceAccountEmail := ExtractServiceAccountEmail(serviceAccount)
-
-	const maxRetries = 10
-	const baseDelay = 500 * time.Millisecond
-	const maxDelay = 30 * time.Second
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Try to get the service account using just the email
-		_, err := r.services.IAMService.Projects.ServiceAccounts.Get(fmt.Sprintf("projects/-/serviceAccounts/%s", serviceAccountEmail)).Context(ctx).Do()
-		if err == nil {
-			log.WithField("service_account", serviceAccountEmail).Debug("service account exists and is ready")
-			return nil
-		}
-
-		// Check if it's a "not found" error (expected while service account is being created)
-		if googleErr, ok := err.(*googleapi.Error); ok && googleErr.Code == 404 {
-			if attempt == maxRetries-1 {
-				return fmt.Errorf("service account %s still does not exist after waiting %d attempts", serviceAccountEmail, maxRetries)
-			}
-
-			// Calculate delay with exponential backoff
-			delay := time.Duration(1<<attempt) * baseDelay
-			if delay > maxDelay {
-				delay = maxDelay
-			}
-
-			log.WithFields(logrus.Fields{
-				"service_account": serviceAccountEmail,
-				"attempt":         attempt + 1,
-				"delay":           delay,
-			}).Debug("service account not yet available, waiting for creation")
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(delay):
-				continue
-			}
-		}
-
-		// For other errors (like permission issues), return immediately
-		log.WithFields(logrus.Fields{
-			"service_account": serviceAccountEmail,
-			"error":           err.Error(),
-		}).Warning("unexpected error checking service account existence")
-		return nil // Don't fail the reconciliation for verification issues
-	}
-
-	return fmt.Errorf("unexpected error in service account wait logic")
-}
-
 // retryIAMOperation performs an IAM operation with exponential backoff retry logic.
 func (r *auditLogReconciler) retryIAMOperation(ctx context.Context, operation func() error, log logrus.FieldLogger) error {
-	const maxRetries = 5
-	const baseDelay = 100 * time.Millisecond
-	const maxDelay = 5 * time.Second
+	const maxRetries = 10
+	const baseDelay = 200 * time.Millisecond
+	const maxDelay = 10 * time.Second
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		err := operation()
@@ -150,11 +91,7 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 		return fmt.Errorf("CloudResourceManagerService is not available")
 	}
 
-	// Wait for the service account to be created before granting permissions
-	if err := r.waitForServiceAccountToExist(ctx, writerIdentity, log); err != nil {
-		log.WithError(err).WithField("identity", writerIdentity).Warning("failed to verify service account existence, continuing with permission grant")
-		// Continue anyway - the IAM operation might still work
-	}
+	log.WithField("identity", ExtractServiceAccountEmail(writerIdentity)).Debug("granting bucket write permission for sink writer identity")
 
 	operation := func() error {
 		policy, err := r.services.CloudResourceManagerService.Projects.GetIamPolicy(r.config.ProjectID, &cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do()
