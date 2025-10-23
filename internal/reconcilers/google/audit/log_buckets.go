@@ -226,3 +226,32 @@ func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apicli
 	// Default to false if config not found
 	return false, nil
 }
+
+// getBucketInfo retrieves information about a log bucket.
+func (r *auditLogReconciler) getBucketInfo(ctx context.Context, bucketPath string) (*loggingpb.LogBucket, error) {
+	bucket, err := r.services.LogConfigService.GetBucket(ctx, &loggingpb.GetBucketRequest{Name: bucketPath})
+	if err != nil {
+		return nil, err
+	}
+	return bucket, nil
+}
+
+// deleteBucket deletes a log bucket.
+func (r *auditLogReconciler) deleteBucket(ctx context.Context, bucketPath string, log logrus.FieldLogger) error {
+	req := &loggingpb.DeleteBucketRequest{
+		Name: bucketPath,
+	}
+
+	err := r.services.LogConfigService.DeleteBucket(ctx, req)
+	if err != nil {
+		// Check if the bucket was already deleted
+		if status.Code(err) == codes.NotFound {
+			log.WithField("bucket", bucketPath).Debug("bucket already deleted")
+			return nil
+		}
+		return fmt.Errorf("delete bucket %s: %w", bucketPath, err)
+	}
+
+	log.WithField("bucket", bucketPath).Info("successfully deleted log bucket")
+	return nil
+}

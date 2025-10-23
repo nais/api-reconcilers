@@ -122,6 +122,38 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 			log.WithError(err).Warning("failed to delete all team sinks")
 			// Continue with other environments instead of failing completely
 		}
+
+		// Check if the log bucket exists and delete it if it's not locked
+		bucketName := GenerateLogBucketName(naisTeam.Slug, env.EnvironmentName)
+		bucketPath := fmt.Sprintf("projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
+
+		// Check if we have a valid logging service
+		if r.services == nil || r.services.LogConfigService == nil {
+			log.WithField("bucket", bucketName).Debug("no logging service available, cannot check or delete bucket")
+		} else {
+			exists, err := r.bucketExists(ctx, bucketPath)
+			if err != nil {
+				log.WithError(err).WithField("bucket", bucketName).Warning("failed to check if bucket exists")
+			} else if exists {
+				// Get bucket information to check if it's locked
+				bucket, err := r.getBucketInfo(ctx, bucketPath)
+				if err != nil {
+					log.WithError(err).WithField("bucket", bucketName).Warning("failed to get bucket information")
+				} else if !bucket.Locked {
+					// Delete the bucket if it's not locked
+					log.WithField("bucket", bucketName).Info("deleting unlocked log bucket")
+					err = r.deleteBucket(ctx, bucketPath, log)
+					if err != nil {
+						log.WithError(err).WithField("bucket", bucketName).Warning("failed to delete bucket")
+						// Continue with other operations instead of failing completely
+					}
+				} else {
+					log.WithField("bucket", bucketName).Info("bucket is locked, skipping deletion")
+				}
+			} else {
+				log.WithField("bucket", bucketName).Debug("bucket does not exist, skipping deletion")
+			}
+		}
 	}
 
 	// Remove team log view permission after all sinks are deleted
