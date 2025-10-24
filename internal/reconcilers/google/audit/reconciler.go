@@ -236,27 +236,14 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			return fmt.Errorf("create or update log bucket for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		// Collect application users from all SQL instances
-		var appUsers []string
-		for _, instance := range listSQLInstances {
-			appUser, err := r.getApplicationUser(ctx, teamProjectID, instance, log)
-			if err != nil {
-				log.WithField("sql_instance", instance).WithError(err).Warning("failed to get application user for SQL instance, continuing")
-				continue
-			}
-			if appUser != "" {
-				appUsers = append(appUsers, appUser)
-			}
-		}
-
 		// Verify that the _AllLogs view exists on the bucket (should be automatic, but check as precaution)
 		err = r.verifyLogViewExists(ctx, bucketName, "_AllLogs", log)
 		if err != nil {
 			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		// Create one log sink per team environment covering all SQL instances
-		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, appUsers, log)
+		// Create one log sink per team environment covering all SQL instances (auditing all database users)
+		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
 		if err != nil {
 			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}

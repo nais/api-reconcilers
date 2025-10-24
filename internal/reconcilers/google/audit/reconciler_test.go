@@ -1246,147 +1246,45 @@ func TestBuildLogFilter(t *testing.T) {
 	tests := []struct {
 		name          string
 		teamProjectID string
-		appUsers      []string
 		expectedParts []string
 	}{
 		{
-			name:          "no application users",
+			name:          "basic filter format",
 			teamProjectID: "test-project",
-			appUsers:      []string{},
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
-				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
 				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
 				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
 			},
 		},
 		{
-			name:          "single application user",
-			teamProjectID: "test-project",
-			appUsers:      []string{"app_user"},
+			name:          "different project ID",
+			teamProjectID: "another-project",
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
-				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
-				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
+				`logName="projects/another-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
 				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
-				`NOT protoPayload.request.user="app_user"`,
-			},
-		},
-		{
-			name:          "multiple application users",
-			teamProjectID: "test-project",
-			appUsers:      []string{"app_user1", "app_user2"},
-			expectedParts: []string{
-				`resource.type="cloudsql_database"`,
-				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
-				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
-				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
-				`NOT protoPayload.request.user="app_user1"`,
-				`NOT protoPayload.request.user="app_user2"`,
-			},
-		},
-		{
-			name:          "empty user in list",
-			teamProjectID: "test-project",
-			appUsers:      []string{"app_user", ""},
-			expectedParts: []string{
-				`resource.type="cloudsql_database"`,
-				`protoPayload.resource.service_name="sqladmin.googleapis.com"`,
-				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
-				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
-				`NOT protoPayload.request.user="app_user"`,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test the filter format by constructing it manually to verify the expected structure
-			baseFilter := fmt.Sprintf(`resource.type="cloudsql_database"
-AND protoPayload.resource.service_name="sqladmin.googleapis.com"
+			// Test the filter format directly (simulating the BuildLogFilter logic)
+			result := fmt.Sprintf(`resource.type="cloudsql_database"
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
 AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, tt.teamProjectID)
 
-			for _, appUser := range tt.appUsers {
-				if appUser != "" {
-					baseFilter += fmt.Sprintf(`
-AND NOT protoPayload.request.user="%s"`, appUser)
-				}
-			}
-
+			// Verify all expected parts are present
 			for _, expectedPart := range tt.expectedParts {
-				if !strings.Contains(baseFilter, expectedPart) {
-					t.Errorf("Expected filter to contain %q, but it didn't. Filter: %s", expectedPart, baseFilter)
-				}
-			}
-		})
-	}
-}
-
-func TestGetApplicationUsersFromLabel(t *testing.T) {
-	tests := []struct {
-		name          string
-		userLabels    map[string]string
-		expectedUsers []string
-	}{
-		{
-			name:          "app label with user",
-			userLabels:    map[string]string{"app": "contests-test"},
-			expectedUsers: []string{"contests-test"},
-		},
-		{
-			name:          "app label with different user",
-			userLabels:    map[string]string{"app": "my-application"},
-			expectedUsers: []string{"my-application"},
-		},
-		{
-			name:          "no app label",
-			userLabels:    map[string]string{"environment": "prod"},
-			expectedUsers: []string{},
-		},
-		{
-			name:          "empty app label",
-			userLabels:    map[string]string{"app": ""},
-			expectedUsers: []string{},
-		},
-		{
-			name:          "nil labels",
-			userLabels:    nil,
-			expectedUsers: []string{},
-		},
-		{
-			name:          "multiple labels with app",
-			userLabels:    map[string]string{"app": "test-user", "env": "prod", "team": "myteam"},
-			expectedUsers: []string{"test-user"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock SQL instance with the specified labels
-			mockInstance := &sqladmin.DatabaseInstance{
-				Settings: &sqladmin.Settings{
-					UserLabels: tt.userLabels,
-				},
-			}
-
-			// Test the label extraction logic
-			var appUsers []string
-			if mockInstance.Settings != nil && mockInstance.Settings.UserLabels != nil {
-				if appUser, exists := mockInstance.Settings.UserLabels["app"]; exists && appUser != "" {
-					appUsers = append(appUsers, appUser)
+				if !strings.Contains(result, expectedPart) {
+					t.Errorf("Expected filter to contain %q, but it didn't. Filter: %s", expectedPart, result)
 				}
 			}
 
-			if len(appUsers) != len(tt.expectedUsers) {
-				t.Errorf("Expected %d users, got %d", len(tt.expectedUsers), len(appUsers))
-				return
-			}
-
-			for i, expectedUser := range tt.expectedUsers {
-				if i >= len(appUsers) || appUsers[i] != expectedUser {
-					t.Errorf("Expected user %q at index %d, got %q", expectedUser, i, appUsers[i])
-				}
+			// Verify no user exclusions are present (since we audit all users now)
+			if strings.Contains(result, "NOT protoPayload.request.user=") {
+				t.Errorf("Filter should not contain user exclusions, but got: %s", result)
 			}
 		})
 	}
