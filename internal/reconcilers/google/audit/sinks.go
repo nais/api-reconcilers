@@ -88,7 +88,8 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 		if needsUpdate {
 			// Update the sink
 			updateReq := &loggingpb.UpdateSinkRequest{
-				SinkName: sinkPath,
+				SinkName:             sinkPath,
+				UniqueWriterIdentity: true,
 				Sink: &loggingpb.LogSink{
 					Name:        existingSink.Name,
 					Destination: destination,
