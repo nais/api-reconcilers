@@ -123,6 +123,10 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
+		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings("pg-"+naisTeam.Slug), "nais:postgres-user", fmt.Sprintf("team-%s-pguser", naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		}
+
 		if !strings.HasSuffix(env.EnvironmentName, "-fss") {
 			if err := r.ensureCNRMConfig(ctx, env, c.DynamicClient.Resource(cnrmbeta1.GroupVersion.WithResource("configconnectorcontexts")).Namespace(naisTeam.Slug), log); err != nil {
 				return fmt.Errorf("ensure CNRM config in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
