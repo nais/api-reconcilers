@@ -103,8 +103,10 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
 		}
 
-		if err := r.ensurePgNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
-			return fmt.Errorf("ensure pg namespace for team %s in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+		if !strings.HasSuffix(env.EnvironmentName, "-fss") {
+			if err := r.ensurePgNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
+				return fmt.Errorf("ensure pg namespace for team %s in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
+			}
 		}
 
 		if err := r.ensureServiceAccount(ctx, naisTeam, c.Clientset.CoreV1().ServiceAccounts(naisTeam.Slug), log); err != nil {
