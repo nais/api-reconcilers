@@ -82,6 +82,11 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	for it.Next() {
 		env := it.Value()
 
+		if strings.HasSuffix(env.EnvironmentName, "-fss") {
+			log.Infof("Skipping namespace reconciliation for FSS environment %q", env.EnvironmentName)
+			continue
+		}
+
 		c, exists := r.k8sClients[env.EnvironmentName]
 		if !exists {
 			log.Errorf("No Kubernetes client for environment %q", env.EnvironmentName)
@@ -90,16 +95,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 		log = log.WithField("environment", env.EnvironmentName)
 
-		var gcpProjectIdOverride *string
-		if env.EnvironmentName == "ci-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["ci-gcp"]
-		} else if env.EnvironmentName == "dev-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["dev-gcp"]
-		} else if env.EnvironmentName == "prod-fss" {
-			gcpProjectIdOverride = gcpProjectIdCache["prod-gcp"]
-		}
-
-		if err := r.ensureNamespace(ctx, naisTeam, env, gcpProjectIdOverride, c.Clientset.CoreV1().Namespaces(), log); err != nil {
+		if err := r.ensureNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
 			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
 		}
 
@@ -127,12 +123,8 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if !strings.HasSuffix(env.EnvironmentName, "-fss") {
-			if err := r.ensureCNRMConfig(ctx, env, c.DynamicClient.Resource(cnrmbeta1.GroupVersion.WithResource("configconnectorcontexts")).Namespace(naisTeam.Slug), log); err != nil {
-				return fmt.Errorf("ensure CNRM config in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
-			}
-		} else {
-			log.Debug("Skipping CNRM config for FSS")
+		if err := r.ensureCNRMConfig(ctx, env, c.DynamicClient.Resource(cnrmbeta1.GroupVersion.WithResource("configconnectorcontexts")).Namespace(naisTeam.Slug), log); err != nil {
+			return fmt.Errorf("ensure CNRM config in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.ensureResourceQuota(ctx, naisTeam, c.Clientset.CoreV1().ResourceQuotas(naisTeam.Slug), log); err != nil {
@@ -143,13 +135,12 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 	return it.Err()
 }
 
-func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, gcpProjectIdOverride *string, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
+func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
 	var ns *corev1.Namespace
 
 	log = log.WithField("slug", env.Slug).
 		WithField("environment", env.EnvironmentName).
-		WithField("gcpProjectId", env.GcpProjectId).
-		WithField("gcpProjectIdOverride", gcpProjectIdOverride)
+		WithField("gcpProjectId", env.GcpProjectId)
 
 	ns, err := c.Get(ctx, naisTeam.Slug, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -170,11 +161,6 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "workload")
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
-
-	if gcpProjectIdOverride != nil {
-		metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(gcpProjectIdOverride, ""))
-		metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(gcpProjectIdOverride, ""))
-	}
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
 	if err != nil {
