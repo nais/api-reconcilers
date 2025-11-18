@@ -1,6 +1,6 @@
 module github.com/nais/api-reconcilers
 
-go 1.25.1
+go 1.25.4
 
 tool (
 	github.com/securego/gosec/v2/cmd/gosec

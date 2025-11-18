@@ -3,5 +3,5 @@ pin = true
 task_output = "prefix"
 
 [tools]
-go = "1.25.1"
+go = "1.25.4"
 helm = "3.17.1"
