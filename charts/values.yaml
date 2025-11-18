@@ -42,7 +42,6 @@ google:
 
 kubernetes:
   clusters: "dev,prod"
-  static: ""
 
 gcp:
   billingAccount: # mapped in fasit
