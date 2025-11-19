@@ -116,10 +116,6 @@ spec:
             - name: FEATURE_ENABLE_GRAFANA_ALERTS
               value: {{ .Values.featureFlags.enableGrafanaAlerts | quote }}
             {{- end }}
-            {{- if .Values.kubernetes.static }}
-            - name: NAV_ONPREM_CLUSTERS
-              value: {{ .Values.kubernetes.static | quote }}
-            {{- end }}
           ports:
             - name: http
               containerPort: 3005

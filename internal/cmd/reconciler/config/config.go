@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/nais/api-reconcilers/internal/gcp"
-	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/sethvargo/go-envconfig"
 )
 
@@ -141,9 +140,6 @@ type Config struct {
 	// Reconcilers to enable the first time it is registered (one time only) in the NAIS API.
 	// If you later would like to enable/disable a reconciler, you can do so through the Console frontend.
 	ReconcilersToEnable []string `env:"RECONCILERS_TO_ENABLE"`
-
-	// OnpremClusters is a list of onprem clusters to connect to. This is only used by Nav.
-	OnpremClusters []kubernetes.OnpremCluster `env:"NAV_ONPREM_CLUSTERS"`
 }
 
 // NewConfig creates a new configuration instance from environment variables

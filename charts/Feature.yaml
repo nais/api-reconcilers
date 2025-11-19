@@ -26,8 +26,6 @@ values:
     config:
       type: bool
 
-
-
   googleManagementProjectID:
     displayName: Google management project ID
     computed:
@@ -112,13 +110,6 @@ values:
     displayName: Billing account
     computed:
       template: "{{ .Env.billing_account | quote }}"
-
-  kubernetes.static:
-    displayName: Static Kubernetes clusters
-    description: Comma-separated list of clusters with static credentials on the format 'name|apiserverHost|token'
-    config:
-      type: string
-      secret: true
 
   kubernetes.clusters:
     displayName: GKE clusters
