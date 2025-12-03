@@ -35,7 +35,7 @@ func (r *auditLogReconciler) createOrUpdateLogBucketIfNeeded(ctx context.Context
 		return "", fmt.Errorf("get retention days: %w", err)
 	}
 
-	locked, err := r.getBucketLocked(ctx, client)
+	locked, err := r.getBucketLocked(ctx, client, envName)
 	if err != nil {
 		return "", fmt.Errorf("get bucket locked: %w", err)
 	}
@@ -204,7 +204,20 @@ func (r *auditLogReconciler) getRetentionDays(ctx context.Context, client *apicl
 }
 
 // getBucketLocked retrieves the bucket locked configuration.
-func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apiclient.APIClient) (bool, error) {
+func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apiclient.APIClient, env string) (bool, error) {
+	// This is a safety measure to prevent accidental locking of non-production buckets
+	// Once a bucket is locked, it cannot be unlocked or deleted
+	// Not the best of solutions, but it will do for now and avoid having too many locked buckets
+	envLower := strings.ToLower(env)
+	switch envLower {
+	case "dev", "dev-gcp", "development",
+		"test", "testing",
+		"sandbox",
+		"staging", "stage",
+		"non-prod", "nonprod":
+		return false, nil
+	}
+
 	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
 		ReconcilerName: r.Name(),
 	})
