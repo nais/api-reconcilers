@@ -81,12 +81,6 @@ values:
       template: |
         {{ .Env.teams_github_org | quote }}
 
-  naisDeploy.provisionKey:
-    displayName: NAIS deploy provision key
-    computed:
-      template: |
-        {{ .Env.hookd_provision_key | quote }}
-
   serviceAccount.email:
     displayName: Email address of the GCP service account
     description: The email address of the service account that is used when using the Google APIs

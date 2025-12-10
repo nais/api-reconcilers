@@ -84,14 +84,6 @@ type Config struct {
 		Insecure bool `env:"INSECURE_GRPC"`
 	}
 
-	NaisDeploy struct {
-		// Endpoint URL to the NAIS deploy key provisioning endpoint
-		Endpoint string `env:"NAIS_DEPLOY_ENDPOINT,default=http://localhost:8080/api/v1/provision"`
-
-		// ProvisionKey The API key used when provisioning deploy keys on behalf of NAIS teams.
-		ProvisionKey string `env:"NAIS_DEPLOY_PROVISION_KEY"`
-	}
-
 	PubSub struct {
 		// SubscriptionID The ID of the Pub/Sub subscription used to listen for events from the NAIS API.
 		SubscriptionID string `env:"PUBSUB_SUBSCRIPTION_ID,default=nais-api-reconcilers-api-events"`
