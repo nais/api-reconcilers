@@ -85,9 +85,6 @@ spec:
             - name: AZURE_GROUP_NAME_PREFIX
               value: {{ .Values.azure.groupNamePrefix }}
             {{- end }}
-            # NAIS deploy
-            - name: NAIS_DEPLOY_ENDPOINT
-              value: {{ .Values.naisDeploy.endpoint }}
             # GCP
             - name: GCP_BILLING_ACCOUNT
               value: {{ .Values.gcp.billingAccount | quote }}

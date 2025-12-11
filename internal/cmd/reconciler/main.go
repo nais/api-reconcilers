@@ -28,8 +28,7 @@ import (
 	google_gcp_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/gcp"
 	google_workspace_admin_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/google/workspace_admin"
 	grafana_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/grafana"
-	nais_deploy_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/deploy"
-	nais_namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/nais/namespace"
+	namespace_reconciler "github.com/nais/api-reconcilers/internal/reconcilers/namespace"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/sethvargo/go-envconfig"
 	"github.com/sirupsen/logrus"
@@ -127,12 +126,6 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	}
 	log.WithField("duration", time.Since(start).String()).Debug("Created Google Workspace Admin reconciler")
 
-	deployReconciler, err := nais_deploy_reconciler.New(cfg.NaisDeploy.Endpoint, cfg.NaisDeploy.ProvisionKey)
-	if err != nil {
-		return fmt.Errorf("error when creating NAIS deploy reconciler: %w", err)
-	}
-	log.WithField("duration", time.Since(start).String()).Debug("Created NAIS deploy reconciler")
-
 	googleGcpReconciler, err := google_gcp_reconciler.New(ctx, cfg.GCP.Clusters, cfg.GCP.ServiceAccountEmail, cfg.TenantDomain, cfg.TenantName, cfg.GCP.BillingAccount, cfg.ClusterAlias, cfg.FeatureFlags)
 	if err != nil {
 		return fmt.Errorf("error when creating Google GCP reconciler: %w", err)
@@ -150,7 +143,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		return fmt.Errorf("error when creating Kubernetes clients: %w", err)
 	}
 
-	namespaceReconciler, err := nais_namespace_reconciler.New(ctx, k8sClients)
+	namespaceReconciler, err := namespace_reconciler.New(ctx, k8sClients)
 	if err != nil {
 		return fmt.Errorf("error when creating NAIS namespace reconciler: %w", err)
 	}
@@ -208,7 +201,6 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	reconcilerManager.AddReconciler(googleWorkspaceAdminReconciler)
 	reconcilerManager.AddReconciler(googleGcpReconciler)
 	reconcilerManager.AddReconciler(namespaceReconciler)
-	reconcilerManager.AddReconciler(deployReconciler)
 	reconcilerManager.AddReconciler(garReconciler)
 	reconcilerManager.AddReconciler(cdnReconciler)
 	if auditLogReconciler != nil {

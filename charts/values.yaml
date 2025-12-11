@@ -17,7 +17,7 @@ auditLog:
 tenantDomain: # mapped in fasit
 naisAuditLogProjectID: # mapped in fasit
 clusterAlias: [ ]
-reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,nais:deploy,google:gcp:gar,google:gcp:cdn,grafana"
+reconcilersToEnable: "google:gcp:project,google:workspace-admin,nais:namespace,google:gcp:gar,google:gcp:cdn,grafana"
 fasit:
   tenant:
     name: # mapped in fasit
@@ -28,10 +28,6 @@ azure:
 gitHub:
   authEndpoint:
   organization:
-
-naisDeploy:
-  endpoint: http://hookd/internal/api/v1/provision
-  provisionKey: # mapped in fasit
 
 serviceAccount:
   email: null
