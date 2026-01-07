@@ -548,6 +548,750 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("owner role is added for nav tenant", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		navTenantName := "nav"
+
+		clusters := gcp.Clusters{
+			env: gcp.Cluster{
+				TeamsFolderID: teamFolderID,
+				ProjectID:     clusterProjectID,
+			},
+		}
+		expectedTeamProjectID := "slug-prod-ea99"
+		expectedCNRMRoleId := "CustomCNRMRole"
+		expectedTeamRoleId := "CustomTeamRole"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedCNRMRoleId
+		expectedTeamRoleName := "projects/slug-prod-ea99/roles/" + expectedTeamRoleId
+		flags := config.FeatureFlags{
+			AttachSharedVpc: true,
+		}
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{Gcp: true, EnvironmentName: env},
+				},
+			}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: env,
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: "prodalias",
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+
+		ownerRoleFound := false
+		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{
+			// create project request
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project := cloudresourcemanager.Project{
+					Name:      payload.DisplayName,
+					ProjectId: payload.ProjectId,
+				}
+				projectJson, _ := project.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: projectJson,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set project labels
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project, _ := payload.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: project,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// update billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				sa := iam.ServiceAccount{
+					Name:  "projects/some-project-123/serviceAccounts/cnrm@some-project-123.iam.gserviceaccount.com",
+					Email: "cnrm@some-project-123.iam.gserviceaccount.com",
+				}
+				resp, _ := sa.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedCnrmRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedTeamRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set workload identity for service account
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set updated IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.SetIamPolicyRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				// Verify owner role is present for nav tenant
+				for _, binding := range payload.Policy.Bindings {
+					if binding.Role == "roles/owner" {
+						ownerRoleFound = true
+						if len(binding.Members) != 1 || binding.Members[0] != "group:"+googleGroupEmail {
+							t.Errorf("expected owner role member %q, got %v", "group:"+googleGroupEmail, binding.Members)
+						}
+					}
+				}
+
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list existing Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				services := serviceusage.ListServicesResponse{}
+				resp, _ := services.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// enable Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				op := serviceusage.Operation{Done: true}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list firewall rules for project
+			func(w http.ResponseWriter, r *http.Request) {
+				list := compute.FirewallList{
+					Items: []*compute.Firewall{
+						{
+							Name:     "default-allow-ssh",
+							Priority: 65534,
+						},
+					},
+				}
+				resp, _ := list.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// delete default firewall rule
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get team projects attached to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				getXpnResources := compute.ProjectsGetXpnResources{
+					Resources: []*compute.XpnResourceId{},
+				}
+				resp, _ := getXpnResources.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// attach team project to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+		})
+		defer srv.Close()
+
+		cloudBillingService, _ := cloudbilling.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		cloudResourceManagerService, _ := cloudresourcemanager.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		iamService, _ := iam.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		serviceUsageService, _ := serviceusage.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		computeService, _ := compute.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+
+		gcpServices := &google_gcp_reconciler.GcpServices{
+			CloudBillingProjectsService:           cloudBillingService.Projects,
+			CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
+			CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
+			IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
+			ServiceUsageService:                   serviceUsageService.Services,
+			ServiceUsageOperationsService:         serviceUsageService.Operations,
+			FirewallService:                       computeService.Firewalls,
+			ComputeGlobalOperationsService:        computeService.GlobalOperations,
+			ComputeProjectsService:                computeService.Projects,
+			ProjectsRolesService:                  iamService.Projects.Roles,
+		}
+
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, navTenantName, billingAccount, aliasList, flags, google_gcp_reconciler.WithGcpServices(gcpServices))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !ownerRoleFound {
+			t.Error("expected owner role to be present in IAM policy for nav tenant, but it was not found")
+		}
+	})
+
+	t.Run("owner role is not added for non-nav tenant", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		nonNavTenantName := "other-tenant"
+
+		clusters := gcp.Clusters{
+			env: gcp.Cluster{
+				TeamsFolderID: teamFolderID,
+				ProjectID:     clusterProjectID,
+			},
+		}
+		expectedTeamProjectID := "slug-prod-ea99"
+		expectedCNRMRoleId := "CustomCNRMRole"
+		expectedTeamRoleId := "CustomTeamRole"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedCNRMRoleId
+		expectedTeamRoleName := "projects/slug-prod-ea99/roles/" + expectedTeamRoleId
+		flags := config.FeatureFlags{
+			AttachSharedVpc: true,
+		}
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{Gcp: true, EnvironmentName: env},
+				},
+			}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: env,
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: "prodalias",
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+
+		ownerRoleFound := false
+		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{
+			// create project request
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project := cloudresourcemanager.Project{
+					Name:      payload.DisplayName,
+					ProjectId: payload.ProjectId,
+				}
+				projectJson, _ := project.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: projectJson,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set project labels
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project, _ := payload.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: project,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// update billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				sa := iam.ServiceAccount{
+					Name:  "projects/some-project-123/serviceAccounts/cnrm@some-project-123.iam.gserviceaccount.com",
+					Email: "cnrm@some-project-123.iam.gserviceaccount.com",
+				}
+				resp, _ := sa.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedCnrmRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedTeamRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set workload identity for service account
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set updated IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.SetIamPolicyRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				// Verify owner role is NOT present for non-nav tenant
+				for _, binding := range payload.Policy.Bindings {
+					if binding.Role == "roles/owner" {
+						ownerRoleFound = true
+					}
+				}
+
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list existing Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				services := serviceusage.ListServicesResponse{}
+				resp, _ := services.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// enable Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				op := serviceusage.Operation{Done: true}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list firewall rules for project
+			func(w http.ResponseWriter, r *http.Request) {
+				list := compute.FirewallList{
+					Items: []*compute.Firewall{
+						{
+							Name:     "default-allow-ssh",
+							Priority: 65534,
+						},
+					},
+				}
+				resp, _ := list.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// delete default firewall rule
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get team projects attached to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				getXpnResources := compute.ProjectsGetXpnResources{
+					Resources: []*compute.XpnResourceId{},
+				}
+				resp, _ := getXpnResources.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// attach team project to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+		})
+		defer srv.Close()
+
+		cloudBillingService, _ := cloudbilling.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		cloudResourceManagerService, _ := cloudresourcemanager.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		iamService, _ := iam.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		serviceUsageService, _ := serviceusage.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		computeService, _ := compute.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+
+		gcpServices := &google_gcp_reconciler.GcpServices{
+			CloudBillingProjectsService:           cloudBillingService.Projects,
+			CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
+			CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
+			IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
+			ServiceUsageService:                   serviceUsageService.Services,
+			ServiceUsageOperationsService:         serviceUsageService.Operations,
+			FirewallService:                       computeService.Firewalls,
+			ComputeGlobalOperationsService:        computeService.GlobalOperations,
+			ComputeProjectsService:                computeService.Projects,
+			ProjectsRolesService:                  iamService.Projects.Roles,
+		}
+
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, nonNavTenantName, billingAccount, aliasList, flags, google_gcp_reconciler.WithGcpServices(gcpServices))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if ownerRoleFound {
+			t.Error("expected owner role to NOT be present in IAM policy for non-nav tenant, but it was found")
+		}
+	})
+
+	t.Run("owner role is added for nav tenant case-insensitive", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		navTenantName := "NAV" // Test case-insensitivity
+
+		clusters := gcp.Clusters{
+			env: gcp.Cluster{
+				TeamsFolderID: teamFolderID,
+				ProjectID:     clusterProjectID,
+			},
+		}
+		expectedTeamProjectID := "slug-prod-ea99"
+		expectedCNRMRoleId := "CustomCNRMRole"
+		expectedTeamRoleId := "CustomTeamRole"
+		expectedCnrmRoleName := "projects/slug-prod-ea99/roles/" + expectedCNRMRoleId
+		expectedTeamRoleName := "projects/slug-prod-ea99/roles/" + expectedTeamRoleId
+		flags := config.FeatureFlags{
+			AttachSharedVpc: true,
+		}
+
+		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{
+					{Gcp: true, EnvironmentName: env},
+				},
+			}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: env,
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+		mockServer.Teams.EXPECT().
+			SetTeamEnvironmentExternalReferences(mock.Anything, &protoapi.SetTeamEnvironmentExternalReferencesRequest{
+				Slug:            teamSlug,
+				EnvironmentName: "prodalias",
+				GcpProjectId:    &expectedTeamProjectID,
+			}).
+			Return(&protoapi.SetTeamEnvironmentExternalReferencesResponse{}, nil).
+			Once()
+
+		ownerRoleFound := false
+		srv := test.HttpServerWithHandlers(t, []http.HandlerFunc{
+			// create project request
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project := cloudresourcemanager.Project{
+					Name:      payload.DisplayName,
+					ProjectId: payload.ProjectId,
+				}
+				projectJson, _ := project.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: projectJson,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set project labels
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := cloudresourcemanager.Project{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				project, _ := payload.MarshalJSON()
+				op := cloudresourcemanager.Operation{
+					Done:     true,
+					Response: project,
+				}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// update billing info
+			func(w http.ResponseWriter, r *http.Request) {
+				info := cloudbilling.ProjectBillingInfo{}
+				resp, _ := info.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create CNRM service account
+			func(w http.ResponseWriter, r *http.Request) {
+				sa := iam.ServiceAccount{
+					Name:  "projects/some-project-123/serviceAccounts/cnrm@some-project-123.iam.gserviceaccount.com",
+					Email: "cnrm@some-project-123.iam.gserviceaccount.com",
+				}
+				resp, _ := sa.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom CNRM role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedCnrmRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(404)
+			},
+			// create custom team role
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.CreateRoleRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				payload.Role.Name = expectedTeamRoleName
+				resp, _ := payload.Role.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set workload identity for service account
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get existing IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// set updated IAM policy for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				payload := iam.SetIamPolicyRequest{}
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+
+				// Verify owner role is present for nav tenant (case-insensitive)
+				for _, binding := range payload.Policy.Bindings {
+					if binding.Role == "roles/owner" {
+						ownerRoleFound = true
+						if len(binding.Members) != 1 || binding.Members[0] != "group:"+googleGroupEmail {
+							t.Errorf("expected owner role member %q, got %v", "group:"+googleGroupEmail, binding.Members)
+						}
+					}
+				}
+
+				policy := iam.Policy{}
+				resp, _ := policy.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list existing Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				services := serviceusage.ListServicesResponse{}
+				resp, _ := services.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// enable Google APIs for the team project
+			func(w http.ResponseWriter, r *http.Request) {
+				op := serviceusage.Operation{Done: true}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// list firewall rules for project
+			func(w http.ResponseWriter, r *http.Request) {
+				list := compute.FirewallList{
+					Items: []*compute.Firewall{
+						{
+							Name:     "default-allow-ssh",
+							Priority: 65534,
+						},
+					},
+				}
+				resp, _ := list.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// delete default firewall rule
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// get team projects attached to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				getXpnResources := compute.ProjectsGetXpnResources{
+					Resources: []*compute.XpnResourceId{},
+				}
+				resp, _ := getXpnResources.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// attach team project to shared vpc
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "RUNNING"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+			// wait for operation to complete
+			func(w http.ResponseWriter, r *http.Request) {
+				op := compute.Operation{Name: "operation-name-enable-xpn-resource", Status: "DONE"}
+				resp, _ := op.MarshalJSON()
+				_, _ = w.Write(resp)
+			},
+		})
+		defer srv.Close()
+
+		cloudBillingService, _ := cloudbilling.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		cloudResourceManagerService, _ := cloudresourcemanager.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		iamService, _ := iam.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		serviceUsageService, _ := serviceusage.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+		computeService, _ := compute.NewService(ctx, option.WithoutAuthentication(), option.WithEndpoint(srv.URL))
+
+		gcpServices := &google_gcp_reconciler.GcpServices{
+			CloudBillingProjectsService:           cloudBillingService.Projects,
+			CloudResourceManagerProjectsService:   cloudResourceManagerService.Projects,
+			CloudResourceManagerOperationsService: cloudResourceManagerService.Operations,
+			IamProjectsServiceAccountsService:     iamService.Projects.ServiceAccounts,
+			ServiceUsageService:                   serviceUsageService.Services,
+			ServiceUsageOperationsService:         serviceUsageService.Operations,
+			FirewallService:                       computeService.Firewalls,
+			ComputeGlobalOperationsService:        computeService.GlobalOperations,
+			ComputeProjectsService:                computeService.Projects,
+			ProjectsRolesService:                  iamService.Projects.Roles,
+		}
+
+		reconcilers, err := google_gcp_reconciler.New(ctx, clusters, clusterProjectID, tenantDomain, navTenantName, billingAccount, aliasList, flags, google_gcp_reconciler.WithGcpServices(gcpServices))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconcilers.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !ownerRoleFound {
+			t.Error("expected owner role to be present in IAM policy for NAV tenant (case-insensitive), but it was not found")
+		}
+	})
 }
 
 func TestDelete(t *testing.T) {
