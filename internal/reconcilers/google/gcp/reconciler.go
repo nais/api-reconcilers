@@ -196,7 +196,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("create team role for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRole.Name, teamRole.Name); err != nil {
+		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRole.Name, teamRole.Name, r.tenantName); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -419,7 +419,7 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 
 // setProjectPermissions Make sure that the project has the necessary permissions, and don't remove permissions we don't
 // control
-func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount, cnrmRoleName, teamRoleName string) error {
+func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamProject *cloudresourcemanager.Project, naisTeam *protoapi.Team, clusterProjectID string, cnrmServiceAccount *iam.ServiceAccount, cnrmRoleName, teamRoleName, tenant string) error {
 	member := "serviceAccount:" + clusterProjectID + ".svc.id.goog[cnrm-system/cnrm-controller-manager-" + naisTeam.Slug + "]"
 	_, err := r.gcpServices.IamProjectsServiceAccountsService.SetIamPolicy(cnrmServiceAccount.Name, &iam.SetIamPolicyRequest{
 		Policy: &iam.Policy{
@@ -440,11 +440,18 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
-		"roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
-		cnrmRoleName:  {"serviceAccount:" + cnrmServiceAccount.Email},
-		teamRoleName:  {"group:" + *naisTeam.GoogleGroupEmail},
-	})
+	bindings := map[string][]string{
+		cnrmRoleName: {"serviceAccount:" + cnrmServiceAccount.Email},
+		teamRoleName: {"group:" + *naisTeam.GoogleGroupEmail},
+		// "roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
+	}
+
+	//TODO: remove once Nav has migrated non-Nais resources away from Nais projects
+	if strings.ToLower(tenant) == "nav" {
+		bindings["roles/owner"] = []string{"group:" + *naisTeam.GoogleGroupEmail}
+	}
+
+	newBindings, updated := CalculateRoleBindings(policy.Bindings, bindings)
 
 	if !updated {
 		return nil
