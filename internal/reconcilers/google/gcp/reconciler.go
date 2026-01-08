@@ -447,7 +447,7 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 	}
 
 	// TODO: remove once Nav has migrated non-Nais resources away from Nais projects
-	if strings.ToLower(tenant) == "nav" {
+	if strings.ToLower(r.tenant) == "nav" {
 		bindings["roles/owner"] = []string{"group:" + *naisTeam.GoogleGroupEmail}
 	}
 
