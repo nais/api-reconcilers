@@ -196,7 +196,7 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			return fmt.Errorf("create team role for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRole.Name, teamRole.Name, r.tenantName); err != nil {
+		if err := r.setProjectPermissions(ctx, teamProject, naisTeam, cluster.ProjectID, cnrmServiceAccount, cnrmRole.Name, teamRole.Name); err != nil {
 			return fmt.Errorf("set group permissions to project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -443,11 +443,10 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 	bindings := map[string][]string{
 		cnrmRoleName: {"serviceAccount:" + cnrmServiceAccount.Email},
 		teamRoleName: {"group:" + *naisTeam.GoogleGroupEmail},
-		// "roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
 	}
 
 	// TODO: remove once Nav has migrated non-Nais resources away from Nais projects
-	if strings.ToLower(r.tenant) == "nav" {
+	if strings.ToLower(r.tenantName) == "nav" {
 		bindings["roles/owner"] = []string{"group:" + *naisTeam.GoogleGroupEmail}
 	}
 
