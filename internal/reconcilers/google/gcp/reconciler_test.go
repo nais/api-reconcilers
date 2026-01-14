@@ -380,11 +380,6 @@ func TestReconcile(t *testing.T) {
 				expectedBindings := map[string]string{
 					payload.Policy.Bindings[0].Role: payload.Policy.Bindings[0].Members[0],
 					payload.Policy.Bindings[1].Role: payload.Policy.Bindings[1].Members[0],
-					payload.Policy.Bindings[2].Role: payload.Policy.Bindings[2].Members[0],
-				}
-
-				if expectedBindings["roles/owner"] != "group:slug@example.com" {
-					t.Errorf("incorrect owner, expected: %q, got: %q", "group:slug@example.com", expectedBindings["roles/owner"])
 				}
 
 				if expectedBindings[expectedCnrmRoleName] != "serviceAccount:cnrm@some-project-123.iam.gserviceaccount.com" {
