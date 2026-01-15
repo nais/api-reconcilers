@@ -178,6 +178,7 @@ func (r *naisNamespaceReconciler) ensurePgNamespace(ctx context.Context, naisTea
 		log.Debug("Namespace already exists")
 	}
 
+	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "postgres")
