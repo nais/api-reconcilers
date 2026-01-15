@@ -178,10 +178,11 @@ func (r *naisNamespaceReconciler) ensurePgNamespace(ctx context.Context, naisTea
 		log.Debug("Namespace already exists")
 	}
 
-	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "cnrm.cloud.google.com/project-id", ptr.Deref(env.GcpProjectId, ""))
+	delete(ns.ObjectMeta.Annotations, "cnrm.cloud.google.com/project-id")
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "postgres")
+	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
 	if err != nil {
