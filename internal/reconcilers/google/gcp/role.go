@@ -86,7 +86,7 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId stri
 			"iam.serviceAccounts.getIamPolicy",
 			"iam.serviceAccounts.list",
 			"iam.serviceAccounts.setIamPolicy",
-			"iam.serviceAccounts.update ",
+			"iam.serviceAccounts.update",
 			"cloudkms.cryptoKeys.create",
 			"cloudkms.cryptoKeys.get",
 			"cloudkms.cryptoKeys.update",
