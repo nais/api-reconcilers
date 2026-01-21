@@ -80,6 +80,13 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId stri
 		Description: "Custom role for namespaced CNRM users to allow creation of GCP resources",
 		Stage:       "GA",
 		IncludedPermissions: []string{
+			"iam.serviceAccounts.create",
+			"iam.serviceAccounts.delete",
+			"iam.serviceAccounts.get",
+			"iam.serviceAccounts.getIamPolicy",
+			"iam.serviceAccounts.list",
+			"iam.serviceAccounts.setIamPolicy",
+			"iam.serviceAccounts.update",
 			"cloudkms.cryptoKeys.create",
 			"cloudkms.cryptoKeys.get",
 			"cloudkms.cryptoKeys.update",
