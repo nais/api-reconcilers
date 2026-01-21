@@ -33,7 +33,7 @@ const (
 	tenantName       = "example"
 	tenantDomain     = "example.com"
 	billingAccount   = "billingAccounts/123"
-	numberOfAPIs     = 14
+	numberOfAPIs     = 15
 
 	teamSlug         = "slug"
 	googleGroupEmail = "slug@example.com"
