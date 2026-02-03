@@ -164,7 +164,16 @@ func AddObjectToDynamicClient(scheme *runtime.Scheme, fc *dynfake.FakeDynamicCli
 			gvr.Resource = depluralized(gvr.Resource)
 			// Get namespace from object
 			ns := obj.(namespaced).GetNamespace()
-			if err := fc.Tracker().Create(gvr, obj, ns); err != nil {
+
+			// Convert typed object to unstructured for dynamic client
+			unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+			if err != nil {
+				panic(fmt.Errorf("converting object to unstructured: %w", err))
+			}
+			u := &unstructured.Unstructured{Object: unstructuredObj}
+			u.SetGroupVersionKind(gvk)
+
+			if err := fc.Tracker().Create(gvr, u, ns); err != nil {
 				panic(err)
 			}
 		}
