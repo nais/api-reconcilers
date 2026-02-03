@@ -10,10 +10,12 @@ import (
 	"testing"
 
 	logging "cloud.google.com/go/logging/apiv2"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	audit "github.com/nais/api-reconcilers/internal/reconcilers/google/audit"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
+	"github.com/nais/pgrator/pkg/api/datav1"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
@@ -21,6 +23,8 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/utils/ptr"
 )
 
@@ -100,7 +104,7 @@ func (m *mocks) start(t *testing.T, ctx context.Context) *audit.Services {
 }
 
 func TestReconcile(t *testing.T) {
-	t.Run("reconcile with no SQL instances", func(t *testing.T) {
+	t.Run("reconcile with no SQL instances and no Postgres clusters", func(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -137,7 +141,14 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
+		unrelatedPostgres := unstructured.Unstructured{}
+		unrelatedPostgres.SetUnstructuredContent(map[string]interface{}{
+			"apiVersion": "data.nais.io/v1",
+			"kind":       "Postgres",
+		})
+		unrelatedPostgres.GroupVersionKind()
+		k8sClients := kubernetes.FakeClients(&unrelatedPostgres)
+		reconciler, err := audit.New(ctx, k8sClients, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -176,7 +187,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -200,7 +211,7 @@ func TestReconcile(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -228,7 +239,7 @@ func TestDelete(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{}, // Empty response
 			}, nil)
 
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -259,7 +270,7 @@ func TestDelete(t *testing.T) {
 
 		// Create a reconciler with empty services - this will cause deleteAllTeamSinks to fail gracefully
 		// but the Delete method should not fail overall, demonstrating the resilient approach
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{
 			LogConfigService: nil, // This will cause ListSinks to fail, simulating the real-world scenario
 		}))
 		if err != nil {
@@ -276,7 +287,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestConfiguration(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -464,7 +475,7 @@ func TestGenerateLogBucketName(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
+	reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -530,7 +541,7 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 		}
 
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -555,7 +566,7 @@ func TestConfigValidation(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("missing project ID", func(t *testing.T) {
-		_, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		_, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			Location: location,
 		})
 		if err == nil {
@@ -567,7 +578,7 @@ func TestConfigValidation(t *testing.T) {
 	})
 
 	t.Run("missing location", func(t *testing.T) {
-		_, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		_, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 		})
 		if err == nil {
@@ -579,7 +590,7 @@ func TestConfigValidation(t *testing.T) {
 	})
 
 	t.Run("valid config", func(t *testing.T) {
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
@@ -596,7 +607,7 @@ func TestGetRetentionDays(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("uses configured retention days", func(t *testing.T) {
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
@@ -609,7 +620,7 @@ func TestGetRetentionDays(t *testing.T) {
 	})
 
 	t.Run("uses default retention days when not configured", func(t *testing.T) {
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
@@ -663,7 +674,7 @@ func TestConfigEdgeCases(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("empty service account email", func(t *testing.T) {
-		reconciler, err := audit.New(ctx, "", audit.Config{
+		reconciler, err := audit.New(ctx, nil, "", audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
@@ -676,7 +687,7 @@ func TestConfigEdgeCases(t *testing.T) {
 
 	t.Run("very long location name", func(t *testing.T) {
 		longLocation := strings.Repeat("a", 50)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  longLocation,
 		}, audit.WithServices(&audit.Services{}))
@@ -688,7 +699,7 @@ func TestConfigEdgeCases(t *testing.T) {
 	})
 
 	t.Run("negative retention days", func(t *testing.T) {
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(&audit.Services{}))
@@ -729,7 +740,7 @@ func TestBucketCreationWithDifferentRetentionDays(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			services := &audit.Services{}
 
-			reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+			reconciler, err := audit.New(ctx, nil, serviceAccountEmail, audit.Config{
 				ProjectID: managementProjectID,
 				Location:  location,
 			}, audit.WithServices(services))
@@ -795,8 +806,28 @@ func TestPgAuditFiltering(t *testing.T) {
 			}),
 		}
 
+		k8sClients := kubernetes.FakeClients(
+			&datav1.Postgres{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Postgres",
+					APIVersion: "data.nais.io/v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "postgres-no-audit",
+					Namespace: teamSlug,
+				},
+				Spec: datav1.PostgresSpec{
+					Cluster: datav1.PostgresCluster{
+						Audit: &datav1.PostgresAudit{
+							Enabled: false,
+						},
+					},
+				},
+			},
+		)
+
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, k8sClients, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(services))
@@ -861,8 +892,10 @@ func TestPgAuditFiltering(t *testing.T) {
 			}),
 		}
 
+		k8sClients := kubernetes.FakeClients()
+
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, k8sClients, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(services))
@@ -943,8 +976,10 @@ func TestPgAuditFiltering(t *testing.T) {
 			}),
 		}
 
+		k8sClients := kubernetes.FakeClients()
+
 		services := mocks.start(t, ctx)
-		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{
+		reconciler, err := audit.New(ctx, k8sClients, serviceAccountEmail, audit.Config{
 			ProjectID: managementProjectID,
 			Location:  location,
 		}, audit.WithServices(services))

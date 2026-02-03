@@ -3,8 +3,11 @@ package kubernetes
 import (
 	"fmt"
 
+	"github.com/nais/api-reconcilers/internal/kubernetes/fake"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	k8s_fake "k8s.io/client-go/kubernetes/fake"
 )
 
 type K8sClients map[string]clients
@@ -39,4 +42,13 @@ func Clients(tenantName string, clusters []string, clusterAliases map[string]str
 	}
 
 	return clientSets, nil
+}
+
+func FakeClients(objects ...runtime.Object) K8sClients {
+	clientSets := make(K8sClients)
+	clientSets["prod"] = clients{
+		Clientset:     k8s_fake.NewClientset(),
+		DynamicClient: fake.NewDynamicClient(objects...),
+	}
+	return clientSets
 }

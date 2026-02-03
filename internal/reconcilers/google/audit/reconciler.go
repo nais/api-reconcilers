@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	logging "cloud.google.com/go/logging/apiv2"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
@@ -34,8 +35,9 @@ type Services struct {
 }
 
 type auditLogReconciler struct {
-	services *Services
-	config   Config
+	services   *Services
+	config     Config
+	k8sClients kubernetes.K8sClients
 }
 
 // Config holds the configuration for the audit log reconciler.
@@ -53,7 +55,7 @@ func (r *auditLogReconciler) Name() string {
 }
 
 // New creates a new audit log reconciler.
-func New(ctx context.Context, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, k8sClient kubernetes.K8sClients, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	if config.ProjectID == "" {
 		return nil, fmt.Errorf("audit log project ID is required: specify the GCP project ID where audit log buckets will be created")
 	}
@@ -62,7 +64,8 @@ func New(ctx context.Context, serviceAccountEmail string, config Config, testOve
 	}
 
 	reconciler := &auditLogReconciler{
-		config: config,
+		config:     config,
+		k8sClients: k8sClient,
 	}
 
 	for _, override := range testOverrides {
@@ -216,13 +219,18 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Get SQL instances for this team/environment
-		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, teamProjectID)
+		sqlInstancesHasAudit, err := r.teamHasSQLInstanceWithAuditEnabled(ctx, naisTeam.Slug, teamProjectID)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
 
+		postgresHasAudit, err := r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
+		if err != nil {
+			return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+		}
+
 		// Skip if no SQL instances with pgaudit enabled
-		if len(listSQLInstances) == 0 {
+		if !sqlInstancesHasAudit && !postgresHasAudit {
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
