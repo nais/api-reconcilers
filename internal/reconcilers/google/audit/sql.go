@@ -7,29 +7,28 @@ import (
 	"google.golang.org/api/sqladmin/v1"
 )
 
-// getSQLInstancesForTeam retrieves SQL instances for a team that have pgaudit enabled.
-func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
+// teamHasSQLInstanceWithAuditEnabled retrieves SQL instances for a team that have pgaudit enabled.
+func (r *auditLogReconciler) teamHasSQLInstanceWithAuditEnabled(ctx context.Context, teamSlug, teamProjectID string) (bool, error) {
 	// Check if we have a valid SQL admin service
 	if r.services == nil || r.services.SQLAdminService == nil {
-		return nil, fmt.Errorf("no SQL admin service available for team %s", teamSlug)
+		return false, fmt.Errorf("no SQL admin service available for team %s", teamSlug)
 	}
 
 	// Validate project ID
 	if teamProjectID == "" {
-		return nil, fmt.Errorf("team project ID is empty for team %s", teamSlug)
+		return false, fmt.Errorf("team project ID is empty for team %s", teamSlug)
 	}
 
-	sqlInstances := make([]string, 0)
 	response, err := r.services.SQLAdminService.Instances.List(teamProjectID).Context(ctx).Do()
 	if err != nil {
-		return nil, fmt.Errorf("list sql instances for team %s project %s: %w", teamSlug, teamProjectID, err)
+		return false, fmt.Errorf("list sql instances for team %s project %s: %w", teamSlug, teamProjectID, err)
 	}
 	for _, i := range response.Items {
 		if HasPgAuditEnabled(i) {
-			sqlInstances = append(sqlInstances, i.Name)
+			return true, nil
 		}
 	}
-	return sqlInstances, nil
+	return false, nil
 }
 
 // HasPgAuditEnabled checks if a SQL instance has the pgaudit flag enabled.
@@ -53,5 +52,12 @@ func (r *auditLogReconciler) BuildLogFilter(teamProjectID string) string {
 AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
 AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
 
+	return baseFilter
+}
+
+// BuildPostgresLogFilter constructs a Postgres-specific audit log filter for Postgres clusters in the project.
+func (r *auditLogReconciler) BuildPostgresLogFilter(teamProjectID string) string {
+	baseFilter := fmt.Sprintf(`logName="projects/%s/logs/postgres-audit-log"
+AND labels.user=~".*@.*"`, teamProjectID)
 	return baseFilter
 }

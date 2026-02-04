@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	logging "cloud.google.com/go/logging/apiv2"
+	"github.com/nais/api-reconcilers/internal/kubernetes"
 	"github.com/nais/api-reconcilers/internal/reconcilers"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/iterator"
@@ -34,8 +35,9 @@ type Services struct {
 }
 
 type auditLogReconciler struct {
-	services *Services
-	config   Config
+	services   *Services
+	config     Config
+	k8sClients kubernetes.K8sClients
 }
 
 // Config holds the configuration for the audit log reconciler.
@@ -53,7 +55,7 @@ func (r *auditLogReconciler) Name() string {
 }
 
 // New creates a new audit log reconciler.
-func New(ctx context.Context, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
+func New(ctx context.Context, k8sClient kubernetes.K8sClients, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	if config.ProjectID == "" {
 		return nil, fmt.Errorf("audit log project ID is required: specify the GCP project ID where audit log buckets will be created")
 	}
@@ -62,7 +64,8 @@ func New(ctx context.Context, serviceAccountEmail string, config Config, testOve
 	}
 
 	reconciler := &auditLogReconciler{
-		config: config,
+		config:     config,
+		k8sClients: k8sClient,
 	}
 
 	for _, override := range testOverrides {
@@ -216,13 +219,23 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Get SQL instances for this team/environment
-		listSQLInstances, err := r.getSQLInstancesForTeam(ctx, naisTeam.Slug, teamProjectID)
+		sqlInstancesHasAudit, err := r.teamHasSQLInstanceWithAuditEnabled(ctx, naisTeam.Slug, teamProjectID)
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
 
+		postgresHasAudit := false
+		if r.k8sClients == nil {
+			log.Debug("k8sClients is nil, cannot check for Postgres clusters with audit enabled")
+		} else {
+			postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
+			if err != nil {
+				return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+			}
+		}
+
 		// Skip if no SQL instances with pgaudit enabled
-		if len(listSQLInstances) == 0 {
+		if !sqlInstancesHasAudit && !postgresHasAudit {
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
@@ -241,21 +254,40 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		if err != nil {
 			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
+		if sqlInstancesHasAudit {
+			// Create one log sink per team environment covering all SQL instances (auditing all database users)
+			_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
+			if err != nil {
+				return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			}
 
-		// Create one log sink per team environment covering all SQL instances (auditing all database users)
-		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
-		if err != nil {
-			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			if writerIdentity != "" {
+				log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
+				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				}
+			} else {
+				log.Debug("no writer identity found for sink, skipping permission grant")
+			}
 		}
 
-		if writerIdentity != "" {
-			log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
-			err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+		if postgresHasAudit {
+			// Create one log sink per team environment covering all Postgres clusters (auditing all database users)
+			_, writerIdentity, err := r.createOrUpdatePostgresLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
 			if err != nil {
-				return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				return fmt.Errorf("create or update postgres log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
-		} else {
-			log.Debug("no writer identity found for sink, skipping permission grant")
+
+			if writerIdentity != "" {
+				log.WithField("identity", writerIdentity).Debug("granting bucket write permission for postgres sink writer identity")
+				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					return fmt.Errorf("grant bucket write permission for postgres sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				}
+			} else {
+				log.Debug("no writer identity found for postgres sink, skipping permission grant")
+			}
 		}
 
 		// Grant log view permission to team members
