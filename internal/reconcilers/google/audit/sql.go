@@ -56,9 +56,8 @@ AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.Pg
 }
 
 // BuildPostgresLogFilter constructs a Postgres-specific audit log filter for Postgres clusters in the project.
-// TODO: real filter please
 func (r *auditLogReconciler) BuildPostgresLogFilter(teamProjectID string) string {
-	baseFilter := "banankake"
-
+	baseFilter := fmt.Sprintf(`logName="projects/%s/logs/postgres-audit-log"
+AND labels.user=~".*@.*"`, teamProjectID)
 	return baseFilter
 }
