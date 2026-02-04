@@ -65,6 +65,26 @@ func GenerateLogSinkName(teamSlug, envName string) string {
 	return fmt.Sprintf("sql-audit-sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
 }
 
+func GeneratePostgresLogSinkName(teamSlug, envName string) string {
+	naturalName := fmt.Sprintf("postgres-audit-sink-%s-%s", teamSlug, envName)
+
+	if len(naturalName) <= 100 {
+		return naturalName
+	}
+
+	fullIdentifier := fmt.Sprintf("%s/%s", teamSlug, envName)
+	hash := sha256.Sum256([]byte(fullIdentifier))
+	hashSuffix := fmt.Sprintf("%x", hash)[:8]
+
+	availableForComponents := 100 - 20 - 8 - 2 // 20 for "postgres-audit-sink-", 8 for hash, 2 for separators
+	maxComponentLen := availableForComponents / 2
+
+	shortTeam := truncateToLength(teamSlug, maxComponentLen)
+	shortEnv := truncateToLength(envName, maxComponentLen)
+
+	return fmt.Sprintf("postgres-audit-sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
+}
+
 // ValidateLogBucketName validates a log bucket name against Google Cloud naming rules.
 func ValidateLogBucketName(name string) error {
 	if len(name) == 0 {

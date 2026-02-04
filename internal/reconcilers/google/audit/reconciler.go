@@ -20,8 +20,9 @@ import (
 const (
 	reconcilerName = "google:gcp:audit"
 
-	configRetentionDays = "audit:retention_days"
-	configLocked        = "audit:locked"
+	configRetentionDays        = "audit:retention_days"
+	configLocked               = "audit:locked"
+	configPostgresAuditEnabled = "audit:postgres_audit_enabled"
 )
 
 // Services contains all the GCP services needed for audit log reconciliation.
@@ -101,6 +102,12 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 				Key:         configLocked,
 				DisplayName: "Lock Buckets",
 				Description: "Set to true for immutable log buckets for auditing purposes. Not possible to revert once set to true. False if not specified.",
+				Secret:      false,
+			},
+			{
+				Key:         configPostgresAuditEnabled,
+				DisplayName: "Postgres Audit Enabled",
+				Description: "Set to true to enable audit log reconciliation for Postgres clusters with pgaudit enabled. False if not specified.",
 				Secret:      false,
 			},
 		},
@@ -197,6 +204,11 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
+	postgresAuditEnabled, err := r.getPostgresAuditEnabled(ctx, client)
+	if err != nil {
+		return fmt.Errorf("get postgres audit enabled config: %w", err)
+	}
+
 	for it.Next() {
 		env := it.Value()
 
@@ -224,9 +236,12 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
 
-		postgresHasAudit, err := r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
-		if err != nil {
-			return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+		postgresHasAudit := false
+		if postgresAuditEnabled {
+			postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
+			if err != nil {
+				return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+			}
 		}
 
 		// Skip if no SQL instances with pgaudit enabled
@@ -249,21 +264,40 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		if err != nil {
 			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
+		if sqlInstancesHasAudit {
+			// Create one log sink per team environment covering all SQL instances (auditing all database users)
+			_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
+			if err != nil {
+				return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			}
 
-		// Create one log sink per team environment covering all SQL instances (auditing all database users)
-		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
-		if err != nil {
-			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+			if writerIdentity != "" {
+				log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
+				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				}
+			} else {
+				log.Debug("no writer identity found for sink, skipping permission grant")
+			}
 		}
 
-		if writerIdentity != "" {
-			log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
-			err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+		if postgresHasAudit {
+			// Create one log sink per team environment covering all Postgres clusters (auditing all database users)
+			_, writerIdentity, err := r.createOrUpdatePostgresLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, log)
 			if err != nil {
-				return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				return fmt.Errorf("create or update postgres log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 			}
-		} else {
-			log.Debug("no writer identity found for sink, skipping permission grant")
+
+			if writerIdentity != "" {
+				log.WithField("identity", writerIdentity).Debug("granting bucket write permission for postgres sink writer identity")
+				err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
+				if err != nil {
+					return fmt.Errorf("grant bucket write permission for postgres sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+				}
+			} else {
+				log.Debug("no writer identity found for postgres sink, skipping permission grant")
+			}
 		}
 
 		// Grant log view permission to team members

@@ -15,6 +15,109 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
+func (r *auditLogReconciler) createOrUpdatePostgresLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, log logrus.FieldLogger) (string, string, error) {
+	parent := fmt.Sprintf("projects/%s", teamProjectID)
+	sinkName := GeneratePostgresLogSinkName(teamSlug, envName)
+	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
+
+	filter := r.BuildPostgresLogFilter(teamProjectID)
+
+	if err := ValidateLogSinkName(sinkName); err != nil {
+		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)
+	}
+
+	sinkPath := fmt.Sprintf("%s/sinks/%s", parent, sinkName)
+	exists, err := r.sinkExists(ctx, sinkPath)
+	if err != nil {
+		return "", "", fmt.Errorf("check if postgres log sink exists: %w", err)
+	}
+
+	var writerIdentity string
+	if !exists {
+		// Create new sink
+		sinkReq := &loggingpb.CreateSinkRequest{
+			Parent:               parent,
+			UniqueWriterIdentity: true,
+			Sink: &loggingpb.LogSink{
+				Name:        sinkName,
+				Destination: destination,
+				Filter:      filter,
+				Description: fmt.Sprintf("Postgres audit log sink for team %s environment %s (created by api-reconcilers)", teamSlug, envName),
+			},
+		}
+
+		sink, err := r.services.LogConfigService.CreateSink(ctx, sinkReq)
+		if err != nil {
+			return "", "", fmt.Errorf("create postgres log sink: %w", err)
+		}
+		log.WithFields(logrus.Fields{
+			"team":        teamSlug,
+			"environment": envName,
+		}).Info("created postgres audit log sink")
+		writerIdentity = sink.WriterIdentity
+	} else {
+		// Check if existing sink needs updates
+		existingSink, err := r.services.LogConfigService.GetSink(ctx, &loggingpb.GetSinkRequest{
+			SinkName: sinkPath,
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("get existing postgres log sink: %w", err)
+		}
+
+		needsUpdate := false
+		updateMask := []string{}
+
+		// Check if filter needs updating
+		if existingSink.Filter != filter {
+			needsUpdate = true
+			updateMask = append(updateMask, "filter")
+			log.WithField("sink", sinkName).Debug("sink filter will be updated")
+		}
+
+		// Check if destination needs updating (less common but possible)
+		if existingSink.Destination != destination {
+			needsUpdate = true
+			updateMask = append(updateMask, "destination")
+			log.WithFields(logrus.Fields{
+				"old_destination": existingSink.Destination,
+				"new_destination": destination,
+			}).Debug("sink destination will be updated")
+		}
+
+		if needsUpdate {
+			// Update the sink
+			updateReq := &loggingpb.UpdateSinkRequest{
+				SinkName:             sinkPath,
+				UniqueWriterIdentity: true,
+				Sink: &loggingpb.LogSink{
+					Name:        existingSink.Name,
+					Destination: destination,
+					Filter:      filter,
+					Description: existingSink.Description,
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{
+					Paths: updateMask,
+				},
+			}
+
+			updatedSink, err := r.services.LogConfigService.UpdateSink(ctx, updateReq)
+			if err != nil {
+				return "", "", fmt.Errorf("update postgres audit log sink: %w", err)
+			}
+			log.WithFields(logrus.Fields{
+				"team":        teamSlug,
+				"environment": envName,
+			}).Info("updated postgres audit log sink")
+			writerIdentity = updatedSink.WriterIdentity
+		} else {
+			log.WithField("sink", sinkName).Debug("postgres audit log sink already exists with correct configuration, skipping")
+			writerIdentity = existingSink.WriterIdentity
+		}
+	}
+
+	return sinkName, writerIdentity, nil
+}
+
 // createOrUpdateLogSinkIfNeeded creates or updates a log sink for the team environment.
 func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
