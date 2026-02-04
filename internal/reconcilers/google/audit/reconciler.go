@@ -238,9 +238,13 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 
 		postgresHasAudit := false
 		if postgresAuditEnabled {
-			postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
-			if err != nil {
-				return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+			if r.k8sClients == nil {
+				log.Warning("k8sClients is nil, cannot check for Postgres clusters with audit enabled")
+			} else {
+				postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
+				if err != nil {
+					return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
+				}
 			}
 		}
 

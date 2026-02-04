@@ -55,7 +55,7 @@ AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.Pg
 	return baseFilter
 }
 
-// BuildLogFilter constructs a Cloud SQL audit log filter for all SQL instances in the project.
+// BuildPostgresLogFilter constructs a Postgres-specific audit log filter for Postgres clusters in the project.
 // TODO: real filter please
 func (r *auditLogReconciler) BuildPostgresLogFilter(teamProjectID string) string {
 	baseFilter := "banankake"
