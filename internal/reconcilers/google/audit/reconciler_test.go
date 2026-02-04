@@ -109,6 +109,11 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -164,6 +169,11 @@ func TestReconcile(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -205,6 +215,11 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
 
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
@@ -494,6 +509,11 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
 
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -761,6 +781,12 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("only includes instances with pgaudit enabled", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -848,6 +874,12 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("only accepts 'on' value for pgaudit, logs warnings for others", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -914,6 +946,12 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("logs warnings for unsupported pgaudit values", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+
+		mockServer.Reconcilers.EXPECT().
+			Config(mock.Anything, &protoapi.ConfigReconcilerRequest{ReconcilerName: "google:gcp:audit"}).
+			Return(&protoapi.ConfigReconcilerResponse{Nodes: []*protoapi.ReconcilerConfig{}}, nil).
+			Once()
+
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
