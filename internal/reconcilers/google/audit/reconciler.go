@@ -20,9 +20,8 @@ import (
 const (
 	reconcilerName = "google:gcp:audit"
 
-	configRetentionDays        = "audit:retention_days"
-	configLocked               = "audit:locked"
-	configPostgresAuditEnabled = "audit:postgres_audit_enabled"
+	configRetentionDays = "audit:retention_days"
+	configLocked        = "audit:locked"
 )
 
 // Services contains all the GCP services needed for audit log reconciliation.
@@ -102,12 +101,6 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 				Key:         configLocked,
 				DisplayName: "Lock Buckets",
 				Description: "Set to true for immutable log buckets for auditing purposes. Not possible to revert once set to true. False if not specified.",
-				Secret:      false,
-			},
-			{
-				Key:         configPostgresAuditEnabled,
-				DisplayName: "Postgres Audit Enabled",
-				Description: "Set to true to enable audit log reconciliation for Postgres clusters with pgaudit enabled. False if not specified.",
 				Secret:      false,
 			},
 		},
@@ -204,11 +197,6 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		return client.Teams().Environments(ctx, &protoapi.ListTeamEnvironmentsRequest{Limit: limit, Offset: offset, Slug: naisTeam.Slug})
 	})
 
-	postgresAuditEnabled, err := r.getPostgresAuditEnabled(ctx, client)
-	if err != nil {
-		return fmt.Errorf("get postgres audit enabled config: %w", err)
-	}
-
 	for it.Next() {
 		env := it.Value()
 
@@ -237,14 +225,12 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		postgresHasAudit := false
-		if postgresAuditEnabled {
-			if r.k8sClients == nil {
-				log.Warning("k8sClients is nil, cannot check for Postgres clusters with audit enabled")
-			} else {
-				postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
-				if err != nil {
-					return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
-				}
+		if r.k8sClients == nil {
+			log.Debug("k8sClients is nil, cannot check for Postgres clusters with audit enabled")
+		} else {
+			postgresHasAudit, err = r.teamHasPostgresWithAuditEnabled(ctx, naisTeam, env, log)
+			if err != nil {
+				return fmt.Errorf("get postgres clusters for team %s: %w", naisTeam.Slug, err)
 			}
 		}
 

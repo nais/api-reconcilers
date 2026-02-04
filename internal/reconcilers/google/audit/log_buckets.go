@@ -248,37 +248,6 @@ func (r *auditLogReconciler) getBucketLocked(ctx context.Context, client *apicli
 	return false, nil
 }
 
-func (r *auditLogReconciler) getPostgresAuditEnabled(ctx context.Context, client *apiclient.APIClient) (bool, error) {
-	config, err := client.Reconcilers().Config(ctx, &protoapi.ConfigReconcilerRequest{
-		ReconcilerName: r.Name(),
-	})
-	if err != nil {
-		return false, fmt.Errorf("get reconciler config: %w", err)
-	}
-
-	for _, c := range config.Nodes {
-		if c.Key == configPostgresAuditEnabled {
-			if c.Value == "" {
-				// Default to false if not configured
-				return false, nil
-			}
-
-			// Parse the value as a boolean
-			switch strings.ToLower(c.Value) {
-			case "true":
-				return true, nil
-			case "false":
-				return false, nil
-			default:
-				return false, fmt.Errorf("invalid postgres_audit_enabled value %q: must be true/false", c.Value)
-			}
-		}
-	}
-
-	// Default to false if config not found
-	return false, nil
-}
-
 // getBucketInfo retrieves information about a log bucket.
 func (r *auditLogReconciler) getBucketInfo(ctx context.Context, bucketPath string) (*loggingpb.LogBucket, error) {
 	if r.services == nil || r.services.LogConfigService == nil {
