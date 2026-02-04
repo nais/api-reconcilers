@@ -1442,9 +1442,9 @@ func TestGeneratePostgresLogSinkName(t *testing.T) {
 			t.Errorf("Sink name exceeds 100 character limit: %d", len(result))
 		}
 
-		// Since the natural name exceeds 100 chars, we should get a hash-based name
-		if len(naturalName) > 100 && !strings.Contains(result, "-") {
-			t.Errorf("Expected hash-based name for long inputs, but got: %s", result)
+		// Since the natural name exceeds 100 chars, result should be different (truncated with hash)
+		if len(naturalName) > 100 && result == naturalName {
+			t.Errorf("Expected truncated/hashed name for long inputs, but got unmodified natural name: %s", result)
 		}
 
 		// Validate the generated name
