@@ -715,8 +715,10 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 		attribute.String("team", teamSlug),
 	))
 
+	disableProvenance := "true"
 	params := &grafanaprovisioning.PutPolicyTreeParams{
-		Body: policyTree,
+		Body:               policyTree,
+		XDisableProvenance: &disableProvenance,
 	}
 	params.SetContext(ctx)
 
