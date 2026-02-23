@@ -173,8 +173,11 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			"tenant":           r.tenantName,
 			ManagedByLabelName: ManagedByLabelValue,
 		}
-		if err := r.ensureProjectHasLabels(ctx, teamProject, labels); err != nil {
-			return fmt.Errorf("set project labels: %w", err)
+		tags := map[string]string{
+			"environment": mapEnvToGoogleProjectTag(env.EnvironmentName),
+		}
+		if err := r.ensureProjectHasLabelsAndTags(ctx, teamProject, labels, tags); err != nil {
+			return fmt.Errorf("set project labels and tags: %w", err)
 		}
 
 		if err := r.setTeamProjectBillingInfo(ctx, teamProject); err != nil {
@@ -530,9 +533,23 @@ func (r *googleGcpReconciler) getOperationResponse(ctx context.Context, operatio
 	return operation.Response, nil
 }
 
-func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, project *cloudresourcemanager.Project, labels map[string]string) error {
+// https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects#designate_project_environments_with_tags
+func mapEnvToGoogleProjectTag(env string) string {
+	if strings.HasPrefix(env, "prod") {
+		return "prod"
+	} else if strings.HasPrefix(env, "dev") || strings.HasPrefix(env, "non") || strings.HasPrefix(env, "test") {
+		return "dev"
+	} else if strings.HasPrefix(env, "sandbox") || strings.HasPrefix(env, "ci") {
+		return "test"
+	}
+
+	return "unknown"
+}
+
+func (r *googleGcpReconciler) ensureProjectHasLabelsAndTags(ctx context.Context, project *cloudresourcemanager.Project, labels, tags map[string]string) error {
 	operation, err := r.gcpServices.CloudResourceManagerProjectsService.Patch(project.Name, &cloudresourcemanager.Project{
 		Labels: labels,
+		Tags:   tags,
 	}).Context(ctx).Do()
 	if err != nil {
 		return err
