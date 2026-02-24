@@ -49,6 +49,7 @@ type GcpServices struct {
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
 	ProjectsRolesService                  *iam.ProjectsRolesService
+	TagBindingsService                    *cloudresourcemanager.TagBindingsService
 }
 
 type googleGcpReconciler struct {
@@ -173,8 +174,16 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 			"tenant":           r.tenantName,
 			ManagedByLabelName: ManagedByLabelValue,
 		}
-		if err := r.ensureProjectHasLabels(ctx, teamProject, labels); err != nil {
-			return fmt.Errorf("set project labels: %w", err)
+		tags := map[string]string{
+			"environment": mapEnvToGoogleProjectTag(env.EnvironmentName),
+		}
+		if err := r.ensureProjectHasLabelsAndTags(ctx, teamProject, labels, tags); err != nil {
+			return fmt.Errorf("set project labels and tags: %w", err)
+		}
+
+		envTag := teamProject.ProjectId + "/environment/" + mapEnvToGoogleProjectTag(env.EnvironmentName)
+		if err := r.ensureProjectHasTagBindings(ctx, teamProject, envTag); err != nil {
+			return fmt.Errorf("set project tag bindings for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.setTeamProjectBillingInfo(ctx, teamProject); err != nil {
@@ -530,9 +539,23 @@ func (r *googleGcpReconciler) getOperationResponse(ctx context.Context, operatio
 	return operation.Response, nil
 }
 
-func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, project *cloudresourcemanager.Project, labels map[string]string) error {
+// https://docs.cloud.google.com/resource-manager/docs/creating-managing-projects#designate_project_environments_with_tags
+func mapEnvToGoogleProjectTag(env string) string {
+	if strings.HasPrefix(env, "prod") {
+		return "prod"
+	} else if strings.HasPrefix(env, "dev") || strings.HasPrefix(env, "non") {
+		return "dev"
+	} else if strings.HasPrefix(env, "test") || strings.HasPrefix(env, "sandbox") || strings.HasPrefix(env, "ci") {
+		return "test"
+	}
+
+	return "unknown"
+}
+
+func (r *googleGcpReconciler) ensureProjectHasLabelsAndTags(ctx context.Context, project *cloudresourcemanager.Project, labels, tags map[string]string) error {
 	operation, err := r.gcpServices.CloudResourceManagerProjectsService.Patch(project.Name, &cloudresourcemanager.Project{
 		Labels: labels,
+		Tags:   tags,
 	}).Context(ctx).Do()
 	if err != nil {
 		return err
@@ -540,6 +563,35 @@ func (r *googleGcpReconciler) ensureProjectHasLabels(ctx context.Context, projec
 
 	_, err = r.getOperationResponse(ctx, operation)
 	return err
+}
+
+func (r *googleGcpReconciler) ensureProjectHasTagBindings(ctx context.Context, project *cloudresourcemanager.Project, tagValue string) error {
+	parent := "//cloudresourcemanager.googleapis.com/projects/" + project.ProjectId
+
+	resp, err := r.gcpServices.TagBindingsService.List().Parent(parent).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("list tag bindings for project %q: %w", project.ProjectId, err)
+	}
+
+	for _, binding := range resp.TagBindings {
+		if binding.TagValueNamespacedName == tagValue {
+			return nil
+		}
+	}
+
+	operation, err := r.gcpServices.TagBindingsService.Create(&cloudresourcemanager.TagBinding{
+		Parent:                 parent,
+		TagValueNamespacedName: tagValue,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("create tag binding %q for project %q: %w", tagValue, project.ProjectId, err)
+	}
+
+	if _, err := r.getOperationResponse(ctx, operation); err != nil {
+		return fmt.Errorf("wait for tag binding %q for project %q: %w", tagValue, project.ProjectId, err)
+	}
+
+	return nil
 }
 
 // createGcpServices Creates the GCP services used by the reconciler
@@ -589,6 +641,7 @@ func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpSer
 		ServiceUsageOperationsService:         serviceUsageService.Operations,
 		ServiceUsageService:                   serviceUsageService.Services,
 		ProjectsRolesService:                  iamService.Projects.Roles,
+		TagBindingsService:                    cloudResourceManagerService.TagBindings,
 	}, nil
 }
 
