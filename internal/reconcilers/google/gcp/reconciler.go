@@ -49,6 +49,7 @@ type GcpServices struct {
 	ServiceUsageOperationsService         *serviceusage.OperationsService
 	ServiceUsageService                   *serviceusage.ServicesService
 	ProjectsRolesService                  *iam.ProjectsRolesService
+	TagBindingsService                    *cloudresourcemanager.TagBindingsService
 }
 
 type googleGcpReconciler struct {
@@ -178,6 +179,11 @@ func (r *googleGcpReconciler) Reconcile(ctx context.Context, client *apiclient.A
 		}
 		if err := r.ensureProjectHasLabelsAndTags(ctx, teamProject, labels, tags); err != nil {
 			return fmt.Errorf("set project labels and tags: %w", err)
+		}
+
+		envTag := teamProject.ProjectId + "/environment/" + mapEnvToGoogleProjectTag(env.EnvironmentName)
+		if err := r.ensureProjectHasTagBindings(ctx, teamProject, envTag); err != nil {
+			return fmt.Errorf("set project tag bindings for project %q for team %q in environment %q: %w", teamProject.ProjectId, naisTeam.Slug, env.EnvironmentName, err)
 		}
 
 		if err := r.setTeamProjectBillingInfo(ctx, teamProject); err != nil {
@@ -559,6 +565,35 @@ func (r *googleGcpReconciler) ensureProjectHasLabelsAndTags(ctx context.Context,
 	return err
 }
 
+func (r *googleGcpReconciler) ensureProjectHasTagBindings(ctx context.Context, project *cloudresourcemanager.Project, tagValue string) error {
+	parent := "//cloudresourcemanager.googleapis.com/projects/" + project.ProjectId
+
+	resp, err := r.gcpServices.TagBindingsService.List().Parent(parent).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("list tag bindings for project %q: %w", project.ProjectId, err)
+	}
+
+	for _, binding := range resp.TagBindings {
+		if binding.TagValueNamespacedName == tagValue {
+			return nil
+		}
+	}
+
+	operation, err := r.gcpServices.TagBindingsService.Create(&cloudresourcemanager.TagBinding{
+		Parent:                 parent,
+		TagValueNamespacedName: tagValue,
+	}).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("create tag binding %q for project %q: %w", tagValue, project.ProjectId, err)
+	}
+
+	if _, err := r.getOperationResponse(ctx, operation); err != nil {
+		return fmt.Errorf("wait for tag binding %q for project %q: %w", tagValue, project.ProjectId, err)
+	}
+
+	return nil
+}
+
 // createGcpServices Creates the GCP services used by the reconciler
 func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpServices, error) {
 	ts, err := google_token_source.GcpTokenSource(ctx, serviceAccountEmail)
@@ -606,6 +641,7 @@ func createGcpServices(ctx context.Context, serviceAccountEmail string) (*GcpSer
 		ServiceUsageOperationsService:         serviceUsageService.Operations,
 		ServiceUsageService:                   serviceUsageService.Services,
 		ProjectsRolesService:                  iamService.Projects.Roles,
+		TagBindingsService:                    cloudResourceManagerService.TagBindings,
 	}, nil
 }
 
