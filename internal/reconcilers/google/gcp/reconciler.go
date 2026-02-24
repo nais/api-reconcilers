@@ -537,9 +537,9 @@ func (r *googleGcpReconciler) getOperationResponse(ctx context.Context, operatio
 func mapEnvToGoogleProjectTag(env string) string {
 	if strings.HasPrefix(env, "prod") {
 		return "prod"
-	} else if strings.HasPrefix(env, "dev") || strings.HasPrefix(env, "non") || strings.HasPrefix(env, "test") {
+	} else if strings.HasPrefix(env, "dev") || strings.HasPrefix(env, "non") {
 		return "dev"
-	} else if strings.HasPrefix(env, "sandbox") || strings.HasPrefix(env, "ci") {
+	} else if strings.HasPrefix(env, "test") || strings.HasPrefix(env, "sandbox") || strings.HasPrefix(env, "ci") {
 		return "test"
 	}
 
