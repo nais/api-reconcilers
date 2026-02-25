@@ -36,7 +36,7 @@ func Test_Queue(t *testing.T) {
 	t.Run("race test", func(t *testing.T) {
 		q, _ := reconcilers.NewQueue()
 		go func(q reconcilers.Queue) {
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				_ = q.Add(input)
 				time.Sleep(time.Millisecond)
 			}

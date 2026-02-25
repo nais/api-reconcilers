@@ -4,19 +4,18 @@ import (
 	"testing"
 
 	"github.com/nais/api-reconcilers/internal/strings"
-	"k8s.io/utils/ptr"
 )
 
 func TestStringWithFallback(t *testing.T) {
 	t.Run("Fallback not used", func(t *testing.T) {
-		actual := strings.WithFallback(ptr.To("some value"), "some fallback value")
+		actual := strings.WithFallback(new("some value"), "some fallback value")
 		if expected := "some value"; actual != expected {
 			t.Errorf("Expected %q, got %q", expected, actual)
 		}
 	})
 
 	t.Run("Fallback used", func(t *testing.T) {
-		actual := strings.WithFallback(ptr.To(""), "some fallback value")
+		actual := strings.WithFallback(new(""), "some fallback value")
 		if expected := "some fallback value"; actual != expected {
 			t.Errorf("Expected %q, got %q", expected, actual)
 		}

@@ -14,7 +14,6 @@ import (
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
-	"k8s.io/utils/ptr"
 )
 
 func TestAzureReconciler_Reconcile(t *testing.T) {
@@ -228,7 +227,7 @@ func TestAzureReconciler_Delete(t *testing.T) {
 	azGroupID := uuid.New()
 	team := &protoapi.Team{
 		Slug:           "slug",
-		EntraIdGroupId: ptr.To(azGroupID.String()),
+		EntraIdGroupId: new(azGroupID.String()),
 	}
 	ctx := context.Background()
 	log, _ := test.NewNullLogger()

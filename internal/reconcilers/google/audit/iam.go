@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 
 // ExtractServiceAccountEmail extracts the email from a writer identity that may have the format "serviceAccount:email@domain".
 func ExtractServiceAccountEmail(writerIdentity string) string {
-	if strings.HasPrefix(writerIdentity, "serviceAccount:") {
-		return strings.TrimPrefix(writerIdentity, "serviceAccount:")
+	if after, ok := strings.CutPrefix(writerIdentity, "serviceAccount:"); ok {
+		return after
 	}
 	return writerIdentity
 }
@@ -25,7 +26,7 @@ func (r *auditLogReconciler) retryIAMOperation(ctx context.Context, operation fu
 	const baseDelay = 200 * time.Millisecond
 	const maxDelay = 10 * time.Second
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err := operation()
 		if err == nil {
 			return nil
@@ -50,10 +51,7 @@ func (r *auditLogReconciler) retryIAMOperation(ctx context.Context, operation fu
 				}
 
 				// Calculate delay with exponential backoff
-				delay := time.Duration(1<<attempt) * baseDelay
-				if delay > maxDelay {
-					delay = maxDelay
-				}
+				delay := min(time.Duration(1<<attempt)*baseDelay, maxDelay)
 
 				var reason string
 				if googleErr.Code == 409 {
@@ -104,11 +102,8 @@ func (r *auditLogReconciler) grantBucketWritePermission(ctx context.Context, buc
 
 		for _, binding := range policy.Bindings {
 			if binding.Role == bucketWriterRole {
-				for _, member := range binding.Members {
-					if member == writerIdentity {
-						hasPermission = true
-						break
-					}
+				if slices.Contains(binding.Members, writerIdentity) {
+					hasPermission = true
 				}
 				break
 			}
@@ -200,11 +195,8 @@ func (r *auditLogReconciler) grantTeamLogViewPermission(ctx context.Context, buc
 		for _, binding := range policy.Bindings {
 			if binding.Role == logViewAccessorRole && binding.Condition != nil {
 				if binding.Condition.Title == conditionTitle {
-					for _, member := range binding.Members {
-						if member == teamGroupMember {
-							hasPermission = true
-							break
-						}
+					if slices.Contains(binding.Members, teamGroupMember) {
+						hasPermission = true
 					}
 				}
 			}

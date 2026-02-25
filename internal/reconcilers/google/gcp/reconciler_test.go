@@ -23,7 +23,6 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/serviceusage/v1"
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -48,7 +47,7 @@ var (
 	}
 	naisTeam = &protoapi.Team{
 		Slug:             teamSlug,
-		GoogleGroupEmail: ptr.To(googleGroupEmail),
+		GoogleGroupEmail: new(googleGroupEmail),
 	}
 	naisTeamWithoutGoogleGroupEmail = &protoapi.Team{
 		Slug: teamSlug,

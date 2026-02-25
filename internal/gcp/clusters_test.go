@@ -50,7 +50,7 @@ func TestDecodeJSONToClusters(t *testing.T) {
 		}
 
 		if expected := "some-id-123"; cluster.ProjectID != expected {
-			t.Fatalf("expected cluster 'env1' to have project ID %q, got %q", expected, cluster.TeamsFolderID)
+			t.Fatalf("expected cluster 'env1' to have project ID %q, got %d", expected, cluster.TeamsFolderID)
 		}
 
 		cluster, exists = clusters["env2"]
@@ -63,7 +63,7 @@ func TestDecodeJSONToClusters(t *testing.T) {
 		}
 
 		if expected := "some-id-456"; cluster.ProjectID != expected {
-			t.Fatalf("expected cluster 'env2' to have project ID %q, got %q", expected, cluster.TeamsFolderID)
+			t.Fatalf("expected cluster 'env2' to have project ID %q, got %d", expected, cluster.TeamsFolderID)
 		}
 	})
 }

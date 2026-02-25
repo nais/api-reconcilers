@@ -18,7 +18,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/api/impersonate"
-	"k8s.io/utils/ptr"
 )
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
@@ -156,7 +155,7 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *proto
 	updatedGitHubTeam := github.NewTeam{
 		Name:        slug,
 		Description: &naisTeam.Purpose,
-		Privacy:     ptr.To("closed"),
+		Privacy:     new("closed"),
 	}
 
 	_, resp, err := r.teamsService.EditTeamBySlug(ctx, r.org, slug, updatedGitHubTeam, false)
@@ -221,7 +220,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 	githubTeam, resp, err := r.teamsService.CreateTeam(ctx, r.org, github.NewTeam{
 		Name:        desiredTeamSlug,
 		Description: &naisTeam.Purpose,
-		Privacy:     ptr.To("closed"),
+		Privacy:     new("closed"),
 	})
 	err = httpError(http.StatusCreated, resp, err)
 	if err != nil {
@@ -363,7 +362,7 @@ func (r *githubTeamReconciler) mapSSOUsers(ctx context.Context, members []*proto
 func (r *githubTeamReconciler) getGitHubUsernameFromEmail(ctx context.Context, email string) (*string, error) {
 	var query LookupGitHubSamlUserByEmail
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"org":      githubv4.String(r.org),
 		"username": githubv4.String(email),
 	}
@@ -390,7 +389,7 @@ func (r *githubTeamReconciler) getGitHubUsernameFromEmail(ctx context.Context, e
 func (r *githubTeamReconciler) getEmailFromGitHubUsername(ctx context.Context, username string) (*string, error) {
 	var query LookupGitHubSamlUserByGitHubUsername
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"org":   githubv4.String(r.org),
 		"login": githubv4.String(username),
 	}

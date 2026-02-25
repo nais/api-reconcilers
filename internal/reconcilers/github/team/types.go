@@ -8,7 +8,7 @@ import (
 )
 
 type GraphClient interface {
-	Query(ctx context.Context, q interface{}, variables map[string]interface{}) error
+	Query(ctx context.Context, q any, variables map[string]any) error
 }
 
 type TeamsService interface {

@@ -65,7 +65,7 @@ func TestReconcile(t *testing.T) {
 			Return(&protoapi.GetUserResponse{User: removeMe}, nil).
 			Once()
 		mockServer.Teams.EXPECT().
-			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{Slug: teamSlug, GoogleGroupEmail: ptr.To(expectedGoogleGroupEmail)}).
+			SetTeamExternalReferences(mock.Anything, &protoapi.SetTeamExternalReferencesRequest{Slug: teamSlug, GoogleGroupEmail: new(expectedGoogleGroupEmail)}).
 			Return(&protoapi.SetTeamExternalReferencesResponse{}, nil).
 			Once()
 

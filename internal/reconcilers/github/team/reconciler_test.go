@@ -81,7 +81,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
+			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
 			Return(
 				&github.Team{Slug: ptr.To(teamSlug)},
 				&github.Response{Response: &http.Response{StatusCode: http.StatusCreated}},
@@ -109,7 +109,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 							"pull":  false,
 							"admin": true,
 						},
-						Archived: ptr.To(true),
+						Archived: new(true),
 					},
 				},
 				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}, NextPage: 1},
@@ -129,7 +129,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 							"pull":  false,
 							"admin": true,
 						},
-						Archived: ptr.To(false),
+						Archived: new(false),
 					},
 				},
 				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}},
@@ -140,7 +140,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			EditTeamBySlug(mock.Anything, org, teamSlug, github.NewTeam{
 				Name:        teamSlug,
 				Description: ptr.To(teamPurpose),
-				Privacy:     ptr.To("closed"),
+				Privacy:     new("closed"),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -173,7 +173,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
+			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusUnprocessableEntity}}, nil).
 			Once()
 
@@ -198,7 +198,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: ptr.To(gitHubSlug),
+			GithubTeamSlug: new(gitHubSlug),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -223,7 +223,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		teamsService.EXPECT().
 			GetTeamBySlug(ctx, org, gitHubSlug).
-			Return(&github.Team{Slug: ptr.To(gitHubSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
+			Return(&github.Team{Slug: new(gitHubSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
 			ListTeamMembersBySlug(mock.Anything, org, gitHubSlug, mock.Anything).
@@ -237,7 +237,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			EditTeamBySlug(mock.Anything, org, gitHubSlug, github.NewTeam{
 				Name:        gitHubSlug,
 				Description: ptr.To(teamPurpose),
-				Privacy:     ptr.To("closed"),
+				Privacy:     new("closed"),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -261,7 +261,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: ptr.To(existingSlug),
+			GithubTeamSlug: new(existingSlug),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -289,8 +289,8 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, nil).
 			Once()
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: existingSlug, Description: ptr.To(teamPurpose), Privacy: ptr.To("closed")}).
-			Return(&github.Team{Slug: ptr.To(existingSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusCreated}}, nil).
+			CreateTeam(ctx, org, github.NewTeam{Name: existingSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
+			Return(&github.Team{Slug: new(existingSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusCreated}}, nil).
 			Once()
 		teamsService.EXPECT().
 			ListTeamMembersBySlug(mock.Anything, org, existingSlug, mock.Anything).
@@ -304,7 +304,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			EditTeamBySlug(mock.Anything, org, existingSlug, github.NewTeam{
 				Name:        existingSlug,
 				Description: ptr.To(teamPurpose),
-				Privacy:     ptr.To("closed"),
+				Privacy:     new("closed"),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -417,7 +417,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			CreateTeam(mock.Anything, org, github.NewTeam{
 				Name:        teamName,
 				Description: ptr.To(teamPurpose),
-				Privacy:     ptr.To("closed"),
+				Privacy:     new("closed"),
 			}).
 			Return(
 				&github.Team{Slug: ptr.To(teamName)},
@@ -429,7 +429,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			EditTeamBySlug(mock.Anything, org, teamName, github.NewTeam{
 				Name:        teamName,
 				Description: ptr.To(teamPurpose),
-				Privacy:     ptr.To("closed"),
+				Privacy:     new("closed"),
 			}, false).
 			Return(
 				&github.Team{},
@@ -488,8 +488,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		graphClient.EXPECT().
-			Query(mock.Anything, mock.Anything, map[string]interface{}{"org": githubv4.String(org), "login": githubv4.String(removeLogin)}).
-			Run(func(_ context.Context, q interface{}, v map[string]interface{}) {
+			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "login": githubv4.String(removeLogin)}).
+			Run(func(_ context.Context, q any, v map[string]any) {
 				query := q.(*github_team_reconciler.LookupGitHubSamlUserByGitHubUsername)
 				query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []github_team_reconciler.ExternalIdentity{
 					{SamlIdentity: github_team_reconciler.ExternalIdentitySamlAttributes{Username: removeEmail}},
@@ -498,8 +498,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once().
 			Return(nil)
 		graphClient.EXPECT().
-			Query(mock.Anything, mock.Anything, map[string]interface{}{"org": githubv4.String(org), "username": githubv4.String(keepEmail)}).
-			Run(func(_ context.Context, q interface{}, v map[string]interface{}) {
+			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(keepEmail)}).
+			Run(func(_ context.Context, q any, v map[string]any) {
 				query := q.(*github_team_reconciler.LookupGitHubSamlUserByEmail)
 				query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []github_team_reconciler.ExternalIdentity{
 					{User: github_team_reconciler.GitHubUser{Login: keepLogin}},
@@ -508,8 +508,8 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once().
 			Return(nil)
 		graphClient.EXPECT().
-			Query(mock.Anything, mock.Anything, map[string]interface{}{"org": githubv4.String(org), "username": githubv4.String(createEmail)}).
-			Run(func(_ context.Context, q interface{}, v map[string]interface{}) {
+			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(createEmail)}).
+			Run(func(_ context.Context, q any, v map[string]any) {
 				query := q.(*github_team_reconciler.LookupGitHubSamlUserByEmail)
 				query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []github_team_reconciler.ExternalIdentity{
 					{User: github_team_reconciler.GitHubUser{Login: createLogin}},
@@ -532,7 +532,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: ptr.To("slug-from-state"),
+			GithubTeamSlug: new("slug-from-state"),
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
@@ -610,7 +610,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: ptr.To(gitHubSlug),
+			GithubTeamSlug: new(gitHubSlug),
 		}
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
@@ -636,7 +636,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: ptr.To(gitHubSlug),
+			GithubTeamSlug: new(gitHubSlug),
 		}
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
@@ -671,7 +671,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
-			GithubTeamSlug: ptr.To(gitHubSlug),
+			GithubTeamSlug: new(gitHubSlug),
 		}
 
 		apiClient, _ := apiclient.NewMockClient(t)

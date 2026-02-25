@@ -21,7 +21,6 @@ import (
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sqladmin/v1"
-	"k8s.io/utils/ptr"
 )
 
 const (
@@ -38,7 +37,7 @@ const (
 var (
 	naisTeam = &protoapi.Team{
 		Slug:             teamSlug,
-		GoogleGroupEmail: ptr.To(googleGroupEmail),
+		GoogleGroupEmail: new(googleGroupEmail),
 	}
 	ctx = context.Background()
 )
@@ -111,7 +110,7 @@ func TestReconcile(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).
@@ -159,7 +158,7 @@ func TestReconcile(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).
@@ -489,7 +488,7 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).
@@ -756,7 +755,7 @@ func TestPgAuditFiltering(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).
@@ -823,7 +822,7 @@ func TestPgAuditFiltering(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).
@@ -887,7 +886,7 @@ func TestPgAuditFiltering(t *testing.T) {
 				Nodes: []*protoapi.TeamEnvironment{
 					{
 						EnvironmentName: environment,
-						GcpProjectId:    ptr.To(teamProjectID),
+						GcpProjectId:    new(teamProjectID),
 					},
 				},
 			}, nil).

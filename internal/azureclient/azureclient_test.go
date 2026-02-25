@@ -12,7 +12,6 @@ import (
 	"github.com/nais/api-reconcilers/internal/azureclient"
 	"github.com/nais/api-reconcilers/internal/test"
 	"github.com/nais/api/pkg/apiclient/protoapi"
-	"k8s.io/utils/ptr"
 )
 
 func Test_GetUser(t *testing.T) {
@@ -343,7 +342,6 @@ func Test_GetOrCreateGroupWithNoExistingGroupID(t *testing.T) {
 }
 
 func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
-	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
 			return test.Response("404 Not Found", "{}")
@@ -361,7 +359,7 @@ func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
 	team := &protoapi.Team{
 		Slug:           "slug",
 		Purpose:        "description",
-		EntraIdGroupId: ptr.To(groupId.String()),
+		EntraIdGroupId: new(uuid.New().String()),
 	}
 
 	client := azureclient.New(httpClient)
@@ -381,7 +379,6 @@ func Test_GetOrCreateGroupWhenGroupInStateDoesNotExist(t *testing.T) {
 }
 
 func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
-	groupId := uuid.New()
 	httpClient := test.NewTestHttpClient(
 		func(req *http.Request) *http.Response {
 			return test.Response("200 OK", `{
@@ -399,7 +396,7 @@ func Test_GetOrCreateGroupWhenGroupInStateExists(t *testing.T) {
 	team := &protoapi.Team{
 		Slug:           "slug",
 		Purpose:        "description",
-		EntraIdGroupId: ptr.To(groupId.String()),
+		EntraIdGroupId: new(uuid.New().String()),
 	}
 
 	client := azureclient.New(httpClient)

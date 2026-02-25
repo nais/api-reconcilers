@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -776,10 +777,5 @@ REQUIRED:
 
 // contains Check if a specific value is in a slice of strings
 func contains(strings []string, contains string) bool {
-	for _, value := range strings {
-		if value == contains {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings, contains)
 }

@@ -112,7 +112,7 @@ const (
 var (
 	naisTeam = &protoapi.Team{
 		Slug:             teamSlug,
-		GoogleGroupEmail: ptr.To(googleGroupEmail),
+		GoogleGroupEmail: new(googleGroupEmail),
 	}
 	naisTeamWithoutGoogleGroupEmail = &protoapi.Team{
 		Slug: teamSlug,
@@ -354,8 +354,8 @@ func TestReconcile(t *testing.T) {
 				// get created backend bucket
 				func(w http.ResponseWriter, r *http.Request) {
 					if err := json.NewEncoder(w).Encode(&computepb.BackendBucket{
-						Name:     ptr.To("some-backend-bucket"),
-						SelfLink: ptr.To("self/link/some-backend-bucket"),
+						Name:     new("some-backend-bucket"),
+						SelfLink: new("self/link/some-backend-bucket"),
 					}); err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -447,8 +447,8 @@ func TestDelete(t *testing.T) {
 				// look for existing backend bucket
 				func(w http.ResponseWriter, r *http.Request) {
 					if err := json.NewEncoder(w).Encode(&computepb.BackendBucket{
-						Name:     ptr.To("some-backend-bucket"),
-						SelfLink: ptr.To("self/link/some-backend-bucket"),
+						Name:     new("some-backend-bucket"),
+						SelfLink: new("self/link/some-backend-bucket"),
 					}); err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}

@@ -512,21 +512,21 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 				// Enables Cloud CDN to cache all static content served from the backend
 				// bucket. This includes content with a file extension that is typically
 				// associated with static content, such as .html, .css, and .js.
-				CacheMode:  ptr.To("CACHE_ALL_STATIC"),
+				CacheMode:  new("CACHE_ALL_STATIC"),
 				ClientTtl:  ptr.To(defaultTTL),
 				DefaultTtl: ptr.To(defaultTTL),
 				MaxTtl:     ptr.To(defaultMaxTTL),
 				// If true then Cloud CDN will combine multiple concurrent cache fill
 				// requests into a small number of requests to the origin.
-				RequestCoalescing: ptr.To(true),
+				RequestCoalescing: new(true),
 			},
 			// When enabled, Cloud CDN automatically compresses content served from the
 			// backend bucket using gzip compression. This can reduce the amount of data
 			// sent over the network, resulting in faster load times for end users.
 			// Enum of "AUTOMATIC", "DISABLED".
-			CompressionMode: ptr.To("AUTOMATIC"),
-			Description:     ptr.To(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
-			EnableCdn:       ptr.To(true),
+			CompressionMode: new("AUTOMATIC"),
+			Description:     new(fmt.Sprintf("Backend bucket for %s", naisTeam.Slug)),
+			EnableCdn:       new(true),
 			Name:            &bucketName,
 		},
 		Project: r.googleManagementProjectID,

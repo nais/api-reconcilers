@@ -438,7 +438,7 @@ func TestReconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:             teamSlug,
 			GoogleGroupEmail: ptr.To(groupEmail),
-			GarRepository:    ptr.To(garRepositoryParent + "/repositories/" + teamSlug),
+			GarRepository:    new(garRepositoryParent + "/repositories/" + teamSlug),
 		}
 
 		artifactregistryClient, iamService := mocks.start(t, ctx)

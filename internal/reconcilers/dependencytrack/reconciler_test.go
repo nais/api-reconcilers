@@ -119,7 +119,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{
 				State: &protoapi.ReconcilerState{
-					Value: []byte(fmt.Sprintf(`{"teamId": %q}`, teamID)),
+					Value: fmt.Appendf(nil, `{"teamId": %q}`, teamID),
 				},
 			}, nil).
 			Once()
@@ -166,7 +166,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{
 				State: &protoapi.ReconcilerState{
-					Value: []byte(fmt.Sprintf(`{"teamId": %q, "members": [%q]}`, teamID, user)),
+					Value: fmt.Appendf(nil, `{"teamId": %q, "members": [%q]}`, teamID, user),
 				},
 			}, nil).
 			Once()
@@ -227,7 +227,7 @@ func TestDependencytrackReconciler_Reconcile(t *testing.T) {
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{
 				State: &protoapi.ReconcilerState{
-					Value: []byte(fmt.Sprintf(`{"teamId": %q, "members": [%q]}`, teamID, unknownMember)),
+					Value: fmt.Appendf(nil, `{"teamId": %q, "members": [%q]}`, teamID, unknownMember),
 				},
 			}, nil).
 			Once()
@@ -286,7 +286,7 @@ func TestDependencytrackReconciler_Delete(t *testing.T) {
 			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "nais:dependencytrack", TeamSlug: teamSlug}).
 			Return(&protoapi.GetReconcilerStateResponse{
 				State: &protoapi.ReconcilerState{
-					Value: []byte(fmt.Sprintf(`{"teamId": %q}`, teamID)),
+					Value: fmt.Appendf(nil, `{"teamId": %q}`, teamID),
 				},
 			}, nil).
 			Once()

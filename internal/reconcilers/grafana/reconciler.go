@@ -242,8 +242,8 @@ Labels:
 	return nil
 }
 
-func (r *grafanaReconciler) buildSlackContactPointSettings(slackChannel string) map[string]interface{} {
-	return map[string]interface{}{
+func (r *grafanaReconciler) buildSlackContactPointSettings(slackChannel string) map[string]any {
+	return map[string]any{
 		"recipient":  slackChannel,
 		"username":   defaultSlackUsername,
 		"icon_emoji": ":grafana:",

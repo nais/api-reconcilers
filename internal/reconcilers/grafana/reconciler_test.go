@@ -1491,7 +1491,7 @@ func TestContactPointCreationRegression(t *testing.T) {
 			UID:  contactPointName,
 			Name: contactPointName,
 			Type: &cpType,
-			Settings: map[string]interface{}{
+			Settings: map[string]any{
 				"recipient": slackChannel,
 				"url":       testSlackWebhookURL,
 			},
