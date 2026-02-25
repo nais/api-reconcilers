@@ -217,38 +217,6 @@ func TestReconcile(t *testing.T) {
 				_, _ = w.Write(resp)
 			},
 
-			// list existing tag bindings for project
-			func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodGet {
-					t.Errorf("expected HTTP GET, got: %q", r.Method)
-				}
-				resp, _ := json.Marshal(cloudresourcemanager.ListTagBindingsResponse{})
-				_, _ = w.Write(resp)
-			},
-
-			// create tag binding for environment
-			func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost {
-					t.Errorf("expected HTTP POST, got: %q", r.Method)
-				}
-				payload := cloudresourcemanager.TagBinding{}
-				_ = json.NewDecoder(r.Body).Decode(&payload)
-
-				expectedParent := "//cloudresourcemanager.googleapis.com/projects/" + expectedTeamProjectID
-				if payload.Parent != expectedParent {
-					t.Errorf("expected parent %q, got %q", expectedParent, payload.Parent)
-				}
-
-				expectedTagValue := expectedTeamProjectID + "/environment/prod"
-				if payload.TagValueNamespacedName != expectedTagValue {
-					t.Errorf("expected tag value namespaced name %q, got %q", expectedTagValue, payload.TagValueNamespacedName)
-				}
-
-				op := cloudresourcemanager.Operation{Done: true}
-				resp, _ := op.MarshalJSON()
-				_, _ = w.Write(resp)
-			},
-
 			// get existing billing info
 			func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet {
