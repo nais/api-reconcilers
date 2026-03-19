@@ -502,8 +502,8 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		return backendBucket, nil
 	}
 
-	const defaultTTL = int32(3600)     // 1 hour
-	const defaultMaxTTL = int32(86400) // 1 year
+	const defaultTTL = int32(3600)        // 1 hour
+	const defaultMaxTTL = int32(31536000) // 1 year
 
 	req := &computepb.InsertBackendBucketRequest{
 		BackendBucketResource: &computepb.BackendBucket{
@@ -512,8 +512,12 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 				// Enables Cloud CDN to cache all static content served from the backend
 				// bucket. This includes content with a file extension that is typically
 				// associated with static content, such as .html, .css, and .js.
-				CacheMode:  new("CACHE_ALL_STATIC"),
-				ClientTtl:  ptr.To(defaultTTL),
+				CacheMode: new("CACHE_ALL_STATIC"),
+				// ClientTtl is intentionally not set. This allows teams to control
+				// browser caching via Cache-Control headers on their GCS objects.
+				// For example, hashed assets can use max-age=31536000, while
+				// index.html can use no-cache or no-store via the no_cache_paths
+				// input in the cdn-upload action.
 				DefaultTtl: ptr.To(defaultTTL),
 				MaxTtl:     ptr.To(defaultMaxTTL),
 				// If true then Cloud CDN will combine multiple concurrent cache fill
