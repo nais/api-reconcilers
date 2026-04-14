@@ -443,17 +443,11 @@ func (r *googleGcpReconciler) setProjectPermissions(ctx context.Context, teamPro
 		return fmt.Errorf("retrieve existing GCP project IAM policy: %w", err)
 	}
 
-	bindings := map[string][]string{
-		cnrmRoleName: {"serviceAccount:" + cnrmServiceAccount.Email},
-		teamRoleName: {"group:" + *naisTeam.GoogleGroupEmail},
-	}
-
-	// TODO: remove once Nav has migrated non-Nais resources away from Nais projects
-	if strings.ToLower(r.tenantName) == "nav" {
-		bindings["roles/owner"] = []string{"group:" + *naisTeam.GoogleGroupEmail}
-	}
-
-	newBindings, updated := CalculateRoleBindings(policy.Bindings, bindings)
+	newBindings, updated := CalculateRoleBindings(policy.Bindings, map[string][]string{
+		"roles/owner": {"group:" + *naisTeam.GoogleGroupEmail},
+		cnrmRoleName:  {"serviceAccount:" + cnrmServiceAccount.Email},
+		teamRoleName:  {"group:" + *naisTeam.GoogleGroupEmail},
+	})
 
 	if !updated {
 		return nil
