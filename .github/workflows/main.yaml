@@ -93,15 +93,21 @@ jobs:
           echo "Pushing: $chart"
           helm push "$chart" ${{ env.IMAGE_REPOSITORY }}
 
-  rollout:
+  deploy:
+    name: Deploy
+    if: github.ref == 'refs/heads/main'
     runs-on: fasit-deploy
     permissions:
       id-token: write
     needs:
       - build-push
     steps:
-      - uses: nais/fasit-deploy@8727ed1c7a5a465e837873e6016a9a692a6b874a # ratchet:nais/fasit-deploy@v2
-        if: github.ref == 'refs/heads/main'
+      - uses: nais/fasit-deploy@58a70a338b16dc646373c91724fc7e7522d085a4 # ratchet:nais/fasit-deploy@v4.0.1
         with:
           chart: ${{ env.IMAGE_REPOSITORY }}/${{ env.NAME }}
           version: ${{ needs.build-push.outputs.chart-version }}
+          targets: |
+            [
+              { "target": { "kind": "management", "tenant": "ci-nais" }, "wait": true },
+              { "target": { "kind": "management" } }
+            ]
