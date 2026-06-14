@@ -106,6 +106,11 @@ type Config struct {
 
 		// Location The GCP location where audit log buckets are created.
 		Location string `env:"NAIS_AUDIT_LOG_LOCATION"`
+
+		// LoggkamelURL The base URL of the loggkamel API used to determine whether
+		// a team requires audit logging. Differs between environments (contains
+		// ".dev." for dev, omitted for prod) and is mapped in fasit.
+		LoggkamelURL string `env:"LOGGKAMEL_URL"`
 	}
 
 	// GoogleManagementProjectID The ID of the NAIS management project in the tenant organization in GCP.
