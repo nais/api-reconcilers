@@ -34,9 +34,9 @@ type Services struct {
 }
 
 type auditLogReconciler struct {
-	services    *Services
-	config      Config
-	auditPolicy AuditPolicyClient
+	services                *Services
+	config                  Config
+	onPremPostgresLogClient OnPremPostgresLogClient
 }
 
 // Config holds the configuration for the audit log reconciler.
@@ -54,12 +54,10 @@ type Config struct {
 // OverrideFunc allows for dependency injection in tests.
 type OverrideFunc func(reconciler *auditLogReconciler)
 
-// Name returns the reconciler name.
 func (r *auditLogReconciler) Name() string {
 	return reconcilerName
 }
 
-// New creates a new audit log reconciler.
 func New(ctx context.Context, serviceAccountEmail string, config Config, testOverrides ...OverrideFunc) (reconcilers.Reconciler, error) {
 	if config.ProjectID == "" {
 		return nil, fmt.Errorf("audit log project ID is required: specify the GCP project ID where audit log buckets will be created")
@@ -84,8 +82,8 @@ func New(ctx context.Context, serviceAccountEmail string, config Config, testOve
 		reconciler.services = s
 	}
 
-	if reconciler.auditPolicy == nil && config.LoggkamelURL != "" {
-		reconciler.auditPolicy = newLoggkamelClient(config.LoggkamelURL)
+	if reconciler.onPremPostgresLogClient == nil && config.LoggkamelURL != "" {
+		reconciler.onPremPostgresLogClient = newLoggkamelClient(config.LoggkamelURL)
 	}
 
 	return reconciler, nil
@@ -201,12 +199,13 @@ func (r *auditLogReconciler) Delete(ctx context.Context, client *apiclient.APICl
 
 // Reconcile handles the main reconciliation logic for audit logs.
 func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	// Determine whether this team requires audit logging according to loggkamel.
-	// When true we must ensure a log bucket and a log sink (with the
-	// dbAuditEntry filter) exist for the team, even if it has no SQL instances.
-	requiresAuditLogging, err := r.requiresAuditLogging(ctx, naisTeam.Slug)
+	// Determine whether this team requires on-prem Postgres log collection
+	// according to loggkamel. When true we must ensure a log bucket and a log
+	// sink (with the dbAuditEntry filter) exist for the team, even if it has no
+	// Cloud SQL instances.
+	requiresOnPremPostgresLogging, err := r.requiresOnPremPostgresLogging(ctx, naisTeam.Slug)
 	if err != nil {
-		return fmt.Errorf("check audit logging requirement for team %s: %w", naisTeam.Slug, err)
+		return fmt.Errorf("check on-prem Postgres logging requirement for team %s: %w", naisTeam.Slug, err)
 	}
 
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
@@ -240,9 +239,11 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
 
-		// Skip only if there are no SQL instances with pgaudit enabled AND the
-		// team does not require audit logging according to loggkamel.
-		if len(listSQLInstances) == 0 && !requiresAuditLogging {
+		// Skip only if there are no Cloud SQL instances with pgaudit enabled AND
+		// the team does not require on-prem Postgres log collection according to
+		// loggkamel.
+		hasCloudSQLAudit := len(listSQLInstances) > 0
+		if !hasCloudSQLAudit && !requiresOnPremPostgresLogging {
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
@@ -263,7 +264,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		// Create one log sink per team environment covering all SQL instances (auditing all database users)
-		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, requiresAuditLogging, log)
+		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, hasCloudSQLAudit, requiresOnPremPostgresLogging, log)
 		if err != nil {
 			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
@@ -293,20 +294,20 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return it.Err()
 }
 
-// requiresAuditLogging asks loggkamel whether the given team requires audit
-// logging. If no loggkamel client is configured, it returns false.
-func (r *auditLogReconciler) requiresAuditLogging(ctx context.Context, teamSlug string) (bool, error) {
-	if r.auditPolicy == nil {
+// requiresOnPremPostgresLogging asks loggkamel whether the given team's on-prem
+// Postgres logs must be collected. If no loggkamel client is configured, it
+// returns false.
+func (r *auditLogReconciler) requiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error) {
+	if r.onPremPostgresLogClient == nil {
 		return false, nil
 	}
-	return r.auditPolicy.RequiresAuditLogging(ctx, teamSlug)
+	return r.onPremPostgresLogClient.RequiresOnPremPostgresLogging(ctx, teamSlug)
 }
 
-// WithAuditPolicyClient is a test override function for dependency injection of
-// the loggkamel audit policy client.
-func WithAuditPolicyClient(client AuditPolicyClient) OverrideFunc {
+// WithOnPremPostgresLogClient is a test override function for dependency
+// injection of the loggkamel on-prem Postgres log client.
+func WithOnPremPostgresLogClient(client OnPremPostgresLogClient) OverrideFunc {
 	return func(reconciler *auditLogReconciler) {
-		reconciler.auditPolicy = client
+		reconciler.onPremPostgresLogClient = client
 	}
 }
-

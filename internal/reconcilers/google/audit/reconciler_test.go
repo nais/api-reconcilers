@@ -964,7 +964,7 @@ func TestPgAuditFiltering(t *testing.T) {
 	})
 }
 
-func TestHasPgAuditEnabled(t *testing.T) {
+func TestHasCloudSQLAuditEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
 		instance *sqladmin.DatabaseInstance
@@ -1071,9 +1071,9 @@ func TestHasPgAuditEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := audit.HasPgAuditEnabled(tt.instance)
+			result := audit.HasCloudSQLAuditEnabled(tt.instance)
 			if result != tt.expected {
-				t.Errorf("HasPgAuditEnabled() = %v, expected %v", result, tt.expected)
+				t.Errorf("HasCloudSQLAuditEnabled() = %v, expected %v", result, tt.expected)
 			}
 		})
 	}
@@ -1242,42 +1242,80 @@ func TestValidateLogSinkName(t *testing.T) {
 }
 
 func TestBuildLogFilter(t *testing.T) {
+	const pgAuditClause = `protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`
+	const dbAuditClause = `jsonPayload.requestType="dbAuditEntry"`
+
 	tests := []struct {
-		name          string
-		teamProjectID string
-		expectedParts []string
+		name                          string
+		teamProjectID                 string
+		hasCloudSQLAudit              bool
+		requiresOnPremPostgresLogging bool
+		expectedParts                 []string
+		unexpectedParts               []string
+		expectEmpty                   bool
 	}{
 		{
-			name:          "basic filter format",
-			teamProjectID: "test-project",
+			name:                          "cloud sql audit only",
+			teamProjectID:                 "test-project",
+			hasCloudSQLAudit:              true,
+			requiresOnPremPostgresLogging: false,
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
 				`logName="projects/test-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
-				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				pgAuditClause,
 			},
+			unexpectedParts: []string{dbAuditClause, " OR "},
 		},
 		{
-			name:          "different project ID",
-			teamProjectID: "another-project",
+			name:                          "on-prem postgres only",
+			teamProjectID:                 "test-project",
+			hasCloudSQLAudit:              false,
+			requiresOnPremPostgresLogging: true,
+			expectedParts:                 []string{dbAuditClause},
+			unexpectedParts:               []string{pgAuditClause, " OR "},
+		},
+		{
+			name:                          "both cloud sql audit and on-prem postgres",
+			teamProjectID:                 "another-project",
+			hasCloudSQLAudit:              true,
+			requiresOnPremPostgresLogging: true,
 			expectedParts: []string{
 				`resource.type="cloudsql_database"`,
 				`logName="projects/another-project/logs/cloudaudit.googleapis.com%2Fdata_access"`,
-				`protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`,
+				pgAuditClause,
+				dbAuditClause,
+				" OR ",
 			},
+		},
+		{
+			name:                          "neither signal enabled",
+			teamProjectID:                 "test-project",
+			hasCloudSQLAudit:              false,
+			requiresOnPremPostgresLogging: false,
+			expectEmpty:                   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test the filter format directly (simulating the BuildLogFilter logic)
-			result := fmt.Sprintf(`resource.type="cloudsql_database"
-AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
-AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, tt.teamProjectID)
+			result := audit.BuildLogFilter(tt.teamProjectID, tt.hasCloudSQLAudit, tt.requiresOnPremPostgresLogging)
 
-			// Verify all expected parts are present
+			if tt.expectEmpty {
+				if result != "" {
+					t.Errorf("Expected empty filter, but got: %q", result)
+				}
+				return
+			}
+
 			for _, expectedPart := range tt.expectedParts {
 				if !strings.Contains(result, expectedPart) {
 					t.Errorf("Expected filter to contain %q, but it didn't. Filter: %s", expectedPart, result)
+				}
+			}
+
+			for _, unexpectedPart := range tt.unexpectedParts {
+				if strings.Contains(result, unexpectedPart) {
+					t.Errorf("Expected filter to NOT contain %q, but it did. Filter: %s", unexpectedPart, result)
 				}
 			}
 

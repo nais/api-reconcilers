@@ -3,18 +3,16 @@ package audit
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"google.golang.org/api/sqladmin/v1"
 )
 
-// getSQLInstancesForTeam retrieves SQL instances for a team that have pgaudit enabled.
 func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlug, teamProjectID string) ([]string, error) {
-	// Check if we have a valid SQL admin service
 	if r.services == nil || r.services.SQLAdminService == nil {
 		return nil, fmt.Errorf("no SQL admin service available for team %s", teamSlug)
 	}
 
-	// Validate project ID
 	if teamProjectID == "" {
 		return nil, fmt.Errorf("team project ID is empty for team %s", teamSlug)
 	}
@@ -25,15 +23,14 @@ func (r *auditLogReconciler) getSQLInstancesForTeam(ctx context.Context, teamSlu
 		return nil, fmt.Errorf("list sql instances for team %s project %s: %w", teamSlug, teamProjectID, err)
 	}
 	for _, i := range response.Items {
-		if HasPgAuditEnabled(i) {
+		if HasCloudSQLAuditEnabled(i) {
 			sqlInstances = append(sqlInstances, i.Name)
 		}
 	}
 	return sqlInstances, nil
 }
 
-// HasPgAuditEnabled checks if a SQL instance has the pgaudit flag enabled.
-func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
+func HasCloudSQLAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	if instance.Settings == nil || instance.Settings.DatabaseFlags == nil {
 		return false
 	}
@@ -47,12 +44,20 @@ func HasPgAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 	return false
 }
 
-// BuildLogFilter constructs a Cloud SQL audit log filter for all SQL instances in the project.
-func (r *auditLogReconciler) BuildLogFilter(teamProjectID string) string {
-	baseFilter := fmt.Sprintf(`(resource.type="cloudsql_database"
-					AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
-					AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry") 
-					OR (jsonPayload.requestType="dbAuditEntry")`, teamProjectID)
+// BuildLogFilter constructs a Logs Explorer filter based on which logging
+func BuildLogFilter(teamProjectID string, hasCloudSQLAudit, requiresOnPremPostgresLogging bool) string {
+	clauses := make([]string, 0, 2)
 
-	return baseFilter
+	if hasCloudSQLAudit {
+		clauses = append(clauses, fmt.Sprintf(`(resource.type="cloudsql_database" `+
+			`AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access" `+
+			`AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry")`,
+			teamProjectID))
+	}
+
+	if requiresOnPremPostgresLogging {
+		clauses = append(clauses, `(jsonPayload.requestType="dbAuditEntry")`)
+	}
+
+	return strings.Join(clauses, " OR ")
 }

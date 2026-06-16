@@ -9,7 +9,7 @@ import (
 	audit "github.com/nais/api-reconcilers/internal/reconcilers/google/audit"
 )
 
-func TestLoggkamelRequiresAuditLogging(t *testing.T) {
+func TestLoggkamelRequiresOnPremPostgresLogging(t *testing.T) {
 	tests := []struct {
 		name         string
 		responseBody string
@@ -34,7 +34,7 @@ func TestLoggkamelRequiresAuditLogging(t *testing.T) {
 			defer srv.Close()
 
 			client := audit.NewLoggkamelClientForTesting(srv.URL)
-			got, err := client.RequiresAuditLogging(context.Background(), "my-team")
+			got, err := client.RequiresOnPremPostgresLogging(context.Background(), "my-team")
 
 			if tt.wantErr {
 				if err == nil {
@@ -46,7 +46,7 @@ func TestLoggkamelRequiresAuditLogging(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tt.wantResult {
-				t.Errorf("RequiresAuditLogging() = %v, want %v", got, tt.wantResult)
+				t.Errorf("RequiresOnPremPostgresLogging() = %v, want %v", got, tt.wantResult)
 			}
 			if want := "/api/v1/naisteam/active/my-team"; gotPath != want {
 				t.Errorf("called path = %q, want %q", gotPath, want)
@@ -54,4 +54,3 @@ func TestLoggkamelRequiresAuditLogging(t *testing.T) {
 		})
 	}
 }
-

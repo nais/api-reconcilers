@@ -10,33 +10,19 @@ import (
 	"time"
 )
 
-// AuditPolicyClient determines whether a team requires audit logging.
-type AuditPolicyClient interface {
-	// RequiresAuditLogging returns true if the given team is an active nais team
-	// that requires audit logging according to loggkamel.
-	RequiresAuditLogging(ctx context.Context, teamSlug string) (bool, error)
+type OnPremPostgresLogClient interface {
+	RequiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error)
 }
 
-// loggkamelClient is an AuditPolicyClient backed by the loggkamel HTTP API.
-//
-// It queries the NaisteamController "findAllActiveNaisteam" style endpoint:
-//
-//	GET <baseURL>/api/v1/naisteam/active/<teamSlug>
-//
-// which returns a JSON boolean (true/false). The base URL differs between
-// environments (e.g. it contains ".dev." for dev and omits it for prod) and is
-// therefore configurable via the helm chart / fasit.
 type loggkamelClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewLoggkamelClientForTesting exposes the loggkamel client for tests.
-func NewLoggkamelClientForTesting(baseURL string) AuditPolicyClient {
+func NewLoggkamelClientForTesting(baseURL string) OnPremPostgresLogClient {
 	return newLoggkamelClient(baseURL)
 }
 
-// newLoggkamelClient creates a new loggkamel-backed AuditPolicyClient.
 func newLoggkamelClient(baseURL string) *loggkamelClient {
 	return &loggkamelClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -46,8 +32,7 @@ func newLoggkamelClient(baseURL string) *loggkamelClient {
 	}
 }
 
-// RequiresAuditLogging calls the loggkamel active naisteam endpoint for the team.
-func (c *loggkamelClient) RequiresAuditLogging(ctx context.Context, teamSlug string) (bool, error) {
+func (c *loggkamelClient) RequiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/naisteam/active/%s", c.baseURL, url.PathEscape(teamSlug))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -73,5 +58,3 @@ func (c *loggkamelClient) RequiresAuditLogging(ctx context.Context, teamSlug str
 
 	return requires, nil
 }
-
-
