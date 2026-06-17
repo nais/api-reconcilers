@@ -13,7 +13,7 @@ googleManagementProjectID: # mapped in fasit
 auditLog:
   projectID: # mapped in fasit
   location: # must be configured
-  loggkamelURL: # mapped in fasit
+  loggkamelEndpoint: # mapped in fasit
 
 tenantDomain: # mapped in fasit
 naisAuditLogProjectID: # mapped in fasit

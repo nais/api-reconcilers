@@ -41,14 +41,9 @@ type auditLogReconciler struct {
 
 // Config holds the configuration for the audit log reconciler.
 type Config struct {
-	ProjectID string
-	Location  string
-
-	// LoggkamelURL is the base URL of the loggkamel API used to determine
-	// whether a team requires audit logging. Differs between environments
-	// (e.g. contains ".dev." for dev) and is configured via fasit/helm.
-	// If empty, the loggkamel audit logging check is disabled.
-	LoggkamelURL string
+	ProjectID         string
+	Location          string
+	LoggkamelEndpoint string
 }
 
 // OverrideFunc allows for dependency injection in tests.
@@ -82,8 +77,8 @@ func New(ctx context.Context, serviceAccountEmail string, config Config, testOve
 		reconciler.services = s
 	}
 
-	if reconciler.onPremPostgresLogClient == nil && config.LoggkamelURL != "" {
-		reconciler.onPremPostgresLogClient = newLoggkamelClient(config.LoggkamelURL)
+	if reconciler.onPremPostgresLogClient == nil && config.LoggkamelEndpoint != "" {
+		reconciler.onPremPostgresLogClient = newLoggkamelClient(config.LoggkamelEndpoint)
 	}
 
 	return reconciler, nil
