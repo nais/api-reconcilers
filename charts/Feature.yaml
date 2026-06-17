@@ -44,8 +44,8 @@ values:
     config:
       type: string
 
-  auditLog.loggkamelURL:
-    displayName: URL for loggkamel service
+  auditLog.loggkamelEndpoint:
+    displayName: Loggkamel endpoint
     description: Loggkamel tells us which teams should have audit logs from onprem
     config:
       type: string
