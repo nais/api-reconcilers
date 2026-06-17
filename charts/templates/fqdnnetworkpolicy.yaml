@@ -16,12 +16,12 @@ spec:
             - {{ get (urlParse .Values.gitHub.authEndpoint) "host" }}
     {{- end }}
     {{- if  .Values.auditLog.loggkamelEndpoint }}
-        - ports:
-            - port: 443
-              protocol: TCP
-          to:
-            - fqdns:
-                - {{ get (urlParse .Values.auditLog.loggkamelEndpoint) "host" }}
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - fqdns:
+            - {{ get (urlParse .Values.auditLog.loggkamelEndpoint) "host" }}
     {{- end }}
     - ports:
         - port: 80
