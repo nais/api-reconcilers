@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"google.golang.org/api/sqladmin/v1"
 )
@@ -46,18 +45,19 @@ func HasCloudSQLAuditEnabled(instance *sqladmin.DatabaseInstance) bool {
 
 // BuildLogFilter constructs a Logs Explorer filter based on which logging
 func BuildLogFilter(teamProjectID string, hasCloudSQLAudit, requiresOnPremPostgresLogging bool) string {
-	clauses := make([]string, 0, 2)
+	cloudSQLClause := fmt.Sprintf(`resource.type="cloudsql_database"
+AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
+	onPremClause := `jsonPayload.requestType="dbAuditEntry"`
 
-	if hasCloudSQLAudit {
-		clauses = append(clauses, fmt.Sprintf(`(resource.type="cloudsql_database" `+
-			`AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access" `+
-			`AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry")`,
-			teamProjectID))
+	switch {
+	case hasCloudSQLAudit && requiresOnPremPostgresLogging:
+		return fmt.Sprintf("(%s) OR (%s)", cloudSQLClause, onPremClause)
+	case hasCloudSQLAudit:
+		return cloudSQLClause
+	case requiresOnPremPostgresLogging:
+		return onPremClause
+	default:
+		return ""
 	}
-
-	if requiresOnPremPostgresLogging {
-		clauses = append(clauses, `(jsonPayload.requestType="dbAuditEntry")`)
-	}
-
-	return strings.Join(clauses, " OR ")
 }

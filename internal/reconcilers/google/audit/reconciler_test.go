@@ -1327,6 +1327,48 @@ func TestBuildLogFilter(t *testing.T) {
 	}
 }
 
+func TestBuildLogFilterCloudSQLOnlyMatchesLegacyFilter(t *testing.T) {
+	const teamProjectID = "test-project"
+
+	legacyFilter := fmt.Sprintf(`resource.type="cloudsql_database"
+AND logName="projects/%s/logs/cloudaudit.googleapis.com%%2Fdata_access"
+AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.PgAuditEntry"`, teamProjectID)
+
+	got := audit.BuildLogFilter(teamProjectID, true, false)
+	if got != legacyFilter {
+		t.Errorf("Cloud SQL audit-only filter changed and would churn existing sinks.\nwant: %q\n got: %q", legacyFilter, got)
+	}
+}
+
+func TestBuildLogFilterOnPremOnly(t *testing.T) {
+	const wantFilter = `jsonPayload.requestType="dbAuditEntry"`
+
+	got := audit.BuildLogFilter("test-project", false, true)
+	if got != wantFilter {
+		t.Errorf("on-prem-only filter should be just the dbAuditEntry clause.\nwant: %q\n got: %q", wantFilter, got)
+	}
+}
+
+func TestBuildLogFilterOnPremClauseGatedOnLoggkamel(t *testing.T) {
+	const onPremClause = `dbAuditEntry`
+
+	// loggkamel false: clause must be absent regardless of Cloud SQL audit.
+	for _, hasCloudSQLAudit := range []bool{false, true} {
+		got := audit.BuildLogFilter("test-project", hasCloudSQLAudit, false)
+		if strings.Contains(got, onPremClause) {
+			t.Errorf("on-prem clause must not be present when loggkamel is false (hasCloudSQLAudit=%v): %q", hasCloudSQLAudit, got)
+		}
+	}
+
+	// loggkamel true: clause must be present.
+	for _, hasCloudSQLAudit := range []bool{false, true} {
+		got := audit.BuildLogFilter("test-project", hasCloudSQLAudit, true)
+		if !strings.Contains(got, onPremClause) {
+			t.Errorf("on-prem clause must be present when loggkamel is true (hasCloudSQLAudit=%v): %q", hasCloudSQLAudit, got)
+		}
+	}
+}
+
 func TestExtractServiceAccountEmail(t *testing.T) {
 	tests := []struct {
 		name           string
