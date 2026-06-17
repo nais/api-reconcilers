@@ -15,13 +15,12 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-// createOrUpdateLogSinkIfNeeded creates or updates a log sink for the team environment.
-func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, log logrus.FieldLogger) (string, string, error) {
+func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, hasCloudSQLAudit, requiresOnPremPostgresLogging bool, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
 	sinkName := GenerateLogSinkName(teamSlug, envName)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
 
-	filter := r.BuildLogFilter(teamProjectID)
+	filter := BuildLogFilter(teamProjectID, hasCloudSQLAudit, requiresOnPremPostgresLogging)
 
 	if err := ValidateLogSinkName(sinkName); err != nil {
 		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)

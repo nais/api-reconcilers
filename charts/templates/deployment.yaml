@@ -68,6 +68,8 @@ spec:
               value: {{ .Values.auditLog.projectID | quote }}
             - name: NAIS_AUDIT_LOG_LOCATION
               value: {{ .Values.auditLog.location | quote }}
+            - name: LOGGKAMEL_URL
+              value: {{ .Values.auditLog.loggkamelURL | quote }}
             # GitHub
             - name: GITHUB_AUTH_ENDPOINT
               value: {{ .Values.gitHub.authEndpoint }}
