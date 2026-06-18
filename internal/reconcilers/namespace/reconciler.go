@@ -73,6 +73,10 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 
 		c, exists := r.k8sClients[env.EnvironmentName]
 		if !exists {
+			if env.GcpProjectId == nil {
+				// Non-GCP environment (e.g. FSS); the namespace reconciler only handles GCP environments.
+				continue
+			}
 			log.Errorf("No Kubernetes client for environment %q", env.EnvironmentName)
 			continue
 		}
@@ -401,6 +405,10 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 
 		c, exists := r.k8sClients[env.EnvironmentName]
 		if !exists {
+			if env.GcpProjectId == nil {
+				// Non-GCP environment (e.g. FSS); the namespace reconciler only handles GCP environments.
+				continue
+			}
 			log.Errorf("No Kubernetes client for environment")
 			continue
 		}
