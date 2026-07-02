@@ -170,6 +170,14 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("expected project id %q, got %q", expectedTeamProjectID, payload.ProjectId)
 				}
 
+				if payload.Labels["team"] != teamSlug {
+					t.Errorf("expected team label %q at creation, got %q", teamSlug, payload.Labels["team"])
+				}
+
+				if payload.Labels[google_gcp_reconciler.ManagedByLabelName] != google_gcp_reconciler.ManagedByLabelValue {
+					t.Errorf("expected managed-by label %q at creation, got %q", google_gcp_reconciler.ManagedByLabelValue, payload.Labels[google_gcp_reconciler.ManagedByLabelName])
+				}
+
 				project := cloudresourcemanager.Project{
 					Name:      payload.DisplayName,
 					ProjectId: payload.ProjectId,

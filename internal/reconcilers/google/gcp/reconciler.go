@@ -380,6 +380,13 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 		DisplayName: GetProjectDisplayName(naisTeam.Slug, environment.EnvironmentName),
 		Parent:      "folders/" + strconv.FormatInt(parentFolderID, 10),
 		ProjectId:   projectID,
+		// Set ownership labels at creation time so the project is identifiable as
+		// ours even if a later reconcile step fails before ensureProjectHasLabels
+		// runs. validateAdoptedProject relies on these when adopting after a 409.
+		Labels: map[string]string{
+			"team":             naisTeam.Slug,
+			ManagedByLabelName: ManagedByLabelValue,
+		},
 	}
 	operation, err := r.gcpServices.CloudResourceManagerProjectsService.Create(project).Do()
 	if err != nil {
@@ -403,7 +410,12 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 			return nil, fmt.Errorf("invalid number of projects in response: %+v", response.Projects)
 		}
 
-		return response.Projects[0], nil
+		adoptedProject := response.Projects[0]
+		if err := validateAdoptedProject(adoptedProject, naisTeam.Slug); err != nil {
+			return nil, fmt.Errorf("refusing to adopt existing GCP project after 409: %w", err)
+		}
+
+		return adoptedProject, nil
 	}
 
 	response, err := r.getOperationResponse(ctx, operation)
@@ -418,6 +430,22 @@ func (r *googleGcpReconciler) getOrCreateProject(ctx context.Context, projectID 
 	}
 
 	return createdProject, nil
+}
+
+func validateAdoptedProject(project *cloudresourcemanager.Project, teamSlug string) error {
+	if project.Labels == nil {
+		return fmt.Errorf("project %q has no labels", project.ProjectId)
+	}
+
+	if managedBy := project.Labels[ManagedByLabelName]; managedBy != ManagedByLabelValue {
+		return fmt.Errorf("project %q has unexpected %q label %q", project.ProjectId, ManagedByLabelName, managedBy)
+	}
+
+	if team := project.Labels["team"]; team != teamSlug {
+		return fmt.Errorf("project %q belongs to team %q, expected %q", project.ProjectId, team, teamSlug)
+	}
+
+	return nil
 }
 
 // setProjectPermissions Make sure that the project has the necessary permissions, and don't remove permissions we don't
