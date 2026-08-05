@@ -79,9 +79,9 @@ type MockProvisioningClientService_GetContactpoints_Call struct {
 // GetContactpoints is a helper method to define mock.On call
 //   - params *provisioning.GetContactpointsParams
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) GetContactpoints(params interface{}, opts ...interface{}) *MockProvisioningClientService_GetContactpoints_Call {
+func (_e *MockProvisioningClientService_Expecter) GetContactpoints(params any, opts ...any) *MockProvisioningClientService_GetContactpoints_Call {
 	return &MockProvisioningClientService_GetContactpoints_Call{Call: _e.mock.On("GetContactpoints",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_GetContactpoints_Call) Run(run func(params *provisioning.GetContactpointsParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_GetContactpoints_Call {
@@ -155,9 +155,9 @@ type MockProvisioningClientService_GetPolicyTree_Call struct {
 
 // GetPolicyTree is a helper method to define mock.On call
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) GetPolicyTree(opts ...interface{}) *MockProvisioningClientService_GetPolicyTree_Call {
+func (_e *MockProvisioningClientService_Expecter) GetPolicyTree(opts ...any) *MockProvisioningClientService_GetPolicyTree_Call {
 	return &MockProvisioningClientService_GetPolicyTree_Call{Call: _e.mock.On("GetPolicyTree",
-		append([]interface{}{}, opts...)...)}
+		append([]any{}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_GetPolicyTree_Call) Run(run func(opts ...provisioning.ClientOption)) *MockProvisioningClientService_GetPolicyTree_Call {
@@ -227,9 +227,9 @@ type MockProvisioningClientService_GetTemplate_Call struct {
 // GetTemplate is a helper method to define mock.On call
 //   - name string
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) GetTemplate(name interface{}, opts ...interface{}) *MockProvisioningClientService_GetTemplate_Call {
+func (_e *MockProvisioningClientService_Expecter) GetTemplate(name any, opts ...any) *MockProvisioningClientService_GetTemplate_Call {
 	return &MockProvisioningClientService_GetTemplate_Call{Call: _e.mock.On("GetTemplate",
-		append([]interface{}{name}, opts...)...)}
+		append([]any{name}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_GetTemplate_Call) Run(run func(name string, opts ...provisioning.ClientOption)) *MockProvisioningClientService_GetTemplate_Call {
@@ -304,9 +304,9 @@ type MockProvisioningClientService_PostContactpoints_Call struct {
 // PostContactpoints is a helper method to define mock.On call
 //   - params *provisioning.PostContactpointsParams
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) PostContactpoints(params interface{}, opts ...interface{}) *MockProvisioningClientService_PostContactpoints_Call {
+func (_e *MockProvisioningClientService_Expecter) PostContactpoints(params any, opts ...any) *MockProvisioningClientService_PostContactpoints_Call {
 	return &MockProvisioningClientService_PostContactpoints_Call{Call: _e.mock.On("PostContactpoints",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_PostContactpoints_Call) Run(run func(params *provisioning.PostContactpointsParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_PostContactpoints_Call {
@@ -381,9 +381,9 @@ type MockProvisioningClientService_PutContactpoint_Call struct {
 // PutContactpoint is a helper method to define mock.On call
 //   - params *provisioning.PutContactpointParams
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) PutContactpoint(params interface{}, opts ...interface{}) *MockProvisioningClientService_PutContactpoint_Call {
+func (_e *MockProvisioningClientService_Expecter) PutContactpoint(params any, opts ...any) *MockProvisioningClientService_PutContactpoint_Call {
 	return &MockProvisioningClientService_PutContactpoint_Call{Call: _e.mock.On("PutContactpoint",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_PutContactpoint_Call) Run(run func(params *provisioning.PutContactpointParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_PutContactpoint_Call {
@@ -458,9 +458,9 @@ type MockProvisioningClientService_PutPolicyTree_Call struct {
 // PutPolicyTree is a helper method to define mock.On call
 //   - params *provisioning.PutPolicyTreeParams
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) PutPolicyTree(params interface{}, opts ...interface{}) *MockProvisioningClientService_PutPolicyTree_Call {
+func (_e *MockProvisioningClientService_Expecter) PutPolicyTree(params any, opts ...any) *MockProvisioningClientService_PutPolicyTree_Call {
 	return &MockProvisioningClientService_PutPolicyTree_Call{Call: _e.mock.On("PutPolicyTree",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_PutPolicyTree_Call) Run(run func(params *provisioning.PutPolicyTreeParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_PutPolicyTree_Call {
@@ -535,9 +535,9 @@ type MockProvisioningClientService_PutTemplate_Call struct {
 // PutTemplate is a helper method to define mock.On call
 //   - params *provisioning.PutTemplateParams
 //   - opts ...provisioning.ClientOption
-func (_e *MockProvisioningClientService_Expecter) PutTemplate(params interface{}, opts ...interface{}) *MockProvisioningClientService_PutTemplate_Call {
+func (_e *MockProvisioningClientService_Expecter) PutTemplate(params any, opts ...any) *MockProvisioningClientService_PutTemplate_Call {
 	return &MockProvisioningClientService_PutTemplate_Call{Call: _e.mock.On("PutTemplate",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockProvisioningClientService_PutTemplate_Call) Run(run func(params *provisioning.PutTemplateParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_PutTemplate_Call {

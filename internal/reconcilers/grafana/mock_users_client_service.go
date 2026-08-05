@@ -79,9 +79,9 @@ type MockUsersClientService_GetUserByLoginOrEmailWithParams_Call struct {
 // GetUserByLoginOrEmailWithParams is a helper method to define mock.On call
 //   - params *users.GetUserByLoginOrEmailParams
 //   - opts ...users.ClientOption
-func (_e *MockUsersClientService_Expecter) GetUserByLoginOrEmailWithParams(params interface{}, opts ...interface{}) *MockUsersClientService_GetUserByLoginOrEmailWithParams_Call {
+func (_e *MockUsersClientService_Expecter) GetUserByLoginOrEmailWithParams(params any, opts ...any) *MockUsersClientService_GetUserByLoginOrEmailWithParams_Call {
 	return &MockUsersClientService_GetUserByLoginOrEmailWithParams_Call{Call: _e.mock.On("GetUserByLoginOrEmailWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockUsersClientService_GetUserByLoginOrEmailWithParams_Call) Run(run func(params *users.GetUserByLoginOrEmailParams, opts ...users.ClientOption)) *MockUsersClientService_GetUserByLoginOrEmailWithParams_Call {
