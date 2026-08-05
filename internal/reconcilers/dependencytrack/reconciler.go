@@ -3,6 +3,7 @@ package dependencytrack_reconciler
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 
 	"github.com/nais/api-reconcilers/internal/reconcilers"
@@ -39,7 +40,8 @@ func New(endpoint, username, password string, opts ...OptFunc) (reconcilers.Reco
 			return nil, fmt.Errorf("no dependencytrack instances configured")
 		}
 
-		r.client = dependencytrack.New(endpoint, username, password, dependencytrack.WithHttpClient(otelhttp.DefaultClient))
+		c := &http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}
+		r.client = dependencytrack.New(endpoint, username, password, dependencytrack.WithHttpClient(c))
 	}
 
 	return r, nil
