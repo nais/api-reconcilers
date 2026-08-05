@@ -79,9 +79,9 @@ type MockAdminUsersClientService_AdminCreateUserWithParams_Call struct {
 // AdminCreateUserWithParams is a helper method to define mock.On call
 //   - params *admin_users.AdminCreateUserParams
 //   - opts ...admin_users.ClientOption
-func (_e *MockAdminUsersClientService_Expecter) AdminCreateUserWithParams(params interface{}, opts ...interface{}) *MockAdminUsersClientService_AdminCreateUserWithParams_Call {
+func (_e *MockAdminUsersClientService_Expecter) AdminCreateUserWithParams(params any, opts ...any) *MockAdminUsersClientService_AdminCreateUserWithParams_Call {
 	return &MockAdminUsersClientService_AdminCreateUserWithParams_Call{Call: _e.mock.On("AdminCreateUserWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockAdminUsersClientService_AdminCreateUserWithParams_Call) Run(run func(params *admin_users.AdminCreateUserParams, opts ...admin_users.ClientOption)) *MockAdminUsersClientService_AdminCreateUserWithParams_Call {

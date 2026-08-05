@@ -79,9 +79,9 @@ type MockServiceAccountsClientService_CreateServiceAccount_Call struct {
 // CreateServiceAccount is a helper method to define mock.On call
 //   - params *service_accounts.CreateServiceAccountParams
 //   - opts ...service_accounts.ClientOption
-func (_e *MockServiceAccountsClientService_Expecter) CreateServiceAccount(params interface{}, opts ...interface{}) *MockServiceAccountsClientService_CreateServiceAccount_Call {
+func (_e *MockServiceAccountsClientService_Expecter) CreateServiceAccount(params any, opts ...any) *MockServiceAccountsClientService_CreateServiceAccount_Call {
 	return &MockServiceAccountsClientService_CreateServiceAccount_Call{Call: _e.mock.On("CreateServiceAccount",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockServiceAccountsClientService_CreateServiceAccount_Call) Run(run func(params *service_accounts.CreateServiceAccountParams, opts ...service_accounts.ClientOption)) *MockServiceAccountsClientService_CreateServiceAccount_Call {
@@ -156,9 +156,9 @@ type MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call st
 // SearchOrgServiceAccountsWithPaging is a helper method to define mock.On call
 //   - params *service_accounts.SearchOrgServiceAccountsWithPagingParams
 //   - opts ...service_accounts.ClientOption
-func (_e *MockServiceAccountsClientService_Expecter) SearchOrgServiceAccountsWithPaging(params interface{}, opts ...interface{}) *MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call {
+func (_e *MockServiceAccountsClientService_Expecter) SearchOrgServiceAccountsWithPaging(params any, opts ...any) *MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call {
 	return &MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call{Call: _e.mock.On("SearchOrgServiceAccountsWithPaging",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call) Run(run func(params *service_accounts.SearchOrgServiceAccountsWithPagingParams, opts ...service_accounts.ClientOption)) *MockServiceAccountsClientService_SearchOrgServiceAccountsWithPaging_Call {

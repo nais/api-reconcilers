@@ -66,7 +66,7 @@ type MockClient_AddToTeam_Call struct {
 //   - ctx context.Context
 //   - username string
 //   - uuid string
-func (_e *MockClient_Expecter) AddToTeam(ctx interface{}, username interface{}, uuid interface{}) *MockClient_AddToTeam_Call {
+func (_e *MockClient_Expecter) AddToTeam(ctx any, username any, uuid any) *MockClient_AddToTeam_Call {
 	return &MockClient_AddToTeam_Call{Call: _e.mock.On("AddToTeam", ctx, username, uuid)}
 }
 
@@ -129,7 +129,7 @@ type MockClient_ChangeAdminPassword_Call struct {
 //   - ctx context.Context
 //   - oldPassword string
 //   - newPassword string
-func (_e *MockClient_Expecter) ChangeAdminPassword(ctx interface{}, oldPassword interface{}, newPassword interface{}) *MockClient_ChangeAdminPassword_Call {
+func (_e *MockClient_Expecter) ChangeAdminPassword(ctx any, oldPassword any, newPassword any) *MockClient_ChangeAdminPassword_Call {
 	return &MockClient_ChangeAdminPassword_Call{Call: _e.mock.On("ChangeAdminPassword", ctx, oldPassword, newPassword)}
 }
 
@@ -202,7 +202,7 @@ type MockClient_ConfigPropertyAggregate_Call struct {
 // ConfigPropertyAggregate is a helper method to define mock.On call
 //   - ctx context.Context
 //   - properties []client.ConfigProperty
-func (_e *MockClient_Expecter) ConfigPropertyAggregate(ctx interface{}, properties interface{}) *MockClient_ConfigPropertyAggregate_Call {
+func (_e *MockClient_Expecter) ConfigPropertyAggregate(ctx any, properties any) *MockClient_ConfigPropertyAggregate_Call {
 	return &MockClient_ConfigPropertyAggregate_Call{Call: _e.mock.On("ConfigPropertyAggregate", ctx, properties)}
 }
 
@@ -260,7 +260,7 @@ type MockClient_CreateAdminUsers_Call struct {
 //   - ctx context.Context
 //   - users *client.AdminUsers
 //   - teamUuid string
-func (_e *MockClient_Expecter) CreateAdminUsers(ctx interface{}, users interface{}, teamUuid interface{}) *MockClient_CreateAdminUsers_Call {
+func (_e *MockClient_Expecter) CreateAdminUsers(ctx any, users any, teamUuid any) *MockClient_CreateAdminUsers_Call {
 	return &MockClient_CreateAdminUsers_Call{Call: _e.mock.On("CreateAdminUsers", ctx, users, teamUuid)}
 }
 
@@ -338,7 +338,7 @@ type MockClient_CreateChildProject_Call struct {
 //   - group string
 //   - classifier string
 //   - tags []string
-func (_e *MockClient_Expecter) CreateChildProject(ctx interface{}, project interface{}, name interface{}, version interface{}, group interface{}, classifier interface{}, tags interface{}) *MockClient_CreateChildProject_Call {
+func (_e *MockClient_Expecter) CreateChildProject(ctx any, project any, name any, version any, group any, classifier any, tags any) *MockClient_CreateChildProject_Call {
 	return &MockClient_CreateChildProject_Call{Call: _e.mock.On("CreateChildProject", ctx, project, name, version, group, classifier, tags)}
 }
 
@@ -421,7 +421,7 @@ type MockClient_CreateManagedUser_Call struct {
 //   - ctx context.Context
 //   - username string
 //   - password string
-func (_e *MockClient_Expecter) CreateManagedUser(ctx interface{}, username interface{}, password interface{}) *MockClient_CreateManagedUser_Call {
+func (_e *MockClient_Expecter) CreateManagedUser(ctx any, username any, password any) *MockClient_CreateManagedUser_Call {
 	return &MockClient_CreateManagedUser_Call{Call: _e.mock.On("CreateManagedUser", ctx, username, password)}
 }
 
@@ -483,7 +483,7 @@ type MockClient_CreateOidcUser_Call struct {
 // CreateOidcUser is a helper method to define mock.On call
 //   - ctx context.Context
 //   - email string
-func (_e *MockClient_Expecter) CreateOidcUser(ctx interface{}, email interface{}) *MockClient_CreateOidcUser_Call {
+func (_e *MockClient_Expecter) CreateOidcUser(ctx any, email any) *MockClient_CreateOidcUser_Call {
 	return &MockClient_CreateOidcUser_Call{Call: _e.mock.On("CreateOidcUser", ctx, email)}
 }
 
@@ -554,7 +554,7 @@ type MockClient_CreateProject_Call struct {
 //   - version string
 //   - group string
 //   - tags []string
-func (_e *MockClient_Expecter) CreateProject(ctx interface{}, name interface{}, version interface{}, group interface{}, tags interface{}) *MockClient_CreateProject_Call {
+func (_e *MockClient_Expecter) CreateProject(ctx any, name any, version any, group any, tags any) *MockClient_CreateProject_Call {
 	return &MockClient_CreateProject_Call{Call: _e.mock.On("CreateProject", ctx, name, version, group, tags)}
 }
 
@@ -638,7 +638,7 @@ type MockClient_CreateTeam_Call struct {
 //   - ctx context.Context
 //   - teamName string
 //   - permissions []client.Permission
-func (_e *MockClient_Expecter) CreateTeam(ctx interface{}, teamName interface{}, permissions interface{}) *MockClient_CreateTeam_Call {
+func (_e *MockClient_Expecter) CreateTeam(ctx any, teamName any, permissions any) *MockClient_CreateTeam_Call {
 	return &MockClient_CreateTeam_Call{Call: _e.mock.On("CreateTeam", ctx, teamName, permissions)}
 }
 
@@ -700,7 +700,7 @@ type MockClient_DeleteManagedUser_Call struct {
 // DeleteManagedUser is a helper method to define mock.On call
 //   - ctx context.Context
 //   - username string
-func (_e *MockClient_Expecter) DeleteManagedUser(ctx interface{}, username interface{}) *MockClient_DeleteManagedUser_Call {
+func (_e *MockClient_Expecter) DeleteManagedUser(ctx any, username any) *MockClient_DeleteManagedUser_Call {
 	return &MockClient_DeleteManagedUser_Call{Call: _e.mock.On("DeleteManagedUser", ctx, username)}
 }
 
@@ -757,7 +757,7 @@ type MockClient_DeleteOidcUser_Call struct {
 // DeleteOidcUser is a helper method to define mock.On call
 //   - ctx context.Context
 //   - username string
-func (_e *MockClient_Expecter) DeleteOidcUser(ctx interface{}, username interface{}) *MockClient_DeleteOidcUser_Call {
+func (_e *MockClient_Expecter) DeleteOidcUser(ctx any, username any) *MockClient_DeleteOidcUser_Call {
 	return &MockClient_DeleteOidcUser_Call{Call: _e.mock.On("DeleteOidcUser", ctx, username)}
 }
 
@@ -814,7 +814,7 @@ type MockClient_DeleteProject_Call struct {
 // DeleteProject is a helper method to define mock.On call
 //   - ctx context.Context
 //   - uuid string
-func (_e *MockClient_Expecter) DeleteProject(ctx interface{}, uuid interface{}) *MockClient_DeleteProject_Call {
+func (_e *MockClient_Expecter) DeleteProject(ctx any, uuid any) *MockClient_DeleteProject_Call {
 	return &MockClient_DeleteProject_Call{Call: _e.mock.On("DeleteProject", ctx, uuid)}
 }
 
@@ -871,7 +871,7 @@ type MockClient_DeleteProjects_Call struct {
 // DeleteProjects is a helper method to define mock.On call
 //   - ctx context.Context
 //   - name string
-func (_e *MockClient_Expecter) DeleteProjects(ctx interface{}, name interface{}) *MockClient_DeleteProjects_Call {
+func (_e *MockClient_Expecter) DeleteProjects(ctx any, name any) *MockClient_DeleteProjects_Call {
 	return &MockClient_DeleteProjects_Call{Call: _e.mock.On("DeleteProjects", ctx, name)}
 }
 
@@ -928,7 +928,7 @@ type MockClient_DeleteTeam_Call struct {
 // DeleteTeam is a helper method to define mock.On call
 //   - ctx context.Context
 //   - uuid string
-func (_e *MockClient_Expecter) DeleteTeam(ctx interface{}, uuid interface{}) *MockClient_DeleteTeam_Call {
+func (_e *MockClient_Expecter) DeleteTeam(ctx any, uuid any) *MockClient_DeleteTeam_Call {
 	return &MockClient_DeleteTeam_Call{Call: _e.mock.On("DeleteTeam", ctx, uuid)}
 }
 
@@ -986,7 +986,7 @@ type MockClient_DeleteUserMembership_Call struct {
 //   - ctx context.Context
 //   - uuid string
 //   - username string
-func (_e *MockClient_Expecter) DeleteUserMembership(ctx interface{}, uuid interface{}, username interface{}) *MockClient_DeleteUserMembership_Call {
+func (_e *MockClient_Expecter) DeleteUserMembership(ctx any, uuid any, username any) *MockClient_DeleteUserMembership_Call {
 	return &MockClient_DeleteUserMembership_Call{Call: _e.mock.On("DeleteUserMembership", ctx, uuid, username)}
 }
 
@@ -1057,7 +1057,7 @@ type MockClient_GenerateApiKey_Call struct {
 // GenerateApiKey is a helper method to define mock.On call
 //   - ctx context.Context
 //   - uuid string
-func (_e *MockClient_Expecter) GenerateApiKey(ctx interface{}, uuid interface{}) *MockClient_GenerateApiKey_Call {
+func (_e *MockClient_Expecter) GenerateApiKey(ctx any, uuid any) *MockClient_GenerateApiKey_Call {
 	return &MockClient_GenerateApiKey_Call{Call: _e.mock.On("GenerateApiKey", ctx, uuid)}
 }
 
@@ -1127,7 +1127,7 @@ type MockClient_GetAnalysisTrail_Call struct {
 //   - projectUuid string
 //   - componentUuid string
 //   - vulnerabilityUuid string
-func (_e *MockClient_Expecter) GetAnalysisTrail(ctx interface{}, projectUuid interface{}, componentUuid interface{}, vulnerabilityUuid interface{}) *MockClient_GetAnalysisTrail_Call {
+func (_e *MockClient_Expecter) GetAnalysisTrail(ctx any, projectUuid any, componentUuid any, vulnerabilityUuid any) *MockClient_GetAnalysisTrail_Call {
 	return &MockClient_GetAnalysisTrail_Call{Call: _e.mock.On("GetAnalysisTrail", ctx, projectUuid, componentUuid, vulnerabilityUuid)}
 }
 
@@ -1204,7 +1204,7 @@ type MockClient_GetConfigProperties_Call struct {
 
 // GetConfigProperties is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) GetConfigProperties(ctx interface{}) *MockClient_GetConfigProperties_Call {
+func (_e *MockClient_Expecter) GetConfigProperties(ctx any) *MockClient_GetConfigProperties_Call {
 	return &MockClient_GetConfigProperties_Call{Call: _e.mock.On("GetConfigProperties", ctx)}
 }
 
@@ -1267,7 +1267,7 @@ type MockClient_GetCurrentProjectMetric_Call struct {
 // GetCurrentProjectMetric is a helper method to define mock.On call
 //   - ctx context.Context
 //   - projectUuid string
-func (_e *MockClient_Expecter) GetCurrentProjectMetric(ctx interface{}, projectUuid interface{}) *MockClient_GetCurrentProjectMetric_Call {
+func (_e *MockClient_Expecter) GetCurrentProjectMetric(ctx any, projectUuid any) *MockClient_GetCurrentProjectMetric_Call {
 	return &MockClient_GetCurrentProjectMetric_Call{Call: _e.mock.On("GetCurrentProjectMetric", ctx, projectUuid)}
 }
 
@@ -1334,7 +1334,7 @@ type MockClient_GetEcosystems_Call struct {
 
 // GetEcosystems is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) GetEcosystems(ctx interface{}) *MockClient_GetEcosystems_Call {
+func (_e *MockClient_Expecter) GetEcosystems(ctx any) *MockClient_GetEcosystems_Call {
 	return &MockClient_GetEcosystems_Call{Call: _e.mock.On("GetEcosystems", ctx)}
 }
 
@@ -1398,7 +1398,7 @@ type MockClient_GetFindings_Call struct {
 //   - ctx context.Context
 //   - projectUuid string
 //   - suppressed bool
-func (_e *MockClient_Expecter) GetFindings(ctx interface{}, projectUuid interface{}, suppressed interface{}) *MockClient_GetFindings_Call {
+func (_e *MockClient_Expecter) GetFindings(ctx any, projectUuid any, suppressed any) *MockClient_GetFindings_Call {
 	return &MockClient_GetFindings_Call{Call: _e.mock.On("GetFindings", ctx, projectUuid, suppressed)}
 }
 
@@ -1470,7 +1470,7 @@ type MockClient_GetOidcUsers_Call struct {
 
 // GetOidcUsers is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) GetOidcUsers(ctx interface{}) *MockClient_GetOidcUsers_Call {
+func (_e *MockClient_Expecter) GetOidcUsers(ctx any) *MockClient_GetOidcUsers_Call {
 	return &MockClient_GetOidcUsers_Call{Call: _e.mock.On("GetOidcUsers", ctx)}
 }
 
@@ -1534,7 +1534,7 @@ type MockClient_GetProject_Call struct {
 //   - ctx context.Context
 //   - name string
 //   - version string
-func (_e *MockClient_Expecter) GetProject(ctx interface{}, name interface{}, version interface{}) *MockClient_GetProject_Call {
+func (_e *MockClient_Expecter) GetProject(ctx any, name any, version any) *MockClient_GetProject_Call {
 	return &MockClient_GetProject_Call{Call: _e.mock.On("GetProject", ctx, name, version)}
 }
 
@@ -1607,7 +1607,7 @@ type MockClient_GetProjectById_Call struct {
 // GetProjectById is a helper method to define mock.On call
 //   - ctx context.Context
 //   - uuid string
-func (_e *MockClient_Expecter) GetProjectById(ctx interface{}, uuid interface{}) *MockClient_GetProjectById_Call {
+func (_e *MockClient_Expecter) GetProjectById(ctx any, uuid any) *MockClient_GetProjectById_Call {
 	return &MockClient_GetProjectById_Call{Call: _e.mock.On("GetProjectById", ctx, uuid)}
 }
 
@@ -1676,7 +1676,7 @@ type MockClient_GetProjectMetricsByDate_Call struct {
 //   - ctx context.Context
 //   - projectUuid string
 //   - date string
-func (_e *MockClient_Expecter) GetProjectMetricsByDate(ctx interface{}, projectUuid interface{}, date interface{}) *MockClient_GetProjectMetricsByDate_Call {
+func (_e *MockClient_Expecter) GetProjectMetricsByDate(ctx any, projectUuid any, date any) *MockClient_GetProjectMetricsByDate_Call {
 	return &MockClient_GetProjectMetricsByDate_Call{Call: _e.mock.On("GetProjectMetricsByDate", ctx, projectUuid, date)}
 }
 
@@ -1748,7 +1748,7 @@ type MockClient_GetProjects_Call struct {
 
 // GetProjects is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) GetProjects(ctx interface{}) *MockClient_GetProjects_Call {
+func (_e *MockClient_Expecter) GetProjects(ctx any) *MockClient_GetProjects_Call {
 	return &MockClient_GetProjects_Call{Call: _e.mock.On("GetProjects", ctx)}
 }
 
@@ -1812,7 +1812,7 @@ type MockClient_GetProjectsByPrefixedTag_Call struct {
 //   - ctx context.Context
 //   - prefix client.TagPrefix
 //   - tag string
-func (_e *MockClient_Expecter) GetProjectsByPrefixedTag(ctx interface{}, prefix interface{}, tag interface{}) *MockClient_GetProjectsByPrefixedTag_Call {
+func (_e *MockClient_Expecter) GetProjectsByPrefixedTag(ctx any, prefix any, tag any) *MockClient_GetProjectsByPrefixedTag_Call {
 	return &MockClient_GetProjectsByPrefixedTag_Call{Call: _e.mock.On("GetProjectsByPrefixedTag", ctx, prefix, tag)}
 }
 
@@ -1885,7 +1885,7 @@ type MockClient_GetProjectsByTag_Call struct {
 // GetProjectsByTag is a helper method to define mock.On call
 //   - ctx context.Context
 //   - tag string
-func (_e *MockClient_Expecter) GetProjectsByTag(ctx interface{}, tag interface{}) *MockClient_GetProjectsByTag_Call {
+func (_e *MockClient_Expecter) GetProjectsByTag(ctx any, tag any) *MockClient_GetProjectsByTag_Call {
 	return &MockClient_GetProjectsByTag_Call{Call: _e.mock.On("GetProjectsByTag", ctx, tag)}
 }
 
@@ -1953,7 +1953,7 @@ type MockClient_GetTeam_Call struct {
 // GetTeam is a helper method to define mock.On call
 //   - ctx context.Context
 //   - team string
-func (_e *MockClient_Expecter) GetTeam(ctx interface{}, team interface{}) *MockClient_GetTeam_Call {
+func (_e *MockClient_Expecter) GetTeam(ctx any, team any) *MockClient_GetTeam_Call {
 	return &MockClient_GetTeam_Call{Call: _e.mock.On("GetTeam", ctx, team)}
 }
 
@@ -2020,7 +2020,7 @@ type MockClient_GetTeams_Call struct {
 
 // GetTeams is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) GetTeams(ctx interface{}) *MockClient_GetTeams_Call {
+func (_e *MockClient_Expecter) GetTeams(ctx any) *MockClient_GetTeams_Call {
 	return &MockClient_GetTeams_Call{Call: _e.mock.On("GetTeams", ctx)}
 }
 
@@ -2082,7 +2082,7 @@ type MockClient_Headers_Call struct {
 
 // Headers is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) Headers(ctx interface{}) *MockClient_Headers_Call {
+func (_e *MockClient_Expecter) Headers(ctx any) *MockClient_Headers_Call {
 	return &MockClient_Headers_Call{Call: _e.mock.On("Headers", ctx)}
 }
 
@@ -2133,7 +2133,7 @@ type MockClient_PortfolioRefresh_Call struct {
 
 // PortfolioRefresh is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) PortfolioRefresh(ctx interface{}) *MockClient_PortfolioRefresh_Call {
+func (_e *MockClient_Expecter) PortfolioRefresh(ctx any) *MockClient_PortfolioRefresh_Call {
 	return &MockClient_PortfolioRefresh_Call{Call: _e.mock.On("PortfolioRefresh", ctx)}
 }
 
@@ -2185,7 +2185,7 @@ type MockClient_RecordAnalysis_Call struct {
 // RecordAnalysis is a helper method to define mock.On call
 //   - ctx context.Context
 //   - analysis *client.AnalysisRequest
-func (_e *MockClient_Expecter) RecordAnalysis(ctx interface{}, analysis interface{}) *MockClient_RecordAnalysis_Call {
+func (_e *MockClient_Expecter) RecordAnalysis(ctx any, analysis any) *MockClient_RecordAnalysis_Call {
 	return &MockClient_RecordAnalysis_Call{Call: _e.mock.On("RecordAnalysis", ctx, analysis)}
 }
 
@@ -2242,7 +2242,7 @@ type MockClient_RemoveAdminUsers_Call struct {
 // RemoveAdminUsers is a helper method to define mock.On call
 //   - ctx context.Context
 //   - users *client.AdminUsers
-func (_e *MockClient_Expecter) RemoveAdminUsers(ctx interface{}, users interface{}) *MockClient_RemoveAdminUsers_Call {
+func (_e *MockClient_Expecter) RemoveAdminUsers(ctx any, users any) *MockClient_RemoveAdminUsers_Call {
 	return &MockClient_RemoveAdminUsers_Call{Call: _e.mock.On("RemoveAdminUsers", ctx, users)}
 }
 
@@ -2299,7 +2299,7 @@ type MockClient_TriggerAnalysis_Call struct {
 // TriggerAnalysis is a helper method to define mock.On call
 //   - ctx context.Context
 //   - projectUuid string
-func (_e *MockClient_Expecter) TriggerAnalysis(ctx interface{}, projectUuid interface{}) *MockClient_TriggerAnalysis_Call {
+func (_e *MockClient_Expecter) TriggerAnalysis(ctx any, projectUuid any) *MockClient_TriggerAnalysis_Call {
 	return &MockClient_TriggerAnalysis_Call{Call: _e.mock.On("TriggerAnalysis", ctx, projectUuid)}
 }
 
@@ -2371,7 +2371,7 @@ type MockClient_UpdateProject_Call struct {
 //   - version string
 //   - group string
 //   - tags []string
-func (_e *MockClient_Expecter) UpdateProject(ctx interface{}, uuid interface{}, name interface{}, version interface{}, group interface{}, tags interface{}) *MockClient_UpdateProject_Call {
+func (_e *MockClient_Expecter) UpdateProject(ctx any, uuid any, name any, version any, group any, tags any) *MockClient_UpdateProject_Call {
 	return &MockClient_UpdateProject_Call{Call: _e.mock.On("UpdateProject", ctx, uuid, name, version, group, tags)}
 }
 
@@ -2451,7 +2451,7 @@ type MockClient_UpdateProjectInfo_Call struct {
 //   - version string
 //   - group string
 //   - tags []string
-func (_e *MockClient_Expecter) UpdateProjectInfo(ctx interface{}, uuid interface{}, version interface{}, group interface{}, tags interface{}) *MockClient_UpdateProjectInfo_Call {
+func (_e *MockClient_Expecter) UpdateProjectInfo(ctx any, uuid any, version any, group any, tags any) *MockClient_UpdateProjectInfo_Call {
 	return &MockClient_UpdateProjectInfo_Call{Call: _e.mock.On("UpdateProjectInfo", ctx, uuid, version, group, tags)}
 }
 
@@ -2527,7 +2527,7 @@ type MockClient_UploadProject_Call struct {
 //   - parentUuid string
 //   - autoCreate bool
 //   - bom []byte
-func (_e *MockClient_Expecter) UploadProject(ctx interface{}, name interface{}, version interface{}, parentUuid interface{}, autoCreate interface{}, bom interface{}) *MockClient_UploadProject_Call {
+func (_e *MockClient_Expecter) UploadProject(ctx any, name any, version any, parentUuid any, autoCreate any, bom any) *MockClient_UploadProject_Call {
 	return &MockClient_UploadProject_Call{Call: _e.mock.On("UploadProject", ctx, name, version, parentUuid, autoCreate, bom)}
 }
 
@@ -2612,7 +2612,7 @@ type MockClient_Version_Call struct {
 
 // Version is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockClient_Expecter) Version(ctx interface{}) *MockClient_Version_Call {
+func (_e *MockClient_Expecter) Version(ctx any) *MockClient_Version_Call {
 	return &MockClient_Version_Call{Call: _e.mock.On("Version", ctx)}
 }
 

@@ -79,9 +79,9 @@ type MockAccessControlClientService_GetResourcePermissionsWithParams_Call struct
 // GetResourcePermissionsWithParams is a helper method to define mock.On call
 //   - params *access_control.GetResourcePermissionsParams
 //   - opts ...access_control.ClientOption
-func (_e *MockAccessControlClientService_Expecter) GetResourcePermissionsWithParams(params interface{}, opts ...interface{}) *MockAccessControlClientService_GetResourcePermissionsWithParams_Call {
+func (_e *MockAccessControlClientService_Expecter) GetResourcePermissionsWithParams(params any, opts ...any) *MockAccessControlClientService_GetResourcePermissionsWithParams_Call {
 	return &MockAccessControlClientService_GetResourcePermissionsWithParams_Call{Call: _e.mock.On("GetResourcePermissionsWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockAccessControlClientService_GetResourcePermissionsWithParams_Call) Run(run func(params *access_control.GetResourcePermissionsParams, opts ...access_control.ClientOption)) *MockAccessControlClientService_GetResourcePermissionsWithParams_Call {
@@ -156,9 +156,9 @@ type MockAccessControlClientService_SetResourcePermissions_Call struct {
 // SetResourcePermissions is a helper method to define mock.On call
 //   - params *access_control.SetResourcePermissionsParams
 //   - opts ...access_control.ClientOption
-func (_e *MockAccessControlClientService_Expecter) SetResourcePermissions(params interface{}, opts ...interface{}) *MockAccessControlClientService_SetResourcePermissions_Call {
+func (_e *MockAccessControlClientService_Expecter) SetResourcePermissions(params any, opts ...any) *MockAccessControlClientService_SetResourcePermissions_Call {
 	return &MockAccessControlClientService_SetResourcePermissions_Call{Call: _e.mock.On("SetResourcePermissions",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockAccessControlClientService_SetResourcePermissions_Call) Run(run func(params *access_control.SetResourcePermissionsParams, opts ...access_control.ClientOption)) *MockAccessControlClientService_SetResourcePermissions_Call {

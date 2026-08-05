@@ -79,9 +79,9 @@ type MockTeamsClientService_AddTeamMemberWithParams_Call struct {
 // AddTeamMemberWithParams is a helper method to define mock.On call
 //   - params *teams.AddTeamMemberParams
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) AddTeamMemberWithParams(params interface{}, opts ...interface{}) *MockTeamsClientService_AddTeamMemberWithParams_Call {
+func (_e *MockTeamsClientService_Expecter) AddTeamMemberWithParams(params any, opts ...any) *MockTeamsClientService_AddTeamMemberWithParams_Call {
 	return &MockTeamsClientService_AddTeamMemberWithParams_Call{Call: _e.mock.On("AddTeamMemberWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_AddTeamMemberWithParams_Call) Run(run func(params *teams.AddTeamMemberParams, opts ...teams.ClientOption)) *MockTeamsClientService_AddTeamMemberWithParams_Call {
@@ -156,9 +156,9 @@ type MockTeamsClientService_CreateTeamWithParams_Call struct {
 // CreateTeamWithParams is a helper method to define mock.On call
 //   - params *teams.CreateTeamParams
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) CreateTeamWithParams(params interface{}, opts ...interface{}) *MockTeamsClientService_CreateTeamWithParams_Call {
+func (_e *MockTeamsClientService_Expecter) CreateTeamWithParams(params any, opts ...any) *MockTeamsClientService_CreateTeamWithParams_Call {
 	return &MockTeamsClientService_CreateTeamWithParams_Call{Call: _e.mock.On("CreateTeamWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_CreateTeamWithParams_Call) Run(run func(params *teams.CreateTeamParams, opts ...teams.ClientOption)) *MockTeamsClientService_CreateTeamWithParams_Call {
@@ -233,9 +233,9 @@ type MockTeamsClientService_DeleteTeamByID_Call struct {
 // DeleteTeamByID is a helper method to define mock.On call
 //   - teamID string
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) DeleteTeamByID(teamID interface{}, opts ...interface{}) *MockTeamsClientService_DeleteTeamByID_Call {
+func (_e *MockTeamsClientService_Expecter) DeleteTeamByID(teamID any, opts ...any) *MockTeamsClientService_DeleteTeamByID_Call {
 	return &MockTeamsClientService_DeleteTeamByID_Call{Call: _e.mock.On("DeleteTeamByID",
-		append([]interface{}{teamID}, opts...)...)}
+		append([]any{teamID}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_DeleteTeamByID_Call) Run(run func(teamID string, opts ...teams.ClientOption)) *MockTeamsClientService_DeleteTeamByID_Call {
@@ -310,9 +310,9 @@ type MockTeamsClientService_GetTeamMembersWithParams_Call struct {
 // GetTeamMembersWithParams is a helper method to define mock.On call
 //   - params *teams.GetTeamMembersParams
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) GetTeamMembersWithParams(params interface{}, opts ...interface{}) *MockTeamsClientService_GetTeamMembersWithParams_Call {
+func (_e *MockTeamsClientService_Expecter) GetTeamMembersWithParams(params any, opts ...any) *MockTeamsClientService_GetTeamMembersWithParams_Call {
 	return &MockTeamsClientService_GetTeamMembersWithParams_Call{Call: _e.mock.On("GetTeamMembersWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_GetTeamMembersWithParams_Call) Run(run func(params *teams.GetTeamMembersParams, opts ...teams.ClientOption)) *MockTeamsClientService_GetTeamMembersWithParams_Call {
@@ -387,9 +387,9 @@ type MockTeamsClientService_RemoveTeamMemberWithParams_Call struct {
 // RemoveTeamMemberWithParams is a helper method to define mock.On call
 //   - params *teams.RemoveTeamMemberParams
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) RemoveTeamMemberWithParams(params interface{}, opts ...interface{}) *MockTeamsClientService_RemoveTeamMemberWithParams_Call {
+func (_e *MockTeamsClientService_Expecter) RemoveTeamMemberWithParams(params any, opts ...any) *MockTeamsClientService_RemoveTeamMemberWithParams_Call {
 	return &MockTeamsClientService_RemoveTeamMemberWithParams_Call{Call: _e.mock.On("RemoveTeamMemberWithParams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_RemoveTeamMemberWithParams_Call) Run(run func(params *teams.RemoveTeamMemberParams, opts ...teams.ClientOption)) *MockTeamsClientService_RemoveTeamMemberWithParams_Call {
@@ -464,9 +464,9 @@ type MockTeamsClientService_SearchTeams_Call struct {
 // SearchTeams is a helper method to define mock.On call
 //   - params *teams.SearchTeamsParams
 //   - opts ...teams.ClientOption
-func (_e *MockTeamsClientService_Expecter) SearchTeams(params interface{}, opts ...interface{}) *MockTeamsClientService_SearchTeams_Call {
+func (_e *MockTeamsClientService_Expecter) SearchTeams(params any, opts ...any) *MockTeamsClientService_SearchTeams_Call {
 	return &MockTeamsClientService_SearchTeams_Call{Call: _e.mock.On("SearchTeams",
-		append([]interface{}{params}, opts...)...)}
+		append([]any{params}, opts...)...)}
 }
 
 func (_c *MockTeamsClientService_SearchTeams_Call) Run(run func(params *teams.SearchTeamsParams, opts ...teams.ClientOption)) *MockTeamsClientService_SearchTeams_Call {

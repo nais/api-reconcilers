@@ -114,7 +114,7 @@ type MockReconciler_Delete_Call struct {
 //   - client *apiclient.APIClient
 //   - naisTeam *protoapi.Team
 //   - log logrus.FieldLogger
-func (_e *MockReconciler_Expecter) Delete(ctx interface{}, client interface{}, naisTeam interface{}, log interface{}) *MockReconciler_Delete_Call {
+func (_e *MockReconciler_Expecter) Delete(ctx any, client any, naisTeam any, log any) *MockReconciler_Delete_Call {
 	return &MockReconciler_Delete_Call{Call: _e.mock.On("Delete", ctx, client, naisTeam, log)}
 }
 
@@ -227,7 +227,7 @@ type MockReconciler_Reconcile_Call struct {
 //   - client *apiclient.APIClient
 //   - naisTeam *protoapi.Team
 //   - log logrus.FieldLogger
-func (_e *MockReconciler_Expecter) Reconcile(ctx interface{}, client interface{}, naisTeam interface{}, log interface{}) *MockReconciler_Reconcile_Call {
+func (_e *MockReconciler_Expecter) Reconcile(ctx any, client any, naisTeam any, log any) *MockReconciler_Reconcile_Call {
 	return &MockReconciler_Reconcile_Call{Call: _e.mock.On("Reconcile", ctx, client, naisTeam, log)}
 }
 

@@ -86,7 +86,7 @@ type MockTeamsService_AddTeamMembershipBySlug_Call struct {
 //   - slug string
 //   - user string
 //   - opts *github.TeamAddTeamMembershipOptions
-func (_e *MockTeamsService_Expecter) AddTeamMembershipBySlug(ctx interface{}, org interface{}, slug interface{}, user interface{}, opts interface{}) *MockTeamsService_AddTeamMembershipBySlug_Call {
+func (_e *MockTeamsService_Expecter) AddTeamMembershipBySlug(ctx any, org any, slug any, user any, opts any) *MockTeamsService_AddTeamMembershipBySlug_Call {
 	return &MockTeamsService_AddTeamMembershipBySlug_Call{Call: _e.mock.On("AddTeamMembershipBySlug", ctx, org, slug, user, opts)}
 }
 
@@ -179,7 +179,7 @@ type MockTeamsService_CreateOrUpdateIDPGroupConnectionsBySlug_Call struct {
 //   - org string
 //   - team string
 //   - opts github.IDPGroupList
-func (_e *MockTeamsService_Expecter) CreateOrUpdateIDPGroupConnectionsBySlug(ctx interface{}, org interface{}, team interface{}, opts interface{}) *MockTeamsService_CreateOrUpdateIDPGroupConnectionsBySlug_Call {
+func (_e *MockTeamsService_Expecter) CreateOrUpdateIDPGroupConnectionsBySlug(ctx any, org any, team any, opts any) *MockTeamsService_CreateOrUpdateIDPGroupConnectionsBySlug_Call {
 	return &MockTeamsService_CreateOrUpdateIDPGroupConnectionsBySlug_Call{Call: _e.mock.On("CreateOrUpdateIDPGroupConnectionsBySlug", ctx, org, team, opts)}
 }
 
@@ -266,7 +266,7 @@ type MockTeamsService_CreateTeam_Call struct {
 //   - ctx context.Context
 //   - org string
 //   - team github.NewTeam
-func (_e *MockTeamsService_Expecter) CreateTeam(ctx interface{}, org interface{}, team interface{}) *MockTeamsService_CreateTeam_Call {
+func (_e *MockTeamsService_Expecter) CreateTeam(ctx any, org any, team any) *MockTeamsService_CreateTeam_Call {
 	return &MockTeamsService_CreateTeam_Call{Call: _e.mock.On("CreateTeam", ctx, org, team)}
 }
 
@@ -340,7 +340,7 @@ type MockTeamsService_DeleteTeamBySlug_Call struct {
 //   - ctx context.Context
 //   - org string
 //   - slug string
-func (_e *MockTeamsService_Expecter) DeleteTeamBySlug(ctx interface{}, org interface{}, slug interface{}) *MockTeamsService_DeleteTeamBySlug_Call {
+func (_e *MockTeamsService_Expecter) DeleteTeamBySlug(ctx any, org any, slug any) *MockTeamsService_DeleteTeamBySlug_Call {
 	return &MockTeamsService_DeleteTeamBySlug_Call{Call: _e.mock.On("DeleteTeamBySlug", ctx, org, slug)}
 }
 
@@ -424,7 +424,7 @@ type MockTeamsService_EditTeamBySlug_Call struct {
 //   - slug string
 //   - team github.NewTeam
 //   - removeParent bool
-func (_e *MockTeamsService_Expecter) EditTeamBySlug(ctx interface{}, org interface{}, slug interface{}, team interface{}, removeParent interface{}) *MockTeamsService_EditTeamBySlug_Call {
+func (_e *MockTeamsService_Expecter) EditTeamBySlug(ctx any, org any, slug any, team any, removeParent any) *MockTeamsService_EditTeamBySlug_Call {
 	return &MockTeamsService_EditTeamBySlug_Call{Call: _e.mock.On("EditTeamBySlug", ctx, org, slug, team, removeParent)}
 }
 
@@ -516,7 +516,7 @@ type MockTeamsService_GetTeamBySlug_Call struct {
 //   - ctx context.Context
 //   - org string
 //   - slug string
-func (_e *MockTeamsService_Expecter) GetTeamBySlug(ctx interface{}, org interface{}, slug interface{}) *MockTeamsService_GetTeamBySlug_Call {
+func (_e *MockTeamsService_Expecter) GetTeamBySlug(ctx any, org any, slug any) *MockTeamsService_GetTeamBySlug_Call {
 	return &MockTeamsService_GetTeamBySlug_Call{Call: _e.mock.On("GetTeamBySlug", ctx, org, slug)}
 }
 
@@ -599,7 +599,7 @@ type MockTeamsService_ListTeamMembersBySlug_Call struct {
 //   - org string
 //   - slug string
 //   - opts *github.TeamListTeamMembersOptions
-func (_e *MockTeamsService_Expecter) ListTeamMembersBySlug(ctx interface{}, org interface{}, slug interface{}, opts interface{}) *MockTeamsService_ListTeamMembersBySlug_Call {
+func (_e *MockTeamsService_Expecter) ListTeamMembersBySlug(ctx any, org any, slug any, opts any) *MockTeamsService_ListTeamMembersBySlug_Call {
 	return &MockTeamsService_ListTeamMembersBySlug_Call{Call: _e.mock.On("ListTeamMembersBySlug", ctx, org, slug, opts)}
 }
 
@@ -687,7 +687,7 @@ type MockTeamsService_ListTeamReposBySlug_Call struct {
 //   - org string
 //   - slug string
 //   - opts *github.ListOptions
-func (_e *MockTeamsService_Expecter) ListTeamReposBySlug(ctx interface{}, org interface{}, slug interface{}, opts interface{}) *MockTeamsService_ListTeamReposBySlug_Call {
+func (_e *MockTeamsService_Expecter) ListTeamReposBySlug(ctx any, org any, slug any, opts any) *MockTeamsService_ListTeamReposBySlug_Call {
 	return &MockTeamsService_ListTeamReposBySlug_Call{Call: _e.mock.On("ListTeamReposBySlug", ctx, org, slug, opts)}
 }
 
@@ -767,7 +767,7 @@ type MockTeamsService_RemoveTeamMembershipBySlug_Call struct {
 //   - org string
 //   - slug string
 //   - user string
-func (_e *MockTeamsService_Expecter) RemoveTeamMembershipBySlug(ctx interface{}, org interface{}, slug interface{}, user interface{}) *MockTeamsService_RemoveTeamMembershipBySlug_Call {
+func (_e *MockTeamsService_Expecter) RemoveTeamMembershipBySlug(ctx any, org any, slug any, user any) *MockTeamsService_RemoveTeamMembershipBySlug_Call {
 	return &MockTeamsService_RemoveTeamMembershipBySlug_Call{Call: _e.mock.On("RemoveTeamMembershipBySlug", ctx, org, slug, user)}
 }
 

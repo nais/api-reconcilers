@@ -64,7 +64,7 @@ type MockGraphClient_Query_Call struct {
 //   - ctx context.Context
 //   - q any
 //   - variables map[string]any
-func (_e *MockGraphClient_Expecter) Query(ctx interface{}, q interface{}, variables interface{}) *MockGraphClient_Query_Call {
+func (_e *MockGraphClient_Expecter) Query(ctx any, q any, variables any) *MockGraphClient_Query_Call {
 	return &MockGraphClient_Query_Call{Call: _e.mock.On("Query", ctx, q, variables)}
 }
 

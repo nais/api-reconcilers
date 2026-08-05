@@ -66,7 +66,7 @@ type MockClient_AddMemberToGroup_Call struct {
 //   - ctx context.Context
 //   - grp *Group
 //   - member *Member
-func (_e *MockClient_Expecter) AddMemberToGroup(ctx interface{}, grp interface{}, member interface{}) *MockClient_AddMemberToGroup_Call {
+func (_e *MockClient_Expecter) AddMemberToGroup(ctx any, grp any, member any) *MockClient_AddMemberToGroup_Call {
 	return &MockClient_AddMemberToGroup_Call{Call: _e.mock.On("AddMemberToGroup", ctx, grp, member)}
 }
 
@@ -139,7 +139,7 @@ type MockClient_CreateGroup_Call struct {
 // CreateGroup is a helper method to define mock.On call
 //   - ctx context.Context
 //   - grp *Group
-func (_e *MockClient_Expecter) CreateGroup(ctx interface{}, grp interface{}) *MockClient_CreateGroup_Call {
+func (_e *MockClient_Expecter) CreateGroup(ctx any, grp any) *MockClient_CreateGroup_Call {
 	return &MockClient_CreateGroup_Call{Call: _e.mock.On("CreateGroup", ctx, grp)}
 }
 
@@ -196,7 +196,7 @@ type MockClient_DeleteGroup_Call struct {
 // DeleteGroup is a helper method to define mock.On call
 //   - ctx context.Context
 //   - grpID uuid.UUID
-func (_e *MockClient_Expecter) DeleteGroup(ctx interface{}, grpID interface{}) *MockClient_DeleteGroup_Call {
+func (_e *MockClient_Expecter) DeleteGroup(ctx any, grpID any) *MockClient_DeleteGroup_Call {
 	return &MockClient_DeleteGroup_Call{Call: _e.mock.On("DeleteGroup", ctx, grpID)}
 }
 
@@ -264,7 +264,7 @@ type MockClient_GetGroupById_Call struct {
 // GetGroupById is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id uuid.UUID
-func (_e *MockClient_Expecter) GetGroupById(ctx interface{}, id interface{}) *MockClient_GetGroupById_Call {
+func (_e *MockClient_Expecter) GetGroupById(ctx any, id any) *MockClient_GetGroupById_Call {
 	return &MockClient_GetGroupById_Call{Call: _e.mock.On("GetGroupById", ctx, id)}
 }
 
@@ -339,7 +339,7 @@ type MockClient_GetOrCreateGroup_Call struct {
 //   - ctx context.Context
 //   - naisTeam *protoapi.Team
 //   - groupName string
-func (_e *MockClient_Expecter) GetOrCreateGroup(ctx interface{}, naisTeam interface{}, groupName interface{}) *MockClient_GetOrCreateGroup_Call {
+func (_e *MockClient_Expecter) GetOrCreateGroup(ctx any, naisTeam any, groupName any) *MockClient_GetOrCreateGroup_Call {
 	return &MockClient_GetOrCreateGroup_Call{Call: _e.mock.On("GetOrCreateGroup", ctx, naisTeam, groupName)}
 }
 
@@ -412,7 +412,7 @@ type MockClient_GetUser_Call struct {
 // GetUser is a helper method to define mock.On call
 //   - ctx context.Context
 //   - email string
-func (_e *MockClient_Expecter) GetUser(ctx interface{}, email interface{}) *MockClient_GetUser_Call {
+func (_e *MockClient_Expecter) GetUser(ctx any, email any) *MockClient_GetUser_Call {
 	return &MockClient_GetUser_Call{Call: _e.mock.On("GetUser", ctx, email)}
 }
 
@@ -480,7 +480,7 @@ type MockClient_ListGroupMembers_Call struct {
 // ListGroupMembers is a helper method to define mock.On call
 //   - ctx context.Context
 //   - grp *Group
-func (_e *MockClient_Expecter) ListGroupMembers(ctx interface{}, grp interface{}) *MockClient_ListGroupMembers_Call {
+func (_e *MockClient_Expecter) ListGroupMembers(ctx any, grp any) *MockClient_ListGroupMembers_Call {
 	return &MockClient_ListGroupMembers_Call{Call: _e.mock.On("ListGroupMembers", ctx, grp)}
 }
 
@@ -548,7 +548,7 @@ type MockClient_ListGroupOwners_Call struct {
 // ListGroupOwners is a helper method to define mock.On call
 //   - ctx context.Context
 //   - grp *Group
-func (_e *MockClient_Expecter) ListGroupOwners(ctx interface{}, grp interface{}) *MockClient_ListGroupOwners_Call {
+func (_e *MockClient_Expecter) ListGroupOwners(ctx any, grp any) *MockClient_ListGroupOwners_Call {
 	return &MockClient_ListGroupOwners_Call{Call: _e.mock.On("ListGroupOwners", ctx, grp)}
 }
 
@@ -606,7 +606,7 @@ type MockClient_RemoveMemberFromGroup_Call struct {
 //   - ctx context.Context
 //   - grp *Group
 //   - member *Member
-func (_e *MockClient_Expecter) RemoveMemberFromGroup(ctx interface{}, grp interface{}, member interface{}) *MockClient_RemoveMemberFromGroup_Call {
+func (_e *MockClient_Expecter) RemoveMemberFromGroup(ctx any, grp any, member any) *MockClient_RemoveMemberFromGroup_Call {
 	return &MockClient_RemoveMemberFromGroup_Call{Call: _e.mock.On("RemoveMemberFromGroup", ctx, grp, member)}
 }
 
