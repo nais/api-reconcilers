@@ -118,6 +118,7 @@ func (r *googleGcpReconciler) createCNRMRole(ctx context.Context, projectId stri
 			"storage.buckets.setIamPolicy",
 			"storage.buckets.update",
 			"storage.buckets.delete",
+			"storage.objects.list",
 			"cloudsql.sslCerts.create",
 			"cloudsql.sslCerts.delete",
 			"cloudsql.sslCerts.get",
