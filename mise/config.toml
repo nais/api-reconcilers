@@ -2,5 +2,5 @@
 pin = true
 
 [tools]
-go = "1.26.5"
+go = "1.26.8"
 helm = "3.17.1"
