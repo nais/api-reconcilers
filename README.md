@@ -41,7 +41,7 @@ Run `mise run test` to run the tests.
 2. Create a kind cluster:
 
 ```shell
-kind create cluster 
+kind create cluster
 ```
 
 3. Apply required cluster resources:
@@ -66,5 +66,9 @@ The project contains a set of reconcilers which are run on schedule or triggered
 A manager is responsible for running the reconcilers and handling the errors.
 
 The manager will listen for pubsub events and trigger the correct reconcilers when needed.
+
+Failed team reconciliations and deletions are retried in the background with exponential backoff.
+Workers continue processing other teams while retries are delayed. A successful attempt resets the backoff.
+The retry queue is in memory; the regular 30-minute full sync reschedules teams after a restart.
 
 All state and data is stored in NAIS api, and the communication with the API is done through GRPC.

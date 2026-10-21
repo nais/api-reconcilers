@@ -35,9 +35,7 @@ type Manager struct {
 	reconcilersToEnable []string
 	log                 logrus.FieldLogger
 	pubsubSubscription  *pubsub.Subscriber
-	syncQueueChan       <-chan ReconcileRequest
 	syncQueue           Queue
-	inFlight            InFlight
 
 	metricReconcilerTime metric.Int64Histogram
 	metricReconcileTeam  metric.Int64Histogram
@@ -68,15 +66,12 @@ func NewManager(ctx context.Context, c *apiclient.APIClient, enableDuringRegistr
 		log.WithField("duration", time.Since(start).String()).Debug("subscription created")
 	}
 
-	queue, channel := NewQueue()
 	return &Manager{
 		apiclient:            c,
 		log:                  log,
 		metricReconcilerTime: recTime,
 		metricReconcileTeam:  teamTime,
-		syncQueue:            queue,
-		syncQueueChan:        channel,
-		inFlight:             NewInFlight(),
+		syncQueue:            NewQueue(),
 		reconcilersToEnable:  enableDuringRegistration,
 		pubsubSubscription:   pubsubSubscription,
 	}
@@ -190,16 +185,28 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 // Run will pull an entry from the queue and start a reconcile process. This function will block until the context is
 // canceled.
 func (m *Manager) Run(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
+	stop := context.AfterFunc(ctx, m.syncQueue.Close)
+	defer stop()
+	for ctx.Err() == nil {
+		input, shutdown := m.syncQueue.Get()
+		if shutdown {
 			return
-		case input, ok := <-m.syncQueueChan:
-			if !ok {
-				return
-			}
-			m.syncTeam(ctx, input)
 		}
+		if ctx.Err() != nil {
+			m.syncQueue.Done(input)
+			return
+		}
+		if m.syncTeam(ctx, input) {
+			m.syncQueue.Forget(input)
+		} else if ctx.Err() == nil {
+			delay, err := m.syncQueue.Retry(input)
+			if err != nil {
+				m.log.WithError(err).WithField("team", input.TeamSlug).Error("failed while scheduling team retry")
+			} else {
+				m.log.WithField("team", input.TeamSlug).WithField("delay", delay).Info("scheduled team retry")
+			}
+		}
+		m.syncQueue.Done(input)
 	}
 }
 
@@ -224,35 +231,19 @@ func (m *Manager) Close() {
 	m.syncQueue.Close()
 }
 
-// syncTeam will mark the team as "in flight" and start the reconciliation process. If the team is already in flight, it
-// will be added to the back of the queue. Based on the input, the team will either be deleted or reconciled.
-func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) {
+// syncTeam returns whether reconciliation or deletion completed without needing a retry.
+func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) bool {
 	log := m.log.WithField("team", req.TeamSlug)
-
-	if !m.inFlight.Set(req.TeamSlug) {
-		log.Info("already in flight - adding to back of queue")
-		time.Sleep(10 * time.Second)
-		if err := m.syncQueue.Add(req); err != nil {
-			log.WithError(err).Error("failed while re-queueing team that is in flight")
-		}
-		return
-	}
-
-	defer m.inFlight.Remove(req.TeamSlug)
 
 	resp, err := m.apiclient.Teams().Get(ctx, &protoapi.GetTeamRequest{Slug: req.TeamSlug})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			log.Info("team not found, team will not be requeued")
-			return
+			return true
 		}
 
-		log.WithError(err).Error("error while getting team, requeuing")
-		if err := m.syncQueue.Add(req); err != nil {
-			log.WithError(err).Error("failed while requeuing team")
-		}
-
-		return
+		log.WithError(err).Error("error while getting team, retrying later")
+		return false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, reconcilerTimeout)
@@ -261,15 +252,10 @@ func (m *Manager) syncTeam(ctx context.Context, req ReconcileRequest) {
 	reconcilers, err := m.enabledReconcilers(ctx)
 	if err != nil {
 		log.WithError(err).Error("unable to fetch reconcilers")
-		return
+		return false
 	}
 
-	team := resp.Team
-	if team.DeleteKeyConfirmedAt != nil {
-		m.deleteTeam(ctx, reconcilers, team, req)
-	} else {
-		m.reconcileTeam(ctx, reconcilers, team, req)
-	}
+	return m.runTeamReconcilers(ctx, reconcilers, resp.Team, req)
 }
 
 // enabledReconcilers will fetch all reconcilers from the NAIS API, and return the ones we have registered locally in a
@@ -291,100 +277,7 @@ func (m *Manager) enabledReconcilers(ctx context.Context) ([]Reconciler, error) 
 	return ret, nil
 }
 
-// deleteTeam will pass the team through to all enabled reconcilers, effectively deleting the team from all configured
-// external systems.
-func (m *Manager) deleteTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, req ReconcileRequest) {
-	teamStart := time.Now()
-	log := m.log.WithField("team", req.TeamSlug)
-
-	if req.CorrelationID != "" {
-		log = log.WithField("correlation_id", req.CorrelationID)
-		ctx = context.WithValue(ctx, ctxCorrelationID, req.CorrelationID)
-	}
-
-	if req.TraceID != "" {
-		log = log.WithField("trace_id", req.TraceID)
-	}
-
-	log.WithField("time", teamStart).Debugf("start team deletion process")
-	successfulDelete := true
-
-	// Do delete in reverse order
-	reversed := slices.Clone(reconcilers)
-	slices.Reverse(reversed)
-	for _, r := range reversed {
-		log := log.WithField("reconciler", r.Name())
-		start := time.Now()
-		hasError := false
-
-		log.WithField("time", start).Debugf("start delete")
-		if err := r.Delete(ctx, m.apiclient, naisTeam, log); err != nil {
-			successfulDelete = false
-			hasError = true
-
-			log.WithError(err).Errorf("error during team deletion")
-
-			req := &protoapi.SetReconcilerErrorForTeamRequest{
-				CorrelationId:  req.CorrelationID,
-				ReconcilerName: r.Name(),
-				ErrorMessage:   err.Error(),
-				TeamSlug:       req.TeamSlug,
-			}
-			if _, err := m.apiclient.Reconcilers().SetReconcilerErrorForTeam(ctx, req); err != nil {
-				log.WithError(err).Errorf("error while adding deletion error")
-			}
-		} else {
-			req := &protoapi.RemoveReconcilerErrorForTeamRequest{
-				ReconcilerName: r.Name(),
-				TeamSlug:       req.TeamSlug,
-			}
-			if _, err := m.apiclient.Reconcilers().RemoveReconcilerErrorForTeam(ctx, req); err != nil {
-				log.WithError(err).Errorf("error while removing deletion error")
-			}
-		}
-
-		log.
-			WithField("duration", time.Since(start)).
-			WithField("has_error", hasError).
-			Debugf("finished delete")
-
-		m.metricReconcilerTime.Record(
-			ctx,
-			time.Since(start).Milliseconds(),
-			metric.WithAttributes(
-				attribute.String("reconciler", r.Name()),
-				attribute.Bool("error", hasError),
-				attribute.Bool("delete", true),
-			),
-		)
-	}
-
-	if successfulDelete {
-		req := &protoapi.DeleteTeamRequest{
-			Slug: req.TeamSlug,
-		}
-		if _, err := m.apiclient.Teams().Delete(ctx, req); err != nil {
-			log.WithError(err).Errorf("error while deleting team")
-		}
-	}
-
-	log.
-		WithField("duration", time.Since(teamStart)).
-		WithField("success", successfulDelete).
-		Debugf("finished team deletion process")
-
-	m.metricReconcileTeam.Record(
-		ctx,
-		time.Since(teamStart).Milliseconds(),
-		metric.WithAttributes(
-			attribute.Bool("delete", true),
-		),
-	)
-}
-
-// reconcileTeam will pass the team through to all enabled reconcilers, effectively synchronizing the team to all
-// configured external systems.
-func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input ReconcileRequest) {
+func (m *Manager) runTeamReconcilers(ctx context.Context, reconcilers []Reconciler, naisTeam *protoapi.Team, input ReconcileRequest) bool {
 	teamStart := time.Now()
 	log := m.log.WithField("team", input.TeamSlug)
 
@@ -397,6 +290,16 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 		log = log.WithField("trace_id", input.TraceID)
 	}
 
+	action, process := "reconcile", "reconciliation"
+	var teamAttributes []attribute.KeyValue
+	deleting := naisTeam.DeleteKeyConfirmedAt != nil
+	if deleting {
+		action, process = "delete", "deletion"
+		reconcilers = slices.Clone(reconcilers)
+		slices.Reverse(reconcilers)
+		teamAttributes = append(teamAttributes, attribute.Bool("delete", true))
+	}
+
 	reconcilerNames := make([]string, len(reconcilers))
 	for i, r := range reconcilers {
 		reconcilerNames[i] = r.Name()
@@ -404,20 +307,22 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 	log.
 		WithField("time", teamStart).
 		WithField("reconcilers", reconcilerNames).
-		Debugf("start team reconciliation process")
+		Debugf("start team %s process", process)
 
-	successfulSync := true
+	success := true
 	for _, r := range reconcilers {
 		log := log.WithField("reconciler", r.Name())
 		start := time.Now()
-		hasError := false
+		operation := r.Reconcile
+		if deleting {
+			operation = r.Delete
+		}
 
-		log.WithField("time", start).Debugf("start reconcile")
-		if err := r.Reconcile(ctx, m.apiclient, naisTeam, log); err != nil {
-			successfulSync = false
-			hasError = true
-
-			log.WithError(err).Errorf("error during team reconciler")
+		log.WithField("time", start).Debugf("start %s", action)
+		err := operation(ctx, m.apiclient, naisTeam, log)
+		if err != nil {
+			success = false
+			log.WithError(err).Errorf("error during team %s", process)
 
 			req := &protoapi.SetReconcilerErrorForTeamRequest{
 				CorrelationId:  input.CorrelationID,
@@ -434,40 +339,49 @@ func (m *Manager) reconcileTeam(ctx context.Context, reconcilers []Reconciler, n
 				TeamSlug:       input.TeamSlug,
 			}
 			if _, err := m.apiclient.Reconcilers().RemoveReconcilerErrorForTeam(ctx, req); err != nil {
+				success = false
 				log.WithError(err).Errorf("error while removing reconciler error")
 			}
 		}
 
 		log.
 			WithField("duration", time.Since(start)).
-			WithField("has_error", hasError).
-			Debugf("finished reconcile")
+			WithField("has_error", err != nil).
+			Debugf("finished %s", action)
 
+		attributes := append([]attribute.KeyValue{
+			attribute.String("reconciler", r.Name()),
+			attribute.Bool("error", err != nil),
+		}, teamAttributes...)
 		m.metricReconcilerTime.Record(
 			ctx,
 			time.Since(start).Milliseconds(),
-			metric.WithAttributes(
-				attribute.String("reconciler", r.Name()),
-				attribute.Bool("error", hasError),
-			),
+			metric.WithAttributes(attributes...),
 		)
 	}
 
-	if successfulSync {
+	if success && deleting {
+		if _, err := m.apiclient.Teams().Delete(ctx, &protoapi.DeleteTeamRequest{Slug: input.TeamSlug}); err != nil {
+			success = false
+			log.WithError(err).Error("error while deleting team")
+		}
+	} else if success {
 		req := &protoapi.SuccessfulTeamSyncRequest{
 			TeamSlug: input.TeamSlug,
 		}
 		if _, err := m.apiclient.Reconcilers().SuccessfulTeamSync(ctx, req); err != nil {
+			success = false
 			log.WithError(err).Errorf("error while setting successful sync for team")
 		}
 	}
 
 	log.
 		WithField("duration", time.Since(teamStart)).
-		WithField("success", successfulSync).
-		Debugf("finished team reconciliation process")
+		WithField("success", success).
+		Debugf("finished team %s process", process)
 
-	m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds())
+	m.metricReconcileTeam.Record(ctx, time.Since(teamStart).Milliseconds(), metric.WithAttributes(teamAttributes...))
+	return success
 }
 
 // scheduleAllTeams will fetch all teams from the NAIS API and put them on the reconciler queue
