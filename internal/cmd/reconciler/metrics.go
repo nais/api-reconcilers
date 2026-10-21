@@ -3,13 +3,12 @@ package reconciler
 import (
 	"fmt"
 
+	promClient "github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
-
-	promClient "github.com/prometheus/client_golang/prometheus"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 )
 
 func newResource() (*resource.Resource, error) {
