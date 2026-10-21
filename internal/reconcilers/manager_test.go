@@ -3,6 +3,7 @@ package reconcilers
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -13,9 +14,7 @@ import (
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
 	logrustest "github.com/sirupsen/logrus/hooks/test"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -88,18 +87,39 @@ func managerTestClient(t *testing.T, servers *apiclient.MockServers) *apiclient.
 			return err
 		}),
 	)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, client.Close()) })
+	if err != nil {
+		t.Fatalf("create API client: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close API client: %v", err)
+		}
+	})
 	return client
+}
+
+func managerTestServers(t *testing.T) *apiclient.MockServers {
+	t.Helper()
+	client, servers := apiclient.NewMockClient(t)
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("close mock API client: %v", err)
+		}
+	})
+	return servers
 }
 
 func newManagerTest(t *testing.T, servers *apiclient.MockServers, reconcilers ...Reconciler) *Manager {
 	t.Helper()
 	meter := noop.NewMeterProvider().Meter("manager-test")
 	reconcilerTime, err := meter.Int64Histogram("reconciler")
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("create reconciler histogram: %v", err)
+	}
 	teamTime, err := meter.Int64Histogram("team")
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("create team histogram: %v", err)
+	}
 	log, _ := logrustest.NewNullLogger()
 	m := &Manager{
 		apiclient:            managerTestClient(t, servers),
@@ -158,8 +178,7 @@ func TestManagerReconcilerOrder(t *testing.T) {
 				name += " with failure"
 			}
 			t.Run(name, func(t *testing.T) {
-				unused, servers := apiclient.NewMockClient(t)
-				t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+				servers := managerTestServers(t)
 				team := &protoapi.Team{Slug: "ordered"}
 				wantOrder := []string{"first", "second"}
 				if deleting {
@@ -218,17 +237,22 @@ func TestManagerReconcilerOrder(t *testing.T) {
 							Return(&protoapi.SuccessfulTeamSyncResponse{}, nil).Once()
 					}
 				}
-				assert.Equal(t, !failing, m.syncTeam(t.Context(), ReconcileRequest{TeamSlug: team.Slug, CorrelationID: "correlation"}))
-				assert.Equal(t, wantOrder, order)
-				assert.Equal(t, "first", m.reconcilers[0].Name(), "deletion must not mutate the registered order")
+				if got := m.syncTeam(t.Context(), ReconcileRequest{TeamSlug: team.Slug, CorrelationID: "correlation"}); got != !failing {
+					t.Errorf("syncTeam() = %v, want %v", got, !failing)
+				}
+				if !slices.Equal(order, wantOrder) {
+					t.Errorf("reconciler order = %v, want %v", order, wantOrder)
+				}
+				if got := m.reconcilers[0].Name(); got != "first" {
+					t.Errorf("registered order changed: first reconciler = %q, want first", got)
+				}
 			})
 		}
 	}
 }
 
 func TestManagerWorkersDoNotProcessSameTeamConcurrently(t *testing.T) {
-	unused, servers := apiclient.NewMockClient(t)
-	t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+	servers := managerTestServers(t)
 	synctest.Test(t, func(t *testing.T) {
 		var attempts, ready atomic.Int32
 		release := make(chan struct{})
@@ -254,26 +278,39 @@ func TestManagerWorkersDoNotProcessSameTeamConcurrently(t *testing.T) {
 		expectManagerReconcilers(servers, 3)
 		expectManagerSuccess(servers, "busy", 2)
 		expectManagerSuccess(servers, "ready", 1)
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "busy"}))
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "busy"}); err != nil {
+			t.Fatal(err)
+		}
 		runManagerTest(t, m)
 		runManagerTest(t, m)
 		synctest.Wait()
-		require.Equal(t, int32(1), attempts.Load())
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "busy", CorrelationID: "new-event"}))
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "ready"}))
+		if got := attempts.Load(); got != 1 {
+			t.Fatalf("attempts = %d, want 1", got)
+		}
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "busy", CorrelationID: "new-event"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "ready"}); err != nil {
+			t.Fatal(err)
+		}
 		synctest.Wait()
-		assert.Equal(t, int32(1), ready.Load(), "other worker must process a different team")
-		assert.Equal(t, int32(1), attempts.Load(), "updated team must wait for its active attempt")
+		if got := ready.Load(); got != 1 {
+			t.Errorf("other team's attempts = %d, want 1 while the busy team is active", got)
+		}
+		if got := attempts.Load(); got != 1 {
+			t.Errorf("busy team's attempts = %d, want 1 until its active attempt finishes", got)
+		}
 		close(release)
 		released = true
 		synctest.Wait()
-		assert.Equal(t, int32(2), attempts.Load(), "updated team must run after its active attempt")
+		if got := attempts.Load(); got != 2 {
+			t.Errorf("busy team's attempts = %d, want 2 after its active attempt finishes", got)
+		}
 	})
 }
 
 func TestManagerDelayedRetryDoesNotBlockOtherTeams(t *testing.T) {
-	unused, servers := apiclient.NewMockClient(t)
-	t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+	servers := managerTestServers(t)
 	synctest.Test(t, func(t *testing.T) {
 		var mu sync.Mutex
 		var order []string
@@ -304,33 +341,48 @@ func TestManagerDelayedRetryDoesNotBlockOtherTeams(t *testing.T) {
 			Return(&protoapi.SetReconcilerErrorForTeamResponse{}, nil).Once()
 		expectManagerSuccess(servers, "retry", 1)
 		expectManagerSuccess(servers, "ready", 1)
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "retry"}))
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "ready"}))
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "retry"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "ready"}); err != nil {
+			t.Fatal(err)
+		}
 		runManagerTest(t, m)
 		synctest.Wait()
-		require.Equal(t, []string{"retry", "ready"}, orderSnapshot())
+		if got, want := orderSnapshot(), []string{"retry", "ready"}; !slices.Equal(got, want) {
+			t.Fatalf("initial order = %v, want %v", got, want)
+		}
 		time.Sleep(10*time.Second - time.Nanosecond)
 		synctest.Wait()
-		require.Equal(t, []string{"retry", "ready"}, orderSnapshot())
+		if got, want := orderSnapshot(), []string{"retry", "ready"}; !slices.Equal(got, want) {
+			t.Fatalf("order before retry deadline = %v, want %v", got, want)
+		}
 		time.Sleep(time.Nanosecond)
 		synctest.Wait()
-		require.Equal(t, []string{"retry", "ready", "retry"}, orderSnapshot())
+		if got, want := orderSnapshot(), []string{"retry", "ready", "retry"}; !slices.Equal(got, want) {
+			t.Fatalf("order at retry deadline = %v, want %v", got, want)
+		}
 		mu.Lock()
 		attemptSnapshot := append([]time.Time(nil), attempts...)
 		mu.Unlock()
-		require.Len(t, attemptSnapshot, 2)
-		assert.Equal(t, 10*time.Second, attemptSnapshot[1].Sub(attemptSnapshot[0]))
+		if len(attemptSnapshot) != 2 {
+			t.Fatalf("retry attempts = %d, want 2", len(attemptSnapshot))
+		}
+		if got := attemptSnapshot[1].Sub(attemptSnapshot[0]); got != 10*time.Second {
+			t.Errorf("retry delay = %v, want 10s", got)
+		}
 		time.Sleep(10 * time.Minute)
 		synctest.Wait()
-		assert.Equal(t, []string{"retry", "ready", "retry"}, orderSnapshot())
+		if got, want := orderSnapshot(), []string{"retry", "ready", "retry"}; !slices.Equal(got, want) {
+			t.Errorf("order after success = %v, want %v", got, want)
+		}
 	})
 }
 
 func TestManagerRetriesDataFetchFailures(t *testing.T) {
 	for _, stage := range []string{"team", "enabled reconcilers", "clear reconciler error persistence", "successful sync persistence"} {
 		t.Run(stage, func(t *testing.T) {
-			unused, servers := apiclient.NewMockClient(t)
-			t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+			servers := managerTestServers(t)
 			synctest.Test(t, func(t *testing.T) {
 				var calls atomic.Int32
 				m := newManagerTest(t, servers, &managerTestReconciler{reconcile: func(*protoapi.Team) error {
@@ -366,47 +418,129 @@ func TestManagerRetriesDataFetchFailures(t *testing.T) {
 						Return(nil, transient).Once()
 				}
 				expectManagerSuccess(servers, slug, 1)
-				require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: slug}))
+				if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: slug}); err != nil {
+					t.Fatal(err)
+				}
 				runManagerTest(t, m)
 				synctest.Wait()
 				before := 0
 				if stage == "successful sync persistence" || stage == "clear reconciler error persistence" {
 					before = 1
 				}
-				require.Equal(t, before, int(calls.Load()))
+				if got := int(calls.Load()); got != before {
+					t.Fatalf("calls before retry = %d, want %d", got, before)
+				}
 				time.Sleep(10 * time.Second)
 				synctest.Wait()
-				require.Equal(t, before+1, int(calls.Load()))
+				if got := int(calls.Load()); got != before+1 {
+					t.Fatalf("calls after retry = %d, want %d", got, before+1)
+				}
 				time.Sleep(10 * time.Minute)
 				synctest.Wait()
-				assert.Equal(t, before+1, int(calls.Load()))
+				if got := int(calls.Load()); got != before+1 {
+					t.Errorf("calls after success = %d, want %d", got, before+1)
+				}
+			})
+		})
+	}
+}
+
+func TestManagerNewEventSupersedesDelayedRetry(t *testing.T) {
+	for _, failsAgain := range []bool{false, true} {
+		name := "new attempt succeeds"
+		if failsAgain {
+			name = "new attempt fails"
+		}
+		t.Run(name, func(t *testing.T) {
+			servers := managerTestServers(t)
+			synctest.Test(t, func(t *testing.T) {
+				var attempts atomic.Int32
+				r := &managerTestReconciler{reconcile: func(*protoapi.Team) error {
+					attempt := attempts.Add(1)
+					if attempt == 1 || (attempt == 2 && failsAgain) {
+						return errors.New("temporary failure")
+					}
+					return nil
+				}}
+				m := newManagerTest(t, servers, r)
+				count := 2
+				correlations := []string{"initial"}
+				if failsAgain {
+					count = 3
+					correlations = append(correlations, "new-event")
+				}
+				expectManagerTeam(servers, &protoapi.Team{Slug: "updated"}, count)
+				expectManagerReconcilers(servers, count)
+				for _, correlation := range correlations {
+					servers.Reconcilers.EXPECT().SetReconcilerErrorForTeam(mock.Anything,
+						&protoapi.SetReconcilerErrorForTeamRequest{
+							CorrelationId: correlation, ReconcilerName: r.Name(),
+							TeamSlug: "updated", ErrorMessage: "temporary failure",
+						}).Return(&protoapi.SetReconcilerErrorForTeamResponse{}, nil).Once()
+				}
+				expectManagerSuccess(servers, "updated", 1)
+				if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "updated", CorrelationID: "initial"}); err != nil {
+					t.Fatal(err)
+				}
+				runManagerTest(t, m)
+				synctest.Wait()
+				if got := attempts.Load(); got != 1 {
+					t.Fatalf("initial attempts = %d, want 1", got)
+				}
+				time.Sleep(time.Second)
+				if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "updated", CorrelationID: "new-event"}); err != nil {
+					t.Fatal(err)
+				}
+				synctest.Wait()
+				if got := attempts.Load(); got != 2 {
+					t.Fatalf("attempts after new event = %d, want 2", got)
+				}
+				time.Sleep(9 * time.Second)
+				synctest.Wait()
+				if got := attempts.Load(); got != 2 {
+					t.Fatalf("attempts at t=10s = %d, want 2; old retry must not run", got)
+				}
+				time.Sleep(time.Second)
+				synctest.Wait()
+				if got := attempts.Load(); got != int32(count) {
+					t.Fatalf("attempts at t=11s = %d, want %d after reset backoff", got, count)
+				}
+				time.Sleep(10 * time.Minute)
+				synctest.Wait()
+				if got := attempts.Load(); got != int32(count) {
+					t.Errorf("attempts after success = %d, want %d; no delayed retry should remain", got, count)
+				}
 			})
 		})
 	}
 }
 
 func TestManagerMissingTeamIsTerminal(t *testing.T) {
-	unused, servers := apiclient.NewMockClient(t)
-	t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+	servers := managerTestServers(t)
 	synctest.Test(t, func(t *testing.T) {
 		m := newManagerTest(t, servers, &managerTestReconciler{})
 		servers.Teams.EXPECT().Get(mock.Anything, &protoapi.GetTeamRequest{Slug: "missing"}).
 			Return(nil, status.Error(codes.NotFound, "team not found")).Once()
-		require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "missing"}))
+		if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "missing"}); err != nil {
+			t.Fatal(err)
+		}
 		runManagerTest(t, m)
 		synctest.Wait()
 		time.Sleep(10 * time.Minute)
 		synctest.Wait()
-		servers.Teams.AssertNumberOfCalls(t, "Get", 1)
-		servers.Reconcilers.AssertNotCalled(t, "List", mock.Anything, mock.Anything)
+		if got := len(servers.Teams.Calls); got != 1 {
+			t.Errorf("team API calls = %d, want 1", got)
+		}
+		if got := len(servers.Reconcilers.Calls); got != 0 {
+			t.Errorf("reconciler API calls = %d, want 0 for a missing team", got)
+		}
 	})
 }
 
 func TestManagerRetriesDeletionFailures(t *testing.T) {
 	for _, stage := range []string{"reconciler", "API persistence"} {
 		t.Run(stage, func(t *testing.T) {
-			unused, servers := apiclient.NewMockClient(t)
-			t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+			servers := managerTestServers(t)
 			synctest.Test(t, func(t *testing.T) {
 				var calls atomic.Int32
 				failure := errors.New("deletion pending")
@@ -439,16 +573,24 @@ func TestManagerRetriesDeletionFailures(t *testing.T) {
 					Return(&protoapi.RemoveReconcilerErrorForTeamResponse{}, nil).Times(successes)
 				servers.Teams.EXPECT().Delete(mock.Anything, &protoapi.DeleteTeamRequest{Slug: slug}).
 					Return(&protoapi.DeleteTeamResponse{}, nil).Once()
-				require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: slug}))
+				if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: slug}); err != nil {
+					t.Fatal(err)
+				}
 				runManagerTest(t, m)
 				synctest.Wait()
-				require.Equal(t, int32(1), calls.Load())
+				if got := calls.Load(); got != 1 {
+					t.Fatalf("deletion attempts before retry = %d, want 1", got)
+				}
 				time.Sleep(10 * time.Second)
 				synctest.Wait()
-				require.Equal(t, int32(2), calls.Load())
+				if got := calls.Load(); got != 2 {
+					t.Fatalf("deletion attempts after retry = %d, want 2", got)
+				}
 				time.Sleep(10 * time.Minute)
 				synctest.Wait()
-				assert.Equal(t, int32(2), calls.Load())
+				if got := calls.Load(); got != 2 {
+					t.Errorf("deletion attempts after success = %d, want 2", got)
+				}
 			})
 		})
 	}
@@ -461,14 +603,15 @@ func TestManagerCancellationShutsDownQueue(t *testing.T) {
 			name = "pending retry"
 		}
 		t.Run(name, func(t *testing.T) {
-			unused, servers := apiclient.NewMockClient(t)
-			t.Cleanup(func() { assert.NoError(t, unused.Close()) })
+			servers := managerTestServers(t)
 			synctest.Test(t, func(t *testing.T) {
 				m := newManagerTest(t, servers, &managerTestReconciler{})
 				if pending {
 					servers.Teams.EXPECT().Get(mock.Anything, &protoapi.GetTeamRequest{Slug: "pending"}).
 						Return(nil, status.Error(codes.Unavailable, "retry later")).Once()
-					require.NoError(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "pending"}))
+					if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "pending"}); err != nil {
+						t.Fatal(err)
+					}
 				}
 				cancel, done := runManagerTest(t, m)
 				synctest.Wait()
@@ -479,9 +622,13 @@ func TestManagerCancellationShutsDownQueue(t *testing.T) {
 				default:
 					t.Fatal("Run did not exit after context cancellation")
 				}
-				require.Error(t, m.syncQueue.Add(ReconcileRequest{TeamSlug: "after-cancel"}))
+				if err := m.syncQueue.Add(ReconcileRequest{TeamSlug: "after-cancel"}); err == nil {
+					t.Fatal("expected adding to the canceled queue to fail")
+				}
 				_, shutdown := m.syncQueue.Get()
-				require.True(t, shutdown)
+				if !shutdown {
+					t.Fatal("expected queue shutdown after cancellation")
+				}
 				time.Sleep(10 * time.Minute)
 				synctest.Wait()
 			})

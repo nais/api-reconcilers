@@ -69,6 +69,9 @@ The manager will listen for pubsub events and trigger the correct reconcilers wh
 
 Failed team reconciliations and deletions are retried in the background with exponential backoff.
 Workers continue processing other teams while retries are delayed. A successful attempt resets the backoff.
+New events supersede pending retries and reset backoff when their attempt starts.
+Each failure replaces the retry deadline, and success cancels it.
+Team request metadata is released once no active, pending, or delayed work remains.
 The retry queue is in memory; the regular 30-minute full sync reschedules teams after a restart.
 
 All state and data is stored in NAIS api, and the communication with the API is done through GRPC.
