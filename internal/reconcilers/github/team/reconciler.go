@@ -170,16 +170,8 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *proto
 
 	_, resp, err := r.teamsService.EditTeamBySlug(ctx, r.org, slug, updatedGitHubTeam, false)
 
-	if resp == nil && err != nil {
+	if err := httpError(http.StatusOK, resp, err); err != nil {
 		return fmt.Errorf("sync team info for GitHub team %q: %w", slug, err)
-	}
-
-	if resp == nil {
-		return fmt.Errorf("sync team info for GitHub team %q: no response from GitHub", slug)
-	}
-
-	if resp.StatusCode >= 300 {
-		return fmt.Errorf("sync team info for GitHub team %q: %s", slug, resp.Status)
 	}
 
 	return nil
@@ -196,16 +188,8 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 		return nil
 	}
 
-	if resp == nil && err != nil {
+	if err := httpError(http.StatusOK, resp, err); err != nil {
 		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: %w", teamSlug, err)
-	}
-
-	if resp == nil {
-		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: no response from GitHub", teamSlug)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unable to delete IDP sync for GitHub team %q: %s", teamSlug, resp.Status)
 	}
 
 	if len(idpList.Groups) > 0 {
