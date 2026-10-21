@@ -22,7 +22,10 @@ import (
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
-const reconcilerName = "github:team"
+const (
+	reconcilerName = "github:team"
+	parentTeamSlug = "nais-teams"
+)
 
 type OptFunc func(*githubTeamReconciler)
 
@@ -90,7 +93,13 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	githubTeam, err := r.getOrCreateTeam(ctx, client, naisTeam)
+	parentTeam, err := r.getOrCreateParentTeam(ctx)
+	if err != nil {
+		return err
+	}
+	parentTeamID := parentTeam.GetID()
+
+	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, parentTeamID)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a GitHub team for team %q in system %q: %w", naisTeam.Slug, r.Name(), err)
 	}
@@ -99,7 +108,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam); err != nil {
+	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam, parentTeamID); err != nil {
 		return err
 	}
 
@@ -119,7 +128,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 	return nil
 }
 
-func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+func (r *githubTeamReconciler) Delete(ctx context.Context, _ *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GithubTeamSlug == nil {
 		log.Warnf("missing slug in reconciler state, unable to delete GitHub team")
 		return nil
@@ -127,7 +136,7 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 
 	resp, err := r.teamsService.DeleteTeamBySlug(ctx, r.org, *naisTeam.GithubTeamSlug)
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == http.StatusNotFound {
 			// If not found, we consider the team already deleted
@@ -146,22 +155,27 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, client *apiclient.API
 	return nil
 }
 
-func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *protoapi.Team, githubTeam *github.Team) error {
-	if gitHubTeamIsUpdated(naisTeam, githubTeam) {
+func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *protoapi.Team, githubTeam *github.Team, parentTeamID int64) error {
+	if gitHubTeamIsUpdated(naisTeam, githubTeam, parentTeamID) {
 		return nil
 	}
 
 	slug := *githubTeam.Slug
 	updatedGitHubTeam := github.NewTeam{
-		Name:        slug,
-		Description: &naisTeam.Purpose,
-		Privacy:     new("closed"),
+		Name:         slug,
+		Description:  &naisTeam.Purpose,
+		Privacy:      new("closed"),
+		ParentTeamID: &parentTeamID,
 	}
 
 	_, resp, err := r.teamsService.EditTeamBySlug(ctx, r.org, slug, updatedGitHubTeam, false)
 
 	if resp == nil && err != nil {
 		return fmt.Errorf("sync team info for GitHub team %q: %w", slug, err)
+	}
+
+	if resp == nil {
+		return fmt.Errorf("sync team info for GitHub team %q: no response from GitHub", slug)
 	}
 
 	if resp.StatusCode >= 300 {
@@ -186,6 +200,10 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: %w", teamSlug, err)
 	}
 
+	if resp == nil {
+		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: no response from GitHub", teamSlug)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unable to delete IDP sync for GitHub team %q: %s", teamSlug, resp.Status)
 	}
@@ -197,13 +215,50 @@ func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug s
 	return nil
 }
 
-func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team) (*github.Team, error) {
+func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*github.Team, error) {
+	team, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, parentTeamSlug)
+	if resp == nil || resp.StatusCode != http.StatusNotFound {
+		if err := httpError(http.StatusOK, resp, err); err != nil {
+			return nil, fmt.Errorf("get GitHub parent team %q: %w", parentTeamSlug, err)
+		}
+		return team, nil
+	}
+
+	team, resp, err = r.teamsService.CreateTeam(ctx, r.org, github.NewTeam{
+		Name:        parentTeamSlug,
+		Description: new("Parent team for all teams synced by Nais."),
+		Privacy:     new("closed"),
+	})
+	if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
+		// Another reconciliation may have created the shared parent in the meantime.
+		team, resp, err = r.teamsService.GetTeamBySlug(ctx, r.org, parentTeamSlug)
+		if err := httpError(http.StatusOK, resp, err); err != nil {
+			return nil, fmt.Errorf("get GitHub parent team %q after creation conflict: %w", parentTeamSlug, err)
+		}
+		return team, nil
+	}
+	if err := httpError(http.StatusCreated, resp, err); err != nil {
+		return nil, fmt.Errorf("create GitHub parent team %q: %w", parentTeamSlug, err)
+	}
+	return team, nil
+}
+
+func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, naisTeam *protoapi.Team, parentTeamID int64) (*github.Team, error) {
 	desiredTeamSlug := naisTeam.Slug
 	if naisTeam.GithubTeamSlug != nil {
 		desiredTeamSlug = *naisTeam.GithubTeamSlug
+	}
+	if desiredTeamSlug == parentTeamSlug {
+		return nil, fmt.Errorf("GitHub team slug %q is reserved for the parent team", parentTeamSlug)
+	}
+	if naisTeam.GithubTeamSlug != nil {
 		existingTeam, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, desiredTeamSlug)
 		if resp == nil && err != nil {
 			return nil, fmt.Errorf("unable to fetch GitHub team %q: %w", desiredTeamSlug, err)
+		}
+
+		if resp == nil {
+			return nil, fmt.Errorf("unable to fetch GitHub team %q: no response from GitHub", desiredTeamSlug)
 		}
 
 		switch resp.StatusCode {
@@ -217,11 +272,13 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, client *apic
 		}
 	}
 
-	githubTeam, resp, err := r.teamsService.CreateTeam(ctx, r.org, github.NewTeam{
-		Name:        desiredTeamSlug,
-		Description: &naisTeam.Purpose,
-		Privacy:     new("closed"),
-	})
+	newTeam := github.NewTeam{
+		Name:         desiredTeamSlug,
+		Description:  &naisTeam.Purpose,
+		Privacy:      new("closed"),
+		ParentTeamID: &parentTeamID,
+	}
+	githubTeam, resp, err := r.teamsService.CreateTeam(ctx, r.org, newTeam)
 	err = httpError(http.StatusCreated, resp, err)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create GitHub team: %w", err)
@@ -266,7 +323,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 				Email: *email,
 			})
 			if err != nil {
-				log.WithError(err).Warnf("get NAIS teams user with email %q", *email)
+				log.WithError(err).Warnf("get Nais teams user with email %q", *email)
 				email = nil
 			}
 		}
@@ -310,7 +367,7 @@ func (r *githubTeamReconciler) getTeamMembers(ctx context.Context, slug string) 
 	return allMembers, nil
 }
 
-// localOnlyMembers Given a mapping of GitHub usernames to NAIS teams users, and a list of GitHub team members according
+// localOnlyMembers Given a mapping of GitHub usernames to Nais teams users, and a list of GitHub team members according
 // to GitHub, return members only present in the mapping.
 func localOnlyMembers(naisUsers map[string]*protoapi.User, membersAccordingToGitHub []*github.User) map[string]*protoapi.User {
 	gitHubUsernameMap := make(map[string]*github.User)
@@ -327,7 +384,7 @@ func localOnlyMembers(naisUsers map[string]*protoapi.User, membersAccordingToGit
 	return localOnly
 }
 
-// remoteOnlyMembers Given a list of GitHub team members and a mapping of known GitHub usernames to NAIS teams users,
+// remoteOnlyMembers Given a list of GitHub team members and a mapping of known GitHub usernames to Nais teams users,
 // return members not present in the mapping.
 func remoteOnlyMembers(membersAccordingToGitHub []*github.User, naisUsers map[string]*protoapi.User) []*github.User {
 	unknownMembers := make([]*github.User, 0)
@@ -339,7 +396,7 @@ func remoteOnlyMembers(membersAccordingToGitHub []*github.User, naisUsers map[st
 	return unknownMembers
 }
 
-// mapSSOUsers Return a mapping of GitHub usernames to NAIS teams users. NAIS teams users with no matching GitHub user
+// mapSSOUsers Return a mapping of GitHub usernames to Nais teams users. Nais teams users with no matching GitHub user
 // will be ignored.
 func (r *githubTeamReconciler) mapSSOUsers(ctx context.Context, members []*protoapi.TeamMember, log logrus.FieldLogger) (map[string]*protoapi.User, error) {
 	userMap := make(map[string]*protoapi.User)
@@ -475,13 +532,17 @@ func httpError(expected int, resp *github.Response, err error) error {
 	return nil
 }
 
-// gitHubTeamIsUpdated check if a GitHub team is updated compared to the NAIS team
-func gitHubTeamIsUpdated(naisTeam *protoapi.Team, gitHubTeam *github.Team) bool {
+// gitHubTeamIsUpdated check if a GitHub team is updated compared to the Nais team
+func gitHubTeamIsUpdated(naisTeam *protoapi.Team, gitHubTeam *github.Team, parentTeamID int64) bool {
 	if naisTeam.Purpose != strhelper.WithFallback(gitHubTeam.Description, "") {
 		return false
 	}
 
 	if gitHubTeam.GetPrivacy() != "closed" {
+		return false
+	}
+
+	if gitHubTeam.GetParent().GetID() != parentTeamID {
 		return false
 	}
 

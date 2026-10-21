@@ -21,6 +21,14 @@ import (
 	"k8s.io/utils/ptr"
 )
 
+func expectParentTeam(t *testing.T, teamsService *github_team_reconciler.MockTeamsService, org string) {
+	t.Helper()
+	teamsService.EXPECT().
+		GetTeamBySlug(mock.Anything, org, "nais-teams").
+		Return(&github.Team{ID: new(int64(123)), Slug: new("nais-teams")}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
+		Once()
+}
+
 func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	ctx := context.Background()
 
@@ -80,8 +88,9 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
+			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed"), ParentTeamID: new(int64(123))}).
 			Return(
 				&github.Team{Slug: ptr.To(teamSlug)},
 				&github.Response{Response: &http.Response{StatusCode: http.StatusCreated}},
@@ -138,9 +147,10 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, teamSlug, github.NewTeam{
-				Name:        teamSlug,
-				Description: ptr.To(teamPurpose),
-				Privacy:     new("closed"),
+				Name:         teamSlug,
+				Description:  ptr.To(teamPurpose),
+				Privacy:      new("closed"),
+				ParentTeamID: new(int64(123)),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -172,8 +182,9 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
+			CreateTeam(ctx, org, github.NewTeam{Name: teamSlug, Description: ptr.To(teamPurpose), Privacy: new("closed"), ParentTeamID: new(int64(123))}).
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusUnprocessableEntity}}, nil).
 			Once()
 
@@ -221,6 +232,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
 			GetTeamBySlug(ctx, org, gitHubSlug).
 			Return(&github.Team{Slug: new(gitHubSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
@@ -235,9 +247,10 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, gitHubSlug, github.NewTeam{
-				Name:        gitHubSlug,
-				Description: ptr.To(teamPurpose),
-				Privacy:     new("closed"),
+				Name:         gitHubSlug,
+				Description:  ptr.To(teamPurpose),
+				Privacy:      new("closed"),
+				ParentTeamID: new(int64(123)),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -284,12 +297,13 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
 			GetTeamBySlug(ctx, org, existingSlug).
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, nil).
 			Once()
 		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.NewTeam{Name: existingSlug, Description: ptr.To(teamPurpose), Privacy: new("closed")}).
+			CreateTeam(ctx, org, github.NewTeam{Name: existingSlug, Description: ptr.To(teamPurpose), Privacy: new("closed"), ParentTeamID: new(int64(123))}).
 			Return(&github.Team{Slug: new(existingSlug)}, &github.Response{Response: &http.Response{StatusCode: http.StatusCreated}}, nil).
 			Once()
 		teamsService.EXPECT().
@@ -302,9 +316,10 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, existingSlug, github.NewTeam{
-				Name:        existingSlug,
-				Description: ptr.To(teamPurpose),
-				Privacy:     new("closed"),
+				Name:         existingSlug,
+				Description:  ptr.To(teamPurpose),
+				Privacy:      new("closed"),
+				ParentTeamID: new(int64(123)),
 			}, false).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
@@ -413,11 +428,13 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once()
 
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
 			CreateTeam(mock.Anything, org, github.NewTeam{
-				Name:        teamName,
-				Description: ptr.To(teamPurpose),
-				Privacy:     new("closed"),
+				Name:         teamName,
+				Description:  ptr.To(teamPurpose),
+				Privacy:      new("closed"),
+				ParentTeamID: new(int64(123)),
 			}).
 			Return(
 				&github.Team{Slug: ptr.To(teamName)},
@@ -427,9 +444,10 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, teamName, github.NewTeam{
-				Name:        teamName,
-				Description: ptr.To(teamPurpose),
-				Privacy:     new("closed"),
+				Name:         teamName,
+				Description:  ptr.To(teamPurpose),
+				Privacy:      new("closed"),
+				ParentTeamID: new(int64(123)),
 			}, false).
 			Return(
 				&github.Team{},
@@ -543,6 +561,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
+		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
 			GetTeamBySlug(mock.Anything, org, "slug-from-state").
 			Return(nil, &github.Response{
