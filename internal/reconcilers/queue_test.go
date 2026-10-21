@@ -155,19 +155,25 @@ func Test_Queue(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			q := reconcilers.NewQueue()
 			defer q.Close()
+			if err := q.Add(input); err != nil {
+				t.Fatal(err)
+			}
+			got, _ := q.Get()
 			for _, want := range []time.Duration{10, 20, 40, 80, 160, 300, 300} {
-				delay, err := q.Retry(input)
+				delay, err := q.Retry(got)
 				if err != nil || delay != want*time.Second {
 					t.Fatalf("expected delay %v, got %v, error %v", want*time.Second, delay, err)
 				}
+				q.Done(got)
 				start := time.Now()
-				got, shutdown := q.Get()
+				var shutdown bool
+				got, shutdown = q.Get()
 				if shutdown || got != input || time.Since(start) != delay {
 					t.Fatalf("unexpected retry %v after %v (shutdown: %v)", got, time.Since(start), shutdown)
 				}
-				q.Done(got)
 			}
-			q.Forget(input)
+			q.Forget(got)
+			q.Done(got)
 			delay, err := q.Retry(input)
 			if err != nil || delay != 10*time.Second {
 				t.Fatalf("expected reset backoff, got %v, error %v", delay, err)
