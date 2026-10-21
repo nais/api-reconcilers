@@ -68,5 +68,3 @@ A manager is responsible for running the reconcilers and handling the errors.
 The manager will listen for pubsub events and trigger the correct reconcilers when needed.
 
 All state and data is stored in NAIS api, and the communication with the API is done through GRPC.
-
-

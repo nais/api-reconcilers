@@ -80,7 +80,7 @@ type Config struct {
 		// Target The target address for the gRPC server.
 		Target string `env:"GRPC_TARGET,default=127.0.0.1:3001"`
 
-		// InsecureGRPC bypasses authentication, use for development purposes only.
+		// Insecure bypasses authentication, use for development purposes only.
 		Insecure bool `env:"INSECURE_GRPC"`
 	}
 
