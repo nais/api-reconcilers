@@ -19,6 +19,8 @@ packages:
     interfaces:
       UsersClientService:
       TeamsClientService:
+      FoldersClientService:
+      FolderPermissionsClientService:
       AccessControlClientService:
       ServiceAccountsClientService:
       AdminUsersClientService:

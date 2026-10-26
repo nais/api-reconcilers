@@ -165,6 +165,8 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 	grafanaReconciler := grafana_reconciler.New(
 		grafanaClient.Users,
 		grafanaClient.Teams,
+		grafanaClient.Folders,
+		grafanaClient.FolderPermissions,
 		grafanaClient.AccessControl,
 		grafanaClient.ServiceAccounts,
 		grafanaClient.AdminUsers,

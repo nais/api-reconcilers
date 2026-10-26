@@ -10,6 +10,8 @@ import (
 
 	grafanaaccesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafanaadminusers "github.com/grafana/grafana-openapi-client-go/client/admin_users"
+	grafanafolderpermissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
+	grafanafolders "github.com/grafana/grafana-openapi-client-go/client/folders"
 	grafanaprovisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
 	grafanaserviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafanateams "github.com/grafana/grafana-openapi-client-go/client/teams"
@@ -51,6 +53,18 @@ type TeamsClientService interface {
 	DeleteTeamByID(teamID string, opts ...grafanateams.ClientOption) (*grafanateams.DeleteTeamByIDOK, error)
 }
 
+type FoldersClientService interface {
+	GetFolders(params *grafanafolders.GetFoldersParams, opts ...grafanafolders.ClientOption) (*grafanafolders.GetFoldersOK, error)
+	GetFolderByUIDWithParams(params *grafanafolders.GetFolderByUIDParams, opts ...grafanafolders.ClientOption) (*grafanafolders.GetFolderByUIDOK, error)
+	CreateFolderWithParams(params *grafanafolders.CreateFolderParams, opts ...grafanafolders.ClientOption) (*grafanafolders.CreateFolderOK, error)
+	UpdateFolderWithParams(params *grafanafolders.UpdateFolderParams, opts ...grafanafolders.ClientOption) (*grafanafolders.UpdateFolderOK, error)
+}
+
+type FolderPermissionsClientService interface {
+	GetFolderPermissionListWithParams(params *grafanafolderpermissions.GetFolderPermissionListParams, opts ...grafanafolderpermissions.ClientOption) (*grafanafolderpermissions.GetFolderPermissionListOK, error)
+	UpdateFolderPermissionsWithParams(params *grafanafolderpermissions.UpdateFolderPermissionsParams, opts ...grafanafolderpermissions.ClientOption) (*grafanafolderpermissions.UpdateFolderPermissionsOK, error)
+}
+
 type AccessControlClientService interface {
 	GetResourcePermissionsWithParams(params *grafanaaccesscontrol.GetResourcePermissionsParams, opts ...grafanaaccesscontrol.ClientOption) (*grafanaaccesscontrol.GetResourcePermissionsOK, error)
 	SetResourcePermissions(params *grafanaaccesscontrol.SetResourcePermissionsParams, opts ...grafanaaccesscontrol.ClientOption) (*grafanaaccesscontrol.SetResourcePermissionsOK, error)
@@ -76,14 +90,16 @@ type ProvisioningClientService interface {
 }
 
 type grafanaReconciler struct {
-	users           UsersClientService
-	teams           TeamsClientService
-	rbac            AccessControlClientService
-	serviceAccounts ServiceAccountsClientService
-	adminUsers      AdminUsersClientService
-	provisioning    ProvisioningClientService
-	flags           config.FeatureFlags
-	slackWebhookURL string
+	users             UsersClientService
+	teams             TeamsClientService
+	folders           FoldersClientService
+	folderPermissions FolderPermissionsClientService
+	rbac              AccessControlClientService
+	serviceAccounts   ServiceAccountsClientService
+	adminUsers        AdminUsersClientService
+	provisioning      ProvisioningClientService
+	flags             config.FeatureFlags
+	slackWebhookURL   string
 
 	// Template management - ensures templates are created only once
 	templatesInitialized bool
@@ -99,6 +115,8 @@ type grafanaReconciler struct {
 func New(
 	users UsersClientService,
 	teams TeamsClientService,
+	folders FoldersClientService,
+	folderPermissions FolderPermissionsClientService,
 	rbac AccessControlClientService,
 	serviceAccounts ServiceAccountsClientService,
 	adminUsers AdminUsersClientService,
@@ -124,14 +142,16 @@ func New(
 		metric.WithDescription("Total number of Grafana policy tree updates that failed"))
 
 	return &grafanaReconciler{
-		users:           users,
-		teams:           teams,
-		rbac:            rbac,
-		serviceAccounts: serviceAccounts,
-		adminUsers:      adminUsers,
-		provisioning:    provisioning,
-		flags:           flags,
-		slackWebhookURL: slackWebhookURL,
+		users:             users,
+		teams:             teams,
+		folders:           folders,
+		folderPermissions: folderPermissions,
+		rbac:              rbac,
+		serviceAccounts:   serviceAccounts,
+		adminUsers:        adminUsers,
+		provisioning:      provisioning,
+		flags:             flags,
+		slackWebhookURL:   slackWebhookURL,
 
 		metricContactPointsCreated:    contactPointsCreated,
 		metricContactPointsFailed:     contactPointsFailed,
@@ -282,6 +302,187 @@ func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string
 	}
 
 	return createResp.Payload.TeamID, nil
+}
+
+func (r *grafanaReconciler) getOrCreateFolder(ctx context.Context, teamName string) (string, error) {
+	folderUID := "nais-" + teamName
+	limit := int64(1000)
+	var stableFolder, titleMatch *models.FolderSearchHit
+	titleMatches := 0
+	for page := int64(1); ; page++ {
+		resp, err := r.folders.GetFolders(&grafanafolders.GetFoldersParams{
+			Limit:   &limit,
+			Page:    &page,
+			Context: ctx,
+		})
+		if err != nil {
+			return "", fmt.Errorf("listing folders: %w", err)
+		}
+
+		for _, folder := range resp.Payload {
+			if folder.ParentUID != "" {
+				continue
+			}
+			if folder.UID == folderUID {
+				stableFolder = folder
+			}
+			if folder.Title == teamName {
+				titleMatches++
+				titleMatch = folder
+			}
+		}
+		if len(resp.Payload) < int(limit) {
+			break
+		}
+	}
+
+	if stableFolder != nil || titleMatches > 0 {
+		folder := stableFolder
+		if folder == nil {
+			if titleMatches > 1 {
+				return "", fmt.Errorf("found %d top-level folders titled %q; cannot determine the team folder", titleMatches, teamName)
+			}
+			folder = titleMatch
+		} else if folder.Title != teamName && titleMatches > 0 {
+			return "", fmt.Errorf("folder %q has title %q, but another top-level folder is titled %q", folderUID, folder.Title, teamName)
+		}
+		if folder.UID == "" {
+			return "", fmt.Errorf("folder %s has no UID", teamName)
+		}
+
+		current, err := r.folders.GetFolderByUIDWithParams(&grafanafolders.GetFolderByUIDParams{
+			FolderUID: folder.UID,
+			Context:   ctx,
+		})
+		if err != nil {
+			return "", fmt.Errorf("getting folder %s: %w", teamName, err)
+		}
+		update := &models.UpdateFolderCommand{
+			Description: "Recognized by api-reconciler as a valid team folder",
+			Version:     current.Payload.Version,
+		}
+		if folder == stableFolder && folder.Title != teamName {
+			update.Title = teamName
+		}
+		_, err = r.folders.UpdateFolderWithParams(&grafanafolders.UpdateFolderParams{
+			FolderUID: folder.UID,
+			Body:      update,
+			Context:   ctx,
+		})
+		if err != nil {
+			return "", fmt.Errorf("marking folder %s as valid: %w", teamName, err)
+		}
+		return folder.UID, nil
+	}
+
+	if len(folderUID) > 40 {
+		return "", fmt.Errorf("folder UID %q exceeds Grafana's 40-character limit", folderUID)
+	}
+
+	resp, err := r.folders.CreateFolderWithParams(&grafanafolders.CreateFolderParams{
+		Body: &models.CreateFolderCommand{
+			Title:       teamName,
+			UID:         folderUID,
+			Description: "Created by api-reconciler",
+		},
+		Context: ctx,
+	})
+	if err != nil {
+		return "", fmt.Errorf("creating folder %s: %w", teamName, err)
+	}
+	if resp.Payload == nil || resp.Payload.UID != folderUID {
+		return "", fmt.Errorf("created folder %s did not return expected UID %q", teamName, folderUID)
+	}
+	return folderUID, nil
+}
+
+func (r *grafanaReconciler) setFolderTeamPermissions(ctx context.Context, folderUID string, teamID int64) error {
+	const (
+		viewPermission models.PermissionType = 1
+		editPermission models.PermissionType = 2
+	)
+
+	existing, err := r.folderPermissions.GetFolderPermissionListWithParams(&grafanafolderpermissions.GetFolderPermissionListParams{
+		FolderUID: folderUID,
+		Context:   ctx,
+	})
+	if err != nil {
+		return fmt.Errorf("getting folder permissions: %w", err)
+	}
+
+	permissions := make([]*models.DashboardACLUpdateItem, 0, len(existing.Payload)+3)
+	var viewerFound, editorFound, teamPermissionFound, changed bool
+	for _, entry := range existing.Payload {
+		if entry.Inherited {
+			if entry.Role != "Admin" && entry.TeamID != teamID && entry.Permission > viewPermission {
+				return fmt.Errorf("folder %s has inherited Edit or Admin permission that cannot be reduced", folderUID)
+			}
+			continue
+		}
+		if entry.Role == "Admin" {
+			continue
+		}
+		switch entry.Role {
+		case "Viewer":
+			viewerFound = true
+		case "Editor":
+			editorFound = true
+		case "":
+			if entry.TeamID == 0 && entry.UserID == 0 {
+				return fmt.Errorf("folder %s has a permission without a user, team or role", folderUID)
+			}
+		default:
+			return fmt.Errorf("folder %s has unsupported role %q", folderUID, entry.Role)
+		}
+
+		permission := viewPermission
+		if entry.TeamID == teamID {
+			teamPermissionFound = true
+			if entry.Permission >= editPermission {
+				permission = entry.Permission
+			} else {
+				permission = editPermission
+			}
+		}
+		if permission != entry.Permission {
+			changed = true
+		}
+		permissions = append(permissions, &models.DashboardACLUpdateItem{
+			Role:       entry.Role,
+			TeamID:     entry.TeamID,
+			UserID:     entry.UserID,
+			Permission: permission,
+		})
+	}
+
+	if !viewerFound {
+		permissions = append(permissions, &models.DashboardACLUpdateItem{Role: "Viewer", Permission: viewPermission})
+		changed = true
+	}
+	if !editorFound {
+		permissions = append(permissions, &models.DashboardACLUpdateItem{Role: "Editor", Permission: viewPermission})
+		changed = true
+	}
+	if !teamPermissionFound {
+		permissions = append(permissions, &models.DashboardACLUpdateItem{
+			TeamID:     teamID,
+			Permission: editPermission,
+		})
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+
+	_, err = r.folderPermissions.UpdateFolderPermissionsWithParams(&grafanafolderpermissions.UpdateFolderPermissionsParams{
+		FolderUID: folderUID,
+		Body:      &models.UpdateDashboardACLCommand{Items: permissions},
+		Context:   ctx,
+	})
+	if err != nil {
+		return fmt.Errorf("updating folder permissions: %w", err)
+	}
+	return nil
 }
 
 func (r *grafanaReconciler) getOrCreateUser(ctx context.Context, user *protoapi.User) (int64, error) {
@@ -477,6 +678,15 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 	teamID, err := r.getOrCreateTeam(ctx, naisTeam.Slug)
 	if err != nil {
 		return fmt.Errorf("getting or creating team: %w", err)
+	}
+
+	folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
+	if err != nil {
+		return fmt.Errorf("getting or creating folder: %w", err)
+	}
+
+	if err := r.setFolderTeamPermissions(ctx, folderUID, teamID); err != nil {
+		return fmt.Errorf("setting folder team permissions: %w", err)
 	}
 
 	members, err := r.getTeamMembers(ctx, client, naisTeam.Slug)
