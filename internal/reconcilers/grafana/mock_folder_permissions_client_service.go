@@ -14,11 +14,21 @@ import (
 func NewMockFolderPermissionsClientService(t interface {
 	mock.TestingT
 	Cleanup(func())
-}) *MockFolderPermissionsClientService {
+},
+) *MockFolderPermissionsClientService {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockFolderPermissionsClientService{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
