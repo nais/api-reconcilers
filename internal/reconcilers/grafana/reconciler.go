@@ -38,6 +38,10 @@ const (
 	defaultRepeatInterval = "3h"
 
 	defaultSlackUsername = "Grafana"
+
+	pilotFolderTeam1 = "traktor"
+	pilotFolderTeam2 = "aura"
+	pilotFolderTeam3 = "nais"
 )
 
 type UsersClientService interface {
@@ -680,13 +684,16 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("getting or creating team: %w", err)
 	}
 
-	folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
-	if err != nil {
-		return fmt.Errorf("getting or creating folder: %w", err)
-	}
+	if naisTeam.Slug != "" && (naisTeam.Slug == pilotFolderTeam1 ||
+		naisTeam.Slug == pilotFolderTeam2 || naisTeam.Slug == pilotFolderTeam3) {
+		folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
+		if err != nil {
+			return fmt.Errorf("getting or creating folder: %w", err)
+		}
 
-	if err := r.setFolderTeamPermissions(ctx, folderUID, teamID); err != nil {
-		return fmt.Errorf("setting folder team permissions: %w", err)
+		if err := r.setFolderTeamPermissions(ctx, folderUID, teamID); err != nil {
+			return fmt.Errorf("setting folder team permissions: %w", err)
+		}
 	}
 
 	members, err := r.getTeamMembers(ctx, client, naisTeam.Slug)

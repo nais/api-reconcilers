@@ -9,8 +9,6 @@ import (
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
-	grafana_folder_permissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
-	grafana_folders "github.com/grafana/grafana-openapi-client-go/client/folders"
 	grafana_provisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
@@ -260,8 +258,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamName, false),
-			newFolderPermissionsClient(t, ctx, teamID, "nais-"+teamName, false),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -458,8 +456,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamName, true),
-			newFolderPermissionsClient(t, ctx, teamID, "team-folder-uid", true),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -641,8 +639,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamName, true),
-			newFolderPermissionsClient(t, ctx, teamID, "team-folder-uid", true),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -875,8 +873,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamSlug, true),
-			newFolderPermissionsClient(t, ctx, 1, "team-folder-uid", true),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1278,8 +1276,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamName, true),
-			newFolderPermissionsClient(t, ctx, teamID, "team-folder-uid", true),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1417,8 +1415,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			newFoldersClient(t, ctx, teamName, true),
-			newFolderPermissionsClient(t, ctx, testTeamID, "team-folder-uid", true),
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1436,89 +1434,6 @@ func TestAlertingFunctionality(t *testing.T) {
 		// If we reach here, it means no provisioning service methods were called
 		// which is exactly what we want when the feature toggle is disabled
 	})
-}
-
-// Helper functions for test assertions
-func newFoldersClient(t *testing.T, ctx context.Context, teamName string, exists bool) *grafana_reconciler.MockFoldersClientService {
-	t.Helper()
-	folders := grafana_reconciler.NewMockFoldersClientService(t)
-	result := &grafana_folders.GetFoldersOK{}
-	if exists {
-		result.Payload = []*models.FolderSearchHit{{Title: teamName, UID: "team-folder-uid"}}
-	}
-	limit, page := int64(1000), int64(1)
-	folders.EXPECT().
-		GetFolders(&grafana_folders.GetFoldersParams{Limit: &limit, Page: &page, Context: ctx}).
-		Return(result, nil).
-		Once()
-	if exists {
-		folders.EXPECT().
-			GetFolderByUIDWithParams(&grafana_folders.GetFolderByUIDParams{
-				FolderUID: "team-folder-uid",
-				Context:   ctx,
-			}).
-			Return(&grafana_folders.GetFolderByUIDOK{Payload: &models.Folder{Version: 3}}, nil).
-			Once()
-		folders.EXPECT().
-			UpdateFolderWithParams(&grafana_folders.UpdateFolderParams{
-				FolderUID: "team-folder-uid",
-				Body: &models.UpdateFolderCommand{
-					Description: "Recognized by api-reconciler as a valid team folder",
-					Version:     3,
-				},
-				Context: ctx,
-			}).
-			Return(&grafana_folders.UpdateFolderOK{}, nil).
-			Once()
-	} else {
-		folders.EXPECT().
-			CreateFolderWithParams(&grafana_folders.CreateFolderParams{
-				Body: &models.CreateFolderCommand{
-					Title:       teamName,
-					UID:         "nais-" + teamName,
-					Description: "Created by api-reconciler",
-				},
-				Context: ctx,
-			}).
-			Return(&grafana_folders.CreateFolderOK{Payload: &models.Folder{Title: teamName, UID: "nais-" + teamName}}, nil).
-			Once()
-	}
-	return folders
-}
-
-func newFolderPermissionsClient(t *testing.T, ctx context.Context, teamID int64, folderUID string, exists bool) *grafana_reconciler.MockFolderPermissionsClientService {
-	t.Helper()
-	permissions := grafana_reconciler.NewMockFolderPermissionsClientService(t)
-	result := &grafana_folder_permissions.GetFolderPermissionListOK{}
-	if exists {
-		result.Payload = []*models.DashboardACLInfoDTO{
-			{Role: "Viewer", Permission: 1},
-			{Role: "Editor", Permission: 1},
-			{TeamID: teamID, Permission: 2},
-		}
-	}
-	permissions.EXPECT().
-		GetFolderPermissionListWithParams(&grafana_folder_permissions.GetFolderPermissionListParams{
-			FolderUID: folderUID,
-			Context:   ctx,
-		}).
-		Return(result, nil).
-		Once()
-	if !exists {
-		permissions.EXPECT().
-			UpdateFolderPermissionsWithParams(&grafana_folder_permissions.UpdateFolderPermissionsParams{
-				FolderUID: folderUID,
-				Body: &models.UpdateDashboardACLCommand{Items: []*models.DashboardACLUpdateItem{
-					{Role: "Viewer", Permission: 1},
-					{Role: "Editor", Permission: 1},
-					{TeamID: teamID, Permission: 2},
-				}},
-				Context: ctx,
-			}).
-			Return(&grafana_folder_permissions.UpdateFolderPermissionsOK{}, nil).
-			Once()
-	}
-	return permissions
 }
 
 func findRouteByReceiver(routes []*models.Route, receiver string) *models.Route {
