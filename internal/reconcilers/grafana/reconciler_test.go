@@ -258,6 +258,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -454,6 +456,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -635,6 +639,8 @@ func TestReconcile(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -675,7 +681,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, config.FeatureFlags{
+		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
 		}, testSlackWebhookURL)
 
@@ -867,6 +873,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -950,7 +958,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
 
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, provisioningService, config.FeatureFlags{
+		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, provisioningService, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
 		}, testSlackWebhookURL)
 
@@ -985,7 +993,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Once()
 
 		// No provisioning service provided - should not call any provisioning methods
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, config.FeatureFlags{
+		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
 		}, testSlackWebhookURL)
 
@@ -1268,6 +1276,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1405,6 +1415,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
+			nil,
+			nil,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1424,7 +1436,6 @@ func TestAlertingFunctionality(t *testing.T) {
 	})
 }
 
-// Helper functions for test assertions
 func findRouteByReceiver(routes []*models.Route, receiver string) *models.Route {
 	for _, route := range routes {
 		if route.Receiver == receiver {
