@@ -362,7 +362,7 @@ func (r *grafanaReconciler) getOrCreateFolder(ctx context.Context, teamName stri
 			return "", fmt.Errorf("getting folder %s: %w", teamName, err)
 		}
 		update := &models.UpdateFolderCommand{
-			Description: "Recognized by api-reconciler as a valid team folder",
+			Description: "Reconciled by nais",
 			Version:     current.Payload.Version,
 		}
 		if folder == stableFolder && folder.Title != teamName {
@@ -684,6 +684,7 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("getting or creating team: %w", err)
 	}
 
+	log.Infof("Reconciling folder %s", naisTeam.Slug)
 	if naisTeam.Slug != "" && (naisTeam.Slug == pilotFolderTeam1 ||
 		naisTeam.Slug == pilotFolderTeam2 || naisTeam.Slug == pilotFolderTeam3) {
 		folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
