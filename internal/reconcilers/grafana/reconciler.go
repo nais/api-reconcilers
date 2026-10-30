@@ -932,7 +932,6 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 	params.SetContext(ctx)
 
 	_, err = r.provisioning.PutPolicyTree(params)
-
 	if err != nil {
 		r.metricPolicyTreeUpdatesFailed.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("team", teamSlug),

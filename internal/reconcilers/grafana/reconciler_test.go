@@ -1407,7 +1407,6 @@ func TestAlertingFunctionality(t *testing.T) {
 			if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 				t.Fatal(err)
 			}
-
 		})
 	}
 }
