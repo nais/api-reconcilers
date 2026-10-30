@@ -15,6 +15,8 @@ type FeatureFlags struct {
 	// EnableGrafanaAlerts enables the Grafana alerts reconciler functionality.
 	// This will create Grafana Contact Points and Notification Policies for teams.
 	EnableGrafanaAlerts bool `env:"FEATURE_ENABLE_GRAFANA_ALERTS"`
+
+	GrafanaAlertPilotTeams []string `env:"FEATURE_GRAFANA_ALERT_PILOT_TEAMS"`
 }
 
 type Config struct {

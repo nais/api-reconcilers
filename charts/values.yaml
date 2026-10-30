@@ -62,3 +62,4 @@ naisAPI:
 featureFlags:
   attachSharedVpc:
   enableGrafanaAlerts:
+  grafanaAlertPilotTeams: []

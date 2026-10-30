@@ -5,8 +5,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"reflect"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	grafanaaccesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafanaadminusers "github.com/grafana/grafana-openapi-client-go/client/admin_users"
@@ -104,6 +108,7 @@ type grafanaReconciler struct {
 	provisioning      ProvisioningClientService
 	flags             config.FeatureFlags
 	slackWebhookURL   string
+	alertingMu        sync.Mutex
 
 	// Template management - ensures templates are created only once
 	templatesInitialized bool
@@ -362,7 +367,7 @@ func (r *grafanaReconciler) getOrCreateFolder(ctx context.Context, teamName stri
 			return "", fmt.Errorf("getting folder %s: %w", teamName, err)
 		}
 		update := &models.UpdateFolderCommand{
-			Description: "Recognized by api-reconciler as a valid team folder",
+			Description: "Reconciled by nais",
 			Version:     current.Payload.Version,
 		}
 		if folder == stableFolder && folder.Title != teamName {
@@ -684,6 +689,7 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("getting or creating team: %w", err)
 	}
 
+	log.Infof("Reconciling folder %s", naisTeam.Slug)
 	if naisTeam.Slug != "" && (naisTeam.Slug == pilotFolderTeam1 ||
 		naisTeam.Slug == pilotFolderTeam2 || naisTeam.Slug == pilotFolderTeam3) {
 		folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
@@ -724,12 +730,12 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("setting service account members: %w", err)
 	}
 
-	if r.flags.EnableGrafanaAlerts {
+	if r.flags.EnableGrafanaAlerts && naisTeam.Slug != "" && slices.Contains(r.flags.GrafanaAlertPilotTeams, naisTeam.Slug) {
 		if err := r.reconcileAlerting(ctx, naisTeam.Slug, environments, log); err != nil {
 			return fmt.Errorf("reconciling alerting: %w", err)
 		}
 	} else {
-		log.Info("Grafana alerting is disabled, skipping alerting reconciliation")
+		log.Info("Grafana alerting is disabled or team is not in the alerting pilot, skipping alerting reconciliation")
 	}
 
 	return nil
@@ -792,6 +798,14 @@ func (r *grafanaReconciler) buildContactPointName(teamSlug, environmentName stri
 }
 
 func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
+	r.alertingMu.Lock()
+	defer r.alertingMu.Unlock()
+
+	baseline, _, err := r.notificationPolicyChanges(ctx, teamSlug, environments, log)
+	if err != nil {
+		return fmt.Errorf("checking notification policy routes: %w", err)
+	}
+
 	// Create notification templates first (only once, they're shared across all teams)
 	if err := r.createNotificationTemplates(ctx); err != nil {
 		return fmt.Errorf("creating notification templates: %w", err)
@@ -809,7 +823,7 @@ func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug stri
 	}
 
 	// Update notification routing policy to direct alerts to the correct contact points
-	if err := r.updateNotificationPolicy(ctx, teamSlug, environments, log); err != nil {
+	if err := r.updateNotificationPolicy(ctx, teamSlug, environments, baseline, log); err != nil {
 		return fmt.Errorf("updating notification policy: %w", err)
 	}
 
@@ -888,45 +902,23 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	return operationErr
 }
 
-func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
-	resp, err := r.provisioning.GetPolicyTree()
+func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, baseline *models.Route, log logrus.FieldLogger) error {
+	policyTree, newRoutes, err := r.notificationPolicyChanges(ctx, teamSlug, environments, log)
 	if err != nil {
-		return fmt.Errorf("getting policy tree: %w", err)
+		return err
+	}
+	if !reflect.DeepEqual(policyTree, baseline) {
+		return fmt.Errorf("notification policy tree changed since preflight for team %s; refusing to overwrite external changes", teamSlug)
+	}
+	if len(newRoutes) == 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
-	policyTree := resp.Payload
-	if policyTree.Routes == nil {
-		policyTree.Routes = []*models.Route{}
-	}
+	policyTree.Routes = append(policyTree.Routes, newRoutes...)
 
-	// Debug: Log existing routes before modification
-	for i, route := range policyTree.Routes {
-		if route.ObjectMatchers != nil {
-			var matchers []string
-			for _, matcher := range route.ObjectMatchers {
-				if len(matcher) >= 3 {
-					matchers = append(matchers, fmt.Sprintf("%s %s %s", matcher[0], matcher[1], matcher[2]))
-				}
-			}
-			log.Debugf("Existing route %d - Receiver: %s, Matchers: %v", i, route.Receiver, matchers)
-		}
-	}
-
-	// Record policy tree size before modification
-	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
-		attribute.String("operation", "read"),
-		attribute.String("team", teamSlug),
-	))
-
-	// Remove existing routes for this team to ensure idempotent behavior
-	filteredRoutes := r.filterRoutesForTeam(policyTree.Routes, teamSlug)
-
-	newRoutes := r.buildNotificationRoutes(teamSlug, environments, log)
-	filteredRoutes = append(filteredRoutes, newRoutes...)
-
-	policyTree.Routes = filteredRoutes
-
-	// Record policy tree size after modification
 	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
 		attribute.String("operation", "write"),
 		attribute.String("team", teamSlug),
@@ -940,30 +932,213 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 	params.SetContext(ctx)
 
 	_, err = r.provisioning.PutPolicyTree(params)
-
-	// Record policy tree update metrics
 	if err != nil {
 		r.metricPolicyTreeUpdatesFailed.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("team", teamSlug),
 		))
 		return fmt.Errorf("updating policy tree: %w", err)
-	} else {
-		r.metricPolicyTreeUpdates.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("team", teamSlug),
-		))
 	}
+	r.metricPolicyTreeUpdates.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("team", teamSlug),
+	))
 
 	return nil
 }
 
-func (r *grafanaReconciler) filterRoutesForTeam(routes []*models.Route, teamSlug string) []*models.Route {
-	var filteredRoutes []*models.Route
-	for _, route := range routes {
-		if !r.isRouteForTeam(route, teamSlug) {
-			filteredRoutes = append(filteredRoutes, route)
+func (r *grafanaReconciler) notificationPolicyChanges(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) (*models.Route, []*models.Route, error) {
+	resp, err := r.provisioning.GetPolicyTree()
+	if err != nil {
+		return nil, nil, fmt.Errorf("getting policy tree: %w", err)
+	}
+	if resp == nil || resp.Payload == nil {
+		return nil, nil, fmt.Errorf("getting policy tree: empty response")
+	}
+
+	policyTree := resp.Payload
+	matches, err := routeMatchesTeam(policyTree, teamSlug)
+	if err != nil {
+		return nil, nil, err
+	}
+	if matches {
+		return nil, nil, fmt.Errorf("root notification route for team %s requires manual migration", teamSlug)
+	}
+	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
+		attribute.String("operation", "read"),
+		attribute.String("team", teamSlug),
+	))
+
+	desired := r.buildNotificationRoutes(teamSlug, environments, log)
+	for _, route := range desired {
+		if policyTree.Receiver == route.Receiver {
+			return nil, nil, fmt.Errorf("contact point %q is already used by the root notification route", route.Receiver)
 		}
 	}
-	return filteredRoutes
+	additions, err := routesToAdd(policyTree.Routes, desired, teamSlug)
+	if err != nil {
+		return nil, nil, err
+	}
+	return policyTree, additions, nil
+}
+
+func routesToAdd(existing, desired []*models.Route, teamSlug string) ([]*models.Route, error) {
+	expected := make(map[string]*models.Route, len(desired))
+	for _, route := range desired {
+		if _, ok := expected[route.Receiver]; ok {
+			return nil, fmt.Errorf("duplicate notification route for contact point %s", route.Receiver)
+		}
+		expected[route.Receiver] = route
+	}
+
+	seen := make(map[string]bool, len(desired))
+	for _, route := range existing {
+		if route == nil {
+			return nil, fmt.Errorf("nil notification route in policy tree")
+		}
+		matches, err := routeMatchesTeam(route, teamSlug)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
+			want, ok := expected[route.Receiver]
+			if !ok || !sameNotificationRoute(route, want) || seen[route.Receiver] {
+				return nil, fmt.Errorf("existing notification route for team %s (receiver %q) requires manual migration", teamSlug, route.Receiver)
+			}
+			seen[route.Receiver] = true
+		} else if expected[route.Receiver] != nil {
+			return nil, fmt.Errorf("contact point %q is already used by another notification route", route.Receiver)
+		}
+		if err := checkNestedTeamRoutes(route.Routes, teamSlug, expected); err != nil {
+			return nil, err
+		}
+	}
+
+	var additions []*models.Route
+	for _, route := range desired {
+		if !seen[route.Receiver] {
+			additions = append(additions, route)
+		}
+	}
+	return additions, nil
+}
+
+func checkNestedTeamRoutes(routes []*models.Route, teamSlug string, expected map[string]*models.Route) error {
+	for _, route := range routes {
+		if route == nil {
+			return fmt.Errorf("nil nested notification route in policy tree")
+		}
+		matches, err := routeMatchesTeam(route, teamSlug)
+		if err != nil {
+			return err
+		}
+		if matches {
+			return fmt.Errorf("nested notification route for team %s (receiver %q) requires manual migration", teamSlug, route.Receiver)
+		}
+		if expected[route.Receiver] != nil {
+			return fmt.Errorf("contact point %q is already used by a nested notification route", route.Receiver)
+		}
+		if err := checkNestedTeamRoutes(route.Routes, teamSlug, expected); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sameNotificationRoute(route, want *models.Route) bool {
+	if route.Receiver != want.Receiver || route.Continue || len(route.Routes) != 0 ||
+		len(route.Match) != 0 || len(route.MatchRe) != 0 || len(route.Matchers) != 0 ||
+		len(route.MuteTimeIntervals) != 0 || len(route.ActiveTimeIntervals) != 0 ||
+		route.GroupWait != want.GroupWait || route.GroupInterval != want.GroupInterval ||
+		route.RepeatInterval != want.RepeatInterval || !slices.Equal(route.GroupBy, want.GroupBy) ||
+		len(route.ObjectMatchers) != len(want.ObjectMatchers) {
+		return false
+	}
+	for _, matcher := range want.ObjectMatchers {
+		found := false
+		for _, existing := range route.ObjectMatchers {
+			if slices.Equal(existing, matcher) {
+				found = true
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func routeMatchesTeam(route *models.Route, teamSlug string) (bool, error) {
+	hasTeamMatcher, matchesTeam := false, true
+	if value, ok := route.Match["team"]; ok {
+		hasTeamMatcher = true
+		matchesTeam = value == teamSlug
+	}
+	if pattern, ok := route.MatchRe["team"]; ok {
+		hasTeamMatcher = true
+		matches, err := teamRegexMatches(pattern, teamSlug)
+		if err != nil {
+			return false, err
+		}
+		matchesTeam = matchesTeam && matches
+	}
+	for _, matcher := range route.Matchers {
+		if matcher == nil || matcher.Name == nil || matcher.Value == nil || matcher.IsRegex == nil {
+			return false, fmt.Errorf("invalid notification route matcher")
+		}
+		if *matcher.Name != "team" {
+			continue
+		}
+		hasTeamMatcher = true
+		matches, err := teamMatcherApplies(*matcher.IsRegex, matcher.IsEqual, *matcher.Value, teamSlug)
+		if err != nil {
+			return false, err
+		}
+		matchesTeam = matchesTeam && matches
+	}
+	for _, matcher := range route.ObjectMatchers {
+		if len(matcher) == 0 || matcher[0] != "team" {
+			continue
+		}
+		if len(matcher) != 3 {
+			return false, fmt.Errorf("invalid team matcher in notification route")
+		}
+		hasTeamMatcher = true
+		var matches bool
+		switch matcher[1] {
+		case "=":
+			matches = matcher[2] == teamSlug
+		case "!=":
+			matches = matcher[2] != teamSlug
+		case "=~", "!~":
+			regexMatches, err := teamRegexMatches(matcher[2], teamSlug)
+			if err != nil {
+				return false, err
+			}
+			matches = regexMatches == (matcher[1] == "=~")
+		default:
+			return false, fmt.Errorf("unsupported team matcher operator %q", matcher[1])
+		}
+		matchesTeam = matchesTeam && matches
+	}
+	return hasTeamMatcher && matchesTeam, nil
+}
+
+func teamMatcherApplies(isRegex, isEqual bool, value, teamSlug string) (bool, error) {
+	if !isRegex {
+		return (value == teamSlug) == isEqual, nil
+	}
+	matches, err := teamRegexMatches(value, teamSlug)
+	if err != nil {
+		return false, err
+	}
+	return matches == isEqual, nil
+}
+
+func teamRegexMatches(pattern, teamSlug string) (bool, error) {
+	matches, err := regexp.MatchString("^(?:"+pattern+")$", teamSlug)
+	if err != nil {
+		return false, fmt.Errorf("invalid team matcher %q: %w", pattern, err)
+	}
+	return matches, nil
 }
 
 func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) []*models.Route {
@@ -1001,26 +1176,18 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 	return routes
 }
 
-func (r *grafanaReconciler) isRouteForTeam(route *models.Route, teamSlug string) bool {
-	if route.ObjectMatchers == nil {
-		return false
-	}
-
-	for _, matcher := range route.ObjectMatchers {
-		if len(matcher) >= 3 && matcher[0] == "team" && matcher[2] == teamSlug {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
+	r.alertingMu.Lock()
+	defer r.alertingMu.Unlock()
+
 	teamName := naisTeam.GetSlug()
 
-	if r.provisioning != nil {
-		if err := r.cleanupAlerting(ctx, teamName); err != nil {
-			log.WithError(err).Warn("Failed to cleanup alerting configuration")
+	if r.flags.EnableGrafanaAlerts {
+		if r.provisioning == nil {
+			return fmt.Errorf("cannot check notification routes before deleting team %s: provisioning client is unavailable", teamName)
+		}
+		if err := r.ensureNoNotificationRoutes(teamName); err != nil {
+			return fmt.Errorf("checking notification routes before deleting team %s: %w", teamName, err)
 		}
 	}
 
@@ -1047,49 +1214,36 @@ func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APICli
 	return nil
 }
 
-// Contact points follow the naming pattern: team-{teamSlug}-{envName}
-func (r *grafanaReconciler) cleanupAlerting(ctx context.Context, teamSlug string) error {
+func (r *grafanaReconciler) ensureNoNotificationRoutes(teamSlug string) error {
 	resp, err := r.provisioning.GetPolicyTree()
 	if err != nil {
 		return fmt.Errorf("getting policy tree: %w", err)
 	}
-
-	policyTree := resp.Payload
-	if policyTree.Routes != nil {
-		// Record policy tree size before cleanup
-		r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
-			attribute.String("operation", "cleanup_read"),
-			attribute.String("team", teamSlug),
-		))
-
-		policyTree.Routes = r.filterRoutesForTeam(policyTree.Routes, teamSlug)
-
-		// Record policy tree size after cleanup
-		r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
-			attribute.String("operation", "cleanup_write"),
-			attribute.String("team", teamSlug),
-		))
-
-		params := &grafanaprovisioning.PutPolicyTreeParams{
-			Body: policyTree,
+	if resp == nil || resp.Payload == nil {
+		return fmt.Errorf("getting policy tree: empty response")
+	}
+	matches, err := routeMatchesTeam(resp.Payload, teamSlug)
+	if err != nil {
+		return err
+	}
+	if matches {
+		return fmt.Errorf("root notification route for team %s requires manual cleanup before deletion", teamSlug)
+	}
+	for _, route := range resp.Payload.Routes {
+		if route == nil {
+			return fmt.Errorf("nil notification route in policy tree")
 		}
-		params.SetContext(ctx)
-
-		_, err = r.provisioning.PutPolicyTree(params)
+		matches, err := routeMatchesTeam(route, teamSlug)
 		if err != nil {
-			r.metricPolicyTreeUpdatesFailed.Add(ctx, 1, metric.WithAttributes(
-				attribute.String("team", teamSlug),
-				attribute.String("operation", "cleanup"),
-			))
-			return fmt.Errorf("updating policy tree during cleanup: %w", err)
-		} else {
-			r.metricPolicyTreeUpdates.Add(ctx, 1, metric.WithAttributes(
-				attribute.String("team", teamSlug),
-				attribute.String("operation", "cleanup"),
-			))
+			return err
+		}
+		if matches {
+			return fmt.Errorf("notification route for team %s (receiver %q) requires manual cleanup before deletion", teamSlug, route.Receiver)
+		}
+		if err := checkNestedTeamRoutes(route.Routes, teamSlug, nil); err != nil {
+			return fmt.Errorf("manual cleanup before deleting team %s: %w", teamSlug, err)
 		}
 	}
-
 	return nil
 }
 
