@@ -34,7 +34,7 @@ func TestGetOrCreateFolder(t *testing.T) {
 		folders.EXPECT().UpdateFolderWithParams(&grafanafolders.UpdateFolderParams{
 			FolderUID: "existing-uid",
 			Body: &models.UpdateFolderCommand{
-				Description: "Recognized by api-reconciler as a valid team folder",
+				Description: "Reconciled by nais",
 				Version:     2,
 			},
 			Context: ctx,
@@ -59,7 +59,7 @@ func TestGetOrCreateFolder(t *testing.T) {
 			FolderUID: "nais-" + teamName,
 			Body: &models.UpdateFolderCommand{
 				Title:       teamName,
-				Description: "Recognized by api-reconciler as a valid team folder",
+				Description: "Reconciled by nais",
 				Version:     2,
 			},
 			Context: ctx,
@@ -84,7 +84,7 @@ func TestGetOrCreateFolder(t *testing.T) {
 		folders.EXPECT().UpdateFolderWithParams(&grafanafolders.UpdateFolderParams{
 			FolderUID: "nais-" + teamName,
 			Body: &models.UpdateFolderCommand{
-				Description: "Recognized by api-reconciler as a valid team folder",
+				Description: "Reconciled by nais",
 				Version:     2,
 			},
 			Context: ctx,
@@ -115,7 +115,7 @@ func TestGetOrCreateFolder(t *testing.T) {
 		folders.EXPECT().UpdateFolderWithParams(&grafanafolders.UpdateFolderParams{
 			FolderUID: "nais-" + teamName,
 			Body: &models.UpdateFolderCommand{
-				Description: "Recognized by api-reconciler as a valid team folder",
+				Description: "Reconciled by nais",
 				Version:     2,
 			},
 			Context: ctx,
@@ -300,7 +300,7 @@ func TestGetOrCreateFolder(t *testing.T) {
 		folders.EXPECT().UpdateFolderWithParams(&grafanafolders.UpdateFolderParams{
 			FolderUID: "existing-uid",
 			Body: &models.UpdateFolderCommand{
-				Description: "Recognized by api-reconciler as a valid team folder",
+				Description: "Reconciled by nais",
 				Version:     2,
 			},
 			Context: ctx,

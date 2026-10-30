@@ -27,6 +27,12 @@ values:
     config:
       type: bool
 
+  featureFlags.grafanaAlertPilotTeams:
+    displayName: Grafana alerting pilot teams
+    description: Team slugs allowed to provision Grafana alerting when enabled; empty means no teams
+    config:
+      type: string_array
+
   googleManagementProjectID:
     displayName: Google management project ID
     computed:

@@ -265,7 +265,8 @@ func TestReconcile(t *testing.T) {
 			adminUsersService,
 			provisioningService,
 			config.FeatureFlags{
-				EnableGrafanaAlerts: true,
+				EnableGrafanaAlerts:    true,
+				GrafanaAlertPilotTeams: []string{teamSlug},
 			},
 			testSlackWebhookURL,
 		)
@@ -463,7 +464,8 @@ func TestReconcile(t *testing.T) {
 			adminUsersService,
 			provisioningService,
 			config.FeatureFlags{
-				EnableGrafanaAlerts: true,
+				EnableGrafanaAlerts:    true,
+				GrafanaAlertPilotTeams: []string{teamSlug},
 			},
 			testSlackWebhookURL,
 		)
@@ -646,7 +648,8 @@ func TestReconcile(t *testing.T) {
 			adminUsersService,
 			provisioningService,
 			config.FeatureFlags{
-				EnableGrafanaAlerts: true,
+				EnableGrafanaAlerts:    true,
+				GrafanaAlertPilotTeams: []string{teamSlug},
 			},
 			testSlackWebhookURL,
 		)
@@ -681,9 +684,7 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{
-			EnableGrafanaAlerts: true,
-		}, testSlackWebhookURL)
+		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{}, testSlackWebhookURL)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -850,7 +851,7 @@ func TestAlertingFunctionality(t *testing.T) {
 					Routes: []*models.Route{},
 				},
 			}, nil).
-			Once()
+			Twice()
 
 		provisioningService.EXPECT().
 			PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
@@ -880,7 +881,8 @@ func TestAlertingFunctionality(t *testing.T) {
 			adminUsersService,
 			provisioningService,
 			config.FeatureFlags{
-				EnableGrafanaAlerts: true,
+				EnableGrafanaAlerts:    true,
+				GrafanaAlertPilotTeams: []string{teamSlug},
 			},
 			testSlackWebhookURL,
 		)
@@ -916,11 +918,10 @@ func TestAlertingFunctionality(t *testing.T) {
 		t.Skip("Covered by integration test")
 	})
 
-	t.Run("cleanupAlerting removes team routes on delete", func(t *testing.T) {
-		// This test is covered by the Delete test cases below
+	t.Run("Delete does not remove notification routes", func(t *testing.T) {
 		t.Skip("Covered by Delete test cases")
 	})
-	t.Run("Delete with provisioning service calls cleanup", func(t *testing.T) {
+	t.Run("Delete with provisioning service checks existing routes", func(t *testing.T) {
 		apiClient, _ := apiclient.NewMockClient(t)
 		teamSlugVar := teamSlug
 		naisTeam := &protoapi.Team{Slug: teamSlug}
@@ -945,17 +946,13 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		// Mock provisioning service for cleanup
+		// Check policy routes without changing the tree.
 		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 		provisioningService.EXPECT().
 			GetPolicyTree().
 			Return(&grafana_provisioning.GetPolicyTreeOK{
 				Payload: &models.Route{Routes: []*models.Route{}},
 			}, nil).
-			Once()
-		provisioningService.EXPECT().
-			PutPolicyTree(mock.AnythingOfType("*provisioning.PutPolicyTreeParams")).
-			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
 
 		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, provisioningService, config.FeatureFlags{
@@ -967,38 +964,16 @@ func TestAlertingFunctionality(t *testing.T) {
 		}
 	})
 
-	t.Run("Delete without provisioning service skips cleanup", func(t *testing.T) {
+	t.Run("Delete without provisioning service fails closed", func(t *testing.T) {
 		apiClient, _ := apiclient.NewMockClient(t)
-		teamSlugVar := teamSlug
 		naisTeam := &protoapi.Team{Slug: teamSlug}
-
-		// Mock team search and deletion
 		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
-		teamsService.EXPECT().
-			SearchTeams(&grafana_teams.SearchTeamsParams{
-				Query:   &teamSlugVar,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.SearchTeamsOK{
-				Payload: &models.SearchTeamQueryResult{
-					Teams: []*models.TeamDTO{
-						{ID: 1, Name: teamSlug},
-					},
-				},
-			}, nil).
-			Once()
-		teamsService.EXPECT().
-			DeleteTeamByID("1").
-			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
-			Once()
-
-		// No provisioning service provided - should not call any provisioning methods
 		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
 		}, testSlackWebhookURL)
 
-		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
-			t.Fatalf("Delete failed: %v", err)
+		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err == nil {
+			t.Fatal("expected an error without a provisioning client")
 		}
 	})
 
@@ -1263,7 +1238,7 @@ func TestAlertingFunctionality(t *testing.T) {
 					Routes: []*models.Route{},
 				},
 			}, nil).
-			Once()
+			Twice()
 
 		provisioningService.EXPECT().
 			PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
@@ -1283,7 +1258,8 @@ func TestAlertingFunctionality(t *testing.T) {
 			adminUsersService,
 			provisioningService,
 			config.FeatureFlags{
-				EnableGrafanaAlerts: true,
+				EnableGrafanaAlerts:    true,
+				GrafanaAlertPilotTeams: []string{teamSlug},
 			},
 			testSlackWebhookURL,
 		)
@@ -1293,147 +1269,147 @@ func TestAlertingFunctionality(t *testing.T) {
 		}
 	})
 
-	t.Run("No alerting calls when feature toggle disabled", func(t *testing.T) {
-		// Define all variables and constants for this test
-		const (
-			testTeamID           = 1
-			testTeamIDAsString   = "1"
-			testServiceAccountID = 1
-			testResourceName     = "serviceaccounts"
-		)
+	for _, tt := range []struct {
+		name  string
+		flags config.FeatureFlags
+	}{
+		{"feature flag disabled", config.FeatureFlags{GrafanaAlertPilotTeams: []string{teamSlug}}},
+		{"empty pilot", config.FeatureFlags{EnableGrafanaAlerts: true}},
+		{"team outside pilot", config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			const (
+				testTeamID           = 1
+				testTeamIDAsString   = "1"
+				testServiceAccountID = 1
+				testResourceName     = "serviceaccounts"
+			)
 
-		teamName := teamSlug
-		serviceAccountName := "team-" + teamSlug
-		naisTeam := &protoapi.Team{
-			Slug:    teamSlug,
-			Purpose: "test-purpose",
-		}
+			teamName := teamSlug
+			serviceAccountName := "team-" + teamSlug
+			naisTeam := &protoapi.Team{
+				Slug:    teamSlug,
+				Purpose: "test-purpose",
+			}
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
+			apiClient, mockServer := apiclient.NewMockClient(t)
 
-		// Mock the basic team operations but NO alerting operations
-		mockServer.Teams.EXPECT().
-			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamEnvironmentsResponse{
-				Nodes: []*protoapi.TeamEnvironment{
-					{
-						EnvironmentName:    "dev",
-						SlackAlertsChannel: "#alerts-dev", // Even with Slack channel, no alerting should happen
+			mockServer.Teams.EXPECT().
+				Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+				Return(&protoapi.ListTeamEnvironmentsResponse{
+					Nodes: []*protoapi.TeamEnvironment{
+						{
+							EnvironmentName:    "dev",
+							SlackAlertsChannel: "#alerts-dev",
+						},
+						{
+							EnvironmentName:    "prod",
+							SlackAlertsChannel: "#alerts-prod",
+						},
 					},
-					{
-						EnvironmentName:    "prod",
-						SlackAlertsChannel: "#alerts-prod",
+				}, nil).
+				Once()
+
+			mockServer.Teams.EXPECT().
+				Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+				Return(&protoapi.ListTeamMembersResponse{
+					Nodes: []*protoapi.TeamMember{},
+				}, nil).
+				Once()
+
+			// Mock basic Grafana services (users, teams, etc.)
+			usersService := grafana_reconciler.NewMockUsersClientService(t)
+			teamsService := grafana_reconciler.NewMockTeamsClientService(t)
+			rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
+			serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
+			adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
+
+			// Setup basic team operations
+			teamsService.EXPECT().
+				SearchTeams(&grafana_teams.SearchTeamsParams{
+					Query:   &teamName,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.SearchTeamsOK{
+					Payload: &models.SearchTeamQueryResult{
+						Teams: []*models.TeamDTO{
+							{ID: testTeamID, Name: teamName},
+						},
 					},
-				},
-			}, nil).
-			Once()
+				}, nil).
+				Once()
 
-		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamMembersResponse{
-				Nodes: []*protoapi.TeamMember{},
-			}, nil).
-			Once()
+			teamsService.EXPECT().
+				GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+					TeamID:  testTeamIDAsString,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.GetTeamMembersOK{
+					Payload: []*models.TeamMemberDTO{},
+				}, nil).
+				Once()
 
-		// Mock basic Grafana services (users, teams, etc.)
-		usersService := grafana_reconciler.NewMockUsersClientService(t)
-		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
-		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
-		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
-		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
-
-		// Setup basic team operations
-		teamsService.EXPECT().
-			SearchTeams(&grafana_teams.SearchTeamsParams{
-				Query:   &teamName,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.SearchTeamsOK{
-				Payload: &models.SearchTeamQueryResult{
-					Teams: []*models.TeamDTO{
-						{ID: testTeamID, Name: teamName},
+			// Setup service account operations
+			serviceAccountsService.EXPECT().
+				SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
+					Query:   &serviceAccountName,
+					Context: ctx,
+				}).
+				Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
+					Payload: &models.SearchOrgServiceAccountsResult{
+						ServiceAccounts: []*models.ServiceAccountDTO{
+							{ID: testServiceAccountID, Name: serviceAccountName},
+						},
 					},
-				},
-			}, nil).
-			Once()
+				}, nil).
+				Once()
 
-		teamsService.EXPECT().
-			GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
-				TeamID:  testTeamIDAsString,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.GetTeamMembersOK{
-				Payload: []*models.TeamMemberDTO{},
-			}, nil).
-			Once()
+			rbacService.EXPECT().
+				GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+					Resource:   testResourceName,
+					ResourceID: strconv.Itoa(int(testServiceAccountID)),
+					Context:    ctx,
+				}).
+				Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+					Payload: []*models.ResourcePermissionDTO{},
+				}, nil).
+				Once()
 
-		// Setup service account operations
-		serviceAccountsService.EXPECT().
-			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
-				Query:   &serviceAccountName,
-				Context: ctx,
-			}).
-			Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
-				Payload: &models.SearchOrgServiceAccountsResult{
-					ServiceAccounts: []*models.ServiceAccountDTO{
-						{ID: testServiceAccountID, Name: serviceAccountName},
+			rbacService.EXPECT().
+				SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+					Body: &models.SetPermissionsCommand{
+						Permissions: []*models.SetResourcePermissionCommand{
+							{Permission: "Edit", TeamID: testTeamID},
+						},
 					},
-				},
-			}, nil).
-			Once()
+					Resource:   testResourceName,
+					ResourceID: strconv.Itoa(int(testServiceAccountID)),
+					Context:    ctx,
+				}).
+				Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
+				Once()
 
-		rbacService.EXPECT().
-			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
-				Resource:   testResourceName,
-				ResourceID: strconv.Itoa(int(testServiceAccountID)),
-				Context:    ctx,
-			}).
-			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
-				Payload: []*models.ResourcePermissionDTO{},
-			}, nil).
-			Once()
+			provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 
-		rbacService.EXPECT().
-			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
-				Body: &models.SetPermissionsCommand{
-					Permissions: []*models.SetResourcePermissionCommand{
-						{Permission: "Edit", TeamID: testTeamID},
-					},
-				},
-				Resource:   testResourceName,
-				ResourceID: strconv.Itoa(int(testServiceAccountID)),
-				Context:    ctx,
-			}).
-			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
-			Once()
+			reconciler := grafana_reconciler.New(
+				usersService,
+				teamsService,
+				nil,
+				nil,
+				rbacService,
+				serviceAccountsService,
+				adminUsersService,
+				provisioningService,
+				tt.flags,
+				testSlackWebhookURL,
+			)
 
-		// CRITICAL: Mock provisioning service but ensure NO methods are called
-		// If any provisioning methods are called, the test will fail
-		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
-		// No EXPECT() calls on provisioningService - any call will fail the test
+			if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+				t.Fatal(err)
+			}
 
-		reconciler := grafana_reconciler.New(
-			usersService,
-			teamsService,
-			nil,
-			nil,
-			rbacService,
-			serviceAccountsService,
-			adminUsersService,
-			provisioningService,
-			config.FeatureFlags{
-				EnableGrafanaAlerts: false, // DISABLED - this is the key test condition
-			},
-			testSlackWebhookURL,
-		)
-
-		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
-			t.Fatal(err)
-		}
-
-		// If we reach here, it means no provisioning service methods were called
-		// which is exactly what we want when the feature toggle is disabled
-	})
+		})
+	}
 }
 
 func findRouteByReceiver(routes []*models.Route, receiver string) *models.Route {

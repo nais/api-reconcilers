@@ -115,6 +115,10 @@ spec:
             - name: FEATURE_ENABLE_GRAFANA_ALERTS
               value: {{ .Values.featureFlags.enableGrafanaAlerts | quote }}
             {{- end }}
+            {{- if .Values.featureFlags.grafanaAlertPilotTeams }}
+            - name: FEATURE_GRAFANA_ALERT_PILOT_TEAMS
+              value: {{ .Values.featureFlags.grafanaAlertPilotTeams | join "," | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 3005
