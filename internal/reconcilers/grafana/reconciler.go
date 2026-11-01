@@ -42,10 +42,6 @@ const (
 	defaultRepeatInterval = "3h"
 
 	defaultSlackUsername = "Grafana"
-
-	pilotFolderTeam1 = "traktor"
-	pilotFolderTeam2 = "aura"
-	pilotFolderTeam3 = "nais"
 )
 
 type UsersClientService interface {
@@ -689,9 +685,8 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		return fmt.Errorf("getting or creating team: %w", err)
 	}
 
-	log.Infof("Reconciling folder %s", naisTeam.Slug)
-	if naisTeam.Slug != "" && (naisTeam.Slug == pilotFolderTeam1 ||
-		naisTeam.Slug == pilotFolderTeam2 || naisTeam.Slug == pilotFolderTeam3) {
+	if naisTeam.Slug != "" && slices.Contains(r.flags.GrafanaAlertPilotTeams, naisTeam.Slug) {
+		log.Infof("Reconciling folder %s", naisTeam.Slug)
 		folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
 		if err != nil {
 			return fmt.Errorf("getting or creating folder: %w", err)
