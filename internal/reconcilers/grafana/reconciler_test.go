@@ -3,12 +3,15 @@ package grafana_reconciler_test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
+	grafana_folderpermissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
+	grafana_folders "github.com/grafana/grafana-openapi-client-go/client/folders"
 	grafana_provisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
 	grafana_teams "github.com/grafana/grafana-openapi-client-go/client/teams"
@@ -23,6 +26,34 @@ import (
 )
 
 const testSlackWebhookURL = "https://hooks.slack.com/test/webhook"
+
+func expectPilotFolder(t *testing.T, ctx context.Context, teamSlug string, teamID int64) (*grafana_reconciler.MockFoldersClientService, *grafana_reconciler.MockFolderPermissionsClientService) {
+	t.Helper()
+	folders := grafana_reconciler.NewMockFoldersClientService(t)
+	permissions := grafana_reconciler.NewMockFolderPermissionsClientService(t)
+	folderUID := "nais-" + teamSlug
+	folders.EXPECT().GetFolders(mock.Anything).
+		Return(&grafana_folders.GetFoldersOK{Payload: []*models.FolderSearchHit{}}, nil).Once()
+	folders.EXPECT().CreateFolderWithParams(&grafana_folders.CreateFolderParams{
+		Body: &models.CreateFolderCommand{
+			Title: teamSlug, UID: folderUID, Description: "Created by api-reconciler",
+		},
+		Context: ctx,
+	}).Return(&grafana_folders.CreateFolderOK{Payload: &models.Folder{UID: folderUID}}, nil).Once()
+	permissions.EXPECT().GetFolderPermissionListWithParams(&grafana_folderpermissions.GetFolderPermissionListParams{
+		FolderUID: folderUID, Context: ctx,
+	}).Return(&grafana_folderpermissions.GetFolderPermissionListOK{Payload: []*models.DashboardACLInfoDTO{}}, nil).Once()
+	permissions.EXPECT().UpdateFolderPermissionsWithParams(&grafana_folderpermissions.UpdateFolderPermissionsParams{
+		FolderUID: folderUID,
+		Body: &models.UpdateDashboardACLCommand{Items: []*models.DashboardACLUpdateItem{
+			{Role: "Viewer", Permission: 1},
+			{Role: "Editor", Permission: 1},
+			{TeamID: teamID, Permission: 2},
+		}},
+		Context: ctx,
+	}).Return(&grafana_folderpermissions.UpdateFolderPermissionsOK{}, nil).Once()
+	return folders, permissions
+}
 
 func TestReconcile(t *testing.T) {
 	ctx := context.Background()
@@ -255,11 +286,12 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
 
+		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			nil,
-			nil,
+			folders,
+			folderPermissions,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -454,11 +486,12 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
 
+		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			nil,
-			nil,
+			folders,
+			folderPermissions,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -638,11 +671,12 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
 
+		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			nil,
-			nil,
+			folders,
+			folderPermissions,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -871,11 +905,12 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
 
+		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, 1)
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			nil,
-			nil,
+			folders,
+			folderPermissions,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1248,11 +1283,12 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
 
+		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
 			usersService,
 			teamsService,
-			nil,
-			nil,
+			folders,
+			folderPermissions,
 			rbacService,
 			serviceAccountsService,
 			adminUsersService,
@@ -1271,13 +1307,16 @@ func TestAlertingFunctionality(t *testing.T) {
 
 	for _, tt := range []struct {
 		name  string
+		team  string
 		flags config.FeatureFlags
 	}{
-		{"feature flag disabled", config.FeatureFlags{GrafanaAlertPilotTeams: []string{teamSlug}}},
-		{"empty pilot", config.FeatureFlags{EnableGrafanaAlerts: true}},
-		{"team outside pilot", config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
+		{"feature flag disabled", teamSlug, config.FeatureFlags{GrafanaAlertPilotTeams: []string{teamSlug}}},
+		{"empty pilot", teamSlug, config.FeatureFlags{EnableGrafanaAlerts: true}},
+		{"team outside pilot", teamSlug, config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
+		{"former hardcoded pilot outside configured pilot", "traktor", config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			teamSlug := tt.team
 			const (
 				testTeamID           = 1
 				testTeamIDAsString   = "1"
@@ -1390,12 +1429,17 @@ func TestAlertingFunctionality(t *testing.T) {
 				Once()
 
 			provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
+			folders := grafana_reconciler.NewMockFoldersClientService(t)
+			folderPermissions := grafana_reconciler.NewMockFolderPermissionsClientService(t)
+			if slices.Contains(tt.flags.GrafanaAlertPilotTeams, teamSlug) {
+				folders, folderPermissions = expectPilotFolder(t, ctx, teamSlug, testTeamID)
+			}
 
 			reconciler := grafana_reconciler.New(
 				usersService,
 				teamsService,
-				nil,
-				nil,
+				folders,
+				folderPermissions,
 				rbacService,
 				serviceAccountsService,
 				adminUsersService,
