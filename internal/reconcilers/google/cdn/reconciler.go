@@ -280,9 +280,11 @@ func (r *cdnReconciler) Delete(ctx context.Context, _ *apiclient.APIClient, nais
 	for _, binding := range projectPolicy.Bindings {
 		if binding.Role == r.cacheReconcilerRoleID {
 			numMembers := len(binding.Members)
-			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
-				return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
-			})
+			if naisTeam.GoogleGroupEmail != nil {
+				binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+					return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
+				})
+			}
 			if serviceAccount != nil {
 				binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
 					return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
