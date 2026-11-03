@@ -123,6 +123,83 @@ func (_c *MockProvisioningClientService_GetContactpoints_Call) RunAndReturn(run 
 	return _c
 }
 
+// GetMuteTimingsWithParams provides a mock function for the type MockProvisioningClientService
+func (_mock *MockProvisioningClientService) GetMuteTimingsWithParams(params *provisioning.GetMuteTimingsParams, opts ...provisioning.ClientOption) (*provisioning.GetMuteTimingsOK, error) {
+	var tmpRet mock.Arguments
+	if len(opts) > 0 {
+		tmpRet = _mock.Called(params, opts)
+	} else {
+		tmpRet = _mock.Called(params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetMuteTimingsWithParams")
+	}
+
+	var r0 *provisioning.GetMuteTimingsOK
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.GetMuteTimingsParams, ...provisioning.ClientOption) (*provisioning.GetMuteTimingsOK, error)); ok {
+		return returnFunc(params, opts...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.GetMuteTimingsParams, ...provisioning.ClientOption) *provisioning.GetMuteTimingsOK); ok {
+		r0 = returnFunc(params, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*provisioning.GetMuteTimingsOK)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(*provisioning.GetMuteTimingsParams, ...provisioning.ClientOption) error); ok {
+		r1 = returnFunc(params, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvisioningClientService_GetMuteTimingsWithParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetMuteTimingsWithParams'
+type MockProvisioningClientService_GetMuteTimingsWithParams_Call struct {
+	*mock.Call
+}
+
+// GetMuteTimingsWithParams is a helper method to define mock.On call
+//   - params *provisioning.GetMuteTimingsParams
+//   - opts ...provisioning.ClientOption
+func (_e *MockProvisioningClientService_Expecter) GetMuteTimingsWithParams(params any, opts ...any) *MockProvisioningClientService_GetMuteTimingsWithParams_Call {
+	return &MockProvisioningClientService_GetMuteTimingsWithParams_Call{Call: _e.mock.On("GetMuteTimingsWithParams",
+		append([]any{params}, opts...)...)}
+}
+
+func (_c *MockProvisioningClientService_GetMuteTimingsWithParams_Call) Run(run func(params *provisioning.GetMuteTimingsParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_GetMuteTimingsWithParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *provisioning.GetMuteTimingsParams
+		if args[0] != nil {
+			arg0 = args[0].(*provisioning.GetMuteTimingsParams)
+		}
+		var arg1 []provisioning.ClientOption
+		var variadicArgs []provisioning.ClientOption
+		if len(args) > 1 {
+			variadicArgs = args[1].([]provisioning.ClientOption)
+		}
+		arg1 = variadicArgs
+		run(
+			arg0,
+			arg1...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvisioningClientService_GetMuteTimingsWithParams_Call) Return(getMuteTimingsOK *provisioning.GetMuteTimingsOK, err error) *MockProvisioningClientService_GetMuteTimingsWithParams_Call {
+	_c.Call.Return(getMuteTimingsOK, err)
+	return _c
+}
+
+func (_c *MockProvisioningClientService_GetMuteTimingsWithParams_Call) RunAndReturn(run func(params *provisioning.GetMuteTimingsParams, opts ...provisioning.ClientOption) (*provisioning.GetMuteTimingsOK, error)) *MockProvisioningClientService_GetMuteTimingsWithParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetPolicyTree provides a mock function for the type MockProvisioningClientService
 func (_mock *MockProvisioningClientService) GetPolicyTree(opts ...provisioning.ClientOption) (*provisioning.GetPolicyTreeOK, error) {
 	var tmpRet mock.Arguments
@@ -344,6 +421,83 @@ func (_c *MockProvisioningClientService_PostContactpoints_Call) Return(postConta
 }
 
 func (_c *MockProvisioningClientService_PostContactpoints_Call) RunAndReturn(run func(params *provisioning.PostContactpointsParams, opts ...provisioning.ClientOption) (*provisioning.PostContactpointsAccepted, error)) *MockProvisioningClientService_PostContactpoints_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// PostMuteTiming provides a mock function for the type MockProvisioningClientService
+func (_mock *MockProvisioningClientService) PostMuteTiming(params *provisioning.PostMuteTimingParams, opts ...provisioning.ClientOption) (*provisioning.PostMuteTimingCreated, error) {
+	var tmpRet mock.Arguments
+	if len(opts) > 0 {
+		tmpRet = _mock.Called(params, opts)
+	} else {
+		tmpRet = _mock.Called(params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for PostMuteTiming")
+	}
+
+	var r0 *provisioning.PostMuteTimingCreated
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.PostMuteTimingParams, ...provisioning.ClientOption) (*provisioning.PostMuteTimingCreated, error)); ok {
+		return returnFunc(params, opts...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.PostMuteTimingParams, ...provisioning.ClientOption) *provisioning.PostMuteTimingCreated); ok {
+		r0 = returnFunc(params, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*provisioning.PostMuteTimingCreated)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(*provisioning.PostMuteTimingParams, ...provisioning.ClientOption) error); ok {
+		r1 = returnFunc(params, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvisioningClientService_PostMuteTiming_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PostMuteTiming'
+type MockProvisioningClientService_PostMuteTiming_Call struct {
+	*mock.Call
+}
+
+// PostMuteTiming is a helper method to define mock.On call
+//   - params *provisioning.PostMuteTimingParams
+//   - opts ...provisioning.ClientOption
+func (_e *MockProvisioningClientService_Expecter) PostMuteTiming(params any, opts ...any) *MockProvisioningClientService_PostMuteTiming_Call {
+	return &MockProvisioningClientService_PostMuteTiming_Call{Call: _e.mock.On("PostMuteTiming",
+		append([]any{params}, opts...)...)}
+}
+
+func (_c *MockProvisioningClientService_PostMuteTiming_Call) Run(run func(params *provisioning.PostMuteTimingParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_PostMuteTiming_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *provisioning.PostMuteTimingParams
+		if args[0] != nil {
+			arg0 = args[0].(*provisioning.PostMuteTimingParams)
+		}
+		var arg1 []provisioning.ClientOption
+		var variadicArgs []provisioning.ClientOption
+		if len(args) > 1 {
+			variadicArgs = args[1].([]provisioning.ClientOption)
+		}
+		arg1 = variadicArgs
+		run(
+			arg0,
+			arg1...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvisioningClientService_PostMuteTiming_Call) Return(postMuteTimingCreated *provisioning.PostMuteTimingCreated, err error) *MockProvisioningClientService_PostMuteTiming_Call {
+	_c.Call.Return(postMuteTimingCreated, err)
+	return _c
+}
+
+func (_c *MockProvisioningClientService_PostMuteTiming_Call) RunAndReturn(run func(params *provisioning.PostMuteTimingParams, opts ...provisioning.ClientOption) (*provisioning.PostMuteTimingCreated, error)) *MockProvisioningClientService_PostMuteTiming_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -3,6 +3,7 @@ package grafana_reconciler_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -285,6 +286,7 @@ func TestReconcile(t *testing.T) {
 			PutPolicyTree(mock.AnythingOfType("*provisioning.PutPolicyTreeParams")).
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
+		expectExistingDiscardMuteTiming(provisioningService)
 
 		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
@@ -485,6 +487,7 @@ func TestReconcile(t *testing.T) {
 			PutPolicyTree(mock.AnythingOfType("*provisioning.PutPolicyTreeParams")).
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
+		expectExistingDiscardMuteTiming(provisioningService)
 
 		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
@@ -670,6 +673,7 @@ func TestReconcile(t *testing.T) {
 			PutPolicyTree(mock.AnythingOfType("*provisioning.PutPolicyTreeParams")).
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Maybe()
+		expectExistingDiscardMuteTiming(provisioningService)
 
 		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
@@ -885,25 +889,27 @@ func TestAlertingFunctionality(t *testing.T) {
 					Routes: []*models.Route{},
 				},
 			}, nil).
-			Twice()
+			Times(3)
 
 		provisioningService.EXPECT().
 			PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
 				routes := params.Body.Routes
-				if len(routes) != 2 {
+				if len(routes) != 1 || len(routes[0].Routes) != 3 ||
+					!reflect.DeepEqual(routes[0].ObjectMatchers, models.ObjectMatchers{{"team", "=", teamSlug}}) {
 					return false
 				}
 
 				// Verify both routes are created with correct matchers
-				devRoute := findRouteByReceiver(routes, "team-test-team-dev")
-				prodRoute := findRouteByReceiver(routes, "team-test-team-prod")
+				devRoute := findRouteByReceiver(routes[0].Routes, "team-test-team-dev")
+				prodRoute := findRouteByReceiver(routes[0].Routes, "team-test-team-prod")
 
 				return devRoute != nil && prodRoute != nil &&
-					hasCorrectMatchers(devRoute, teamSlug, envName1) &&
-					hasCorrectMatchers(prodRoute, teamSlug, envName2)
+					hasCorrectEnvMatcher(devRoute, envName1) &&
+					hasCorrectEnvMatcher(prodRoute, envName2)
 			})).
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
+		expectExistingDiscardMuteTiming(provisioningService)
 
 		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, 1)
 		reconciler := grafana_reconciler.New(
@@ -1273,15 +1279,15 @@ func TestAlertingFunctionality(t *testing.T) {
 					Routes: []*models.Route{},
 				},
 			}, nil).
-			Twice()
+			Times(3)
 
 		provisioningService.EXPECT().
 			PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
-				// Verify that 2 routes are created (dev and prod)
-				return len(params.Body.Routes) == 2
+				return len(params.Body.Routes) == 1 && len(params.Body.Routes[0].Routes) == 3
 			})).
 			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
 			Once()
+		expectExistingDiscardMuteTiming(provisioningService)
 
 		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
 		reconciler := grafana_reconciler.New(
@@ -1464,26 +1470,19 @@ func findRouteByReceiver(routes []*models.Route, receiver string) *models.Route 
 	return nil
 }
 
-func hasCorrectMatchers(route *models.Route, expectedTeam, expectedEnv string) bool {
-	if route.ObjectMatchers == nil || len(route.ObjectMatchers) != 2 {
-		return false
-	}
+func hasCorrectEnvMatcher(route *models.Route, expectedEnv string) bool {
+	return reflect.DeepEqual(route.ObjectMatchers, models.ObjectMatchers{{"env", "=", expectedEnv}})
+}
 
-	hasTeamMatcher := false
-	hasEnvMatcher := false
-
-	for _, matcher := range route.ObjectMatchers {
-		if len(matcher) >= 3 {
-			if matcher[0] == "team" && matcher[1] == "=" && matcher[2] == expectedTeam {
-				hasTeamMatcher = true
-			}
-			if matcher[0] == "env" && matcher[1] == "=" && matcher[2] == expectedEnv {
-				hasEnvMatcher = true
-			}
-		}
-	}
-
-	return hasTeamMatcher && hasEnvMatcher
+func expectExistingDiscardMuteTiming(provisioning *grafana_reconciler.MockProvisioningClientService) {
+	provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(&grafana_provisioning.GetMuteTimingsOK{
+		Payload: models.MuteTimings{{
+			Name: "nais-unconfigured-environment",
+			TimeIntervals: []*models.TimeIntervalItem{{
+				Times: []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+			}},
+		}},
+	}, nil)
 }
 
 func TestContactPointCreationRegression(t *testing.T) {

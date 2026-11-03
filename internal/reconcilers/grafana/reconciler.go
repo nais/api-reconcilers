@@ -42,6 +42,7 @@ const (
 	defaultRepeatInterval = "3h"
 
 	defaultSlackUsername = "Grafana"
+	discardMuteTiming    = "nais-unconfigured-environment"
 )
 
 type UsersClientService interface {
@@ -91,6 +92,8 @@ type ProvisioningClientService interface {
 	PutContactpoint(params *grafanaprovisioning.PutContactpointParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutContactpointAccepted, error)
 	GetPolicyTree(opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetPolicyTreeOK, error)
 	PutPolicyTree(params *grafanaprovisioning.PutPolicyTreeParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutPolicyTreeAccepted, error)
+	GetMuteTimingsWithParams(params *grafanaprovisioning.GetMuteTimingsParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetMuteTimingsOK, error)
+	PostMuteTiming(params *grafanaprovisioning.PostMuteTimingParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PostMuteTimingCreated, error)
 }
 
 type grafanaReconciler struct {
@@ -905,24 +908,37 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 	if !reflect.DeepEqual(policyTree, baseline) {
 		return fmt.Errorf("notification policy tree changed since preflight for team %s; refusing to overwrite external changes", teamSlug)
 	}
-	if len(newRoutes) == 0 {
+	if err := r.ensureDiscardMuteTiming(ctx); err != nil {
+		return err
+	}
+	if len(newRoutes) == 0 && policyTree.Provenance != "" {
 		return nil
+	}
+	latest, err := r.provisioning.GetPolicyTree()
+	if err != nil {
+		return fmt.Errorf("rechecking policy tree after ensuring discard mute timing: %w", err)
+	}
+	if latest == nil || latest.Payload == nil {
+		return fmt.Errorf("rechecking policy tree after ensuring discard mute timing: empty response")
+	}
+	if !reflect.DeepEqual(latest.Payload, baseline) {
+		return fmt.Errorf("notification policy tree changed while ensuring discard mute timing for team %s; refusing to overwrite external changes", teamSlug)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	policyTree.Routes = append(policyTree.Routes, newRoutes...)
+	if len(newRoutes) != 0 {
+		policyTree.Routes = newRoutes
+	}
 
 	r.metricPolicyTreeSize.Record(ctx, int64(len(policyTree.Routes)), metric.WithAttributes(
 		attribute.String("operation", "write"),
 		attribute.String("team", teamSlug),
 	))
 
-	disableProvenance := "true"
 	params := &grafanaprovisioning.PutPolicyTreeParams{
-		Body:               policyTree,
-		XDisableProvenance: &disableProvenance,
+		Body: policyTree,
 	}
 	params.SetContext(ctx)
 
@@ -941,6 +957,14 @@ func (r *grafanaReconciler) updateNotificationPolicy(ctx context.Context, teamSl
 }
 
 func (r *grafanaReconciler) notificationPolicyChanges(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) (*models.Route, []*models.Route, error) {
+	if teamSlug == "" {
+		return nil, nil, fmt.Errorf("cannot reconcile notification policies without a team slug")
+	}
+	for _, env := range environments {
+		if env == nil || (env.SlackAlertsChannel != "" && env.EnvironmentName == "") {
+			return nil, nil, fmt.Errorf("team %s has an invalid alerting environment", teamSlug)
+		}
+	}
 	resp, err := r.provisioning.GetPolicyTree()
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting policy tree: %w", err)
@@ -968,11 +992,161 @@ func (r *grafanaReconciler) notificationPolicyChanges(ctx context.Context, teamS
 			return nil, nil, fmt.Errorf("contact point %q is already used by the root notification route", route.Receiver)
 		}
 	}
-	additions, err := routesToAdd(policyTree.Routes, desired, teamSlug)
+	additions, err := planTeamNotificationRoutes(policyTree.Routes, desired, teamSlug)
 	if err != nil {
 		return nil, nil, err
 	}
 	return policyTree, additions, nil
+}
+
+func (r *grafanaReconciler) ensureDiscardMuteTiming(ctx context.Context) error {
+	desired := &models.MuteTimeInterval{
+		Name: discardMuteTiming,
+		TimeIntervals: []*models.TimeIntervalItem{{
+			Times: []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+		}},
+	}
+	resp, err := r.provisioning.GetMuteTimingsWithParams(grafanaprovisioning.NewGetMuteTimingsParamsWithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("getting discard mute timing: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("getting discard mute timing: empty response")
+	}
+	for _, timing := range resp.Payload {
+		if timing == nil {
+			return fmt.Errorf("getting discard mute timing: null interval")
+		}
+		if timing.Name == desired.Name {
+			if len(timing.TimeIntervals) != 1 || timing.TimeIntervals[0] == nil {
+				return fmt.Errorf("mute timing %q differs from the always-muted fallback; requires manual migration", desired.Name)
+			}
+			interval := timing.TimeIntervals[0]
+			if len(interval.DaysOfMonth) != 0 || len(interval.Months) != 0 ||
+				len(interval.Weekdays) != 0 || len(interval.Years) != 0 ||
+				len(interval.Times) != 1 || interval.Times[0] == nil ||
+				interval.Times[0].StartTime != "00:00" || interval.Times[0].EndTime != "24:00" {
+				return fmt.Errorf("mute timing %q differs from the always-muted fallback; requires manual migration", desired.Name)
+			}
+			return nil
+		}
+	}
+	created, err := r.provisioning.PostMuteTiming(&grafanaprovisioning.PostMuteTimingParams{
+		Body: desired, Context: ctx,
+	})
+	if err != nil {
+		return fmt.Errorf("creating discard mute timing: %w", err)
+	}
+	if created == nil {
+		return fmt.Errorf("creating discard mute timing: empty response")
+	}
+	return nil
+}
+
+func planTeamNotificationRoutes(existing, desired []*models.Route, teamSlug string) ([]*models.Route, error) {
+	parent := &models.Route{ObjectMatchers: models.ObjectMatchers{{"team", "=", teamSlug}}}
+	fallback := &models.Route{MuteTimeIntervals: []string{discardMuteTiming}}
+	expected := make(map[string]*models.Route, len(desired))
+	for _, route := range desired {
+		if expected[route.Receiver] != nil {
+			return nil, fmt.Errorf("duplicate notification route for contact point %s", route.Receiver)
+		}
+		child := *route
+		child.ObjectMatchers = nil
+		for _, matcher := range route.ObjectMatchers {
+			if matcher[0] != "team" {
+				child.ObjectMatchers = append(child.ObjectMatchers, matcher)
+			}
+		}
+		expected[route.Receiver] = &child
+	}
+
+	parentIndex := -1
+	var unrelated []*models.Route
+	for i, route := range existing {
+		if route == nil {
+			return nil, fmt.Errorf("nil notification route in policy tree")
+		}
+		shell := *route
+		shell.Routes = nil
+		if sameNotificationRoute(&shell, parent) {
+			if parentIndex != -1 {
+				return nil, fmt.Errorf("duplicate team parent for %s requires manual migration", teamSlug)
+			}
+			parentIndex = i
+		} else {
+			unrelated = append(unrelated, route)
+		}
+	}
+	if parentIndex != -1 {
+		additions, err := routesToAdd(unrelated, desired, teamSlug)
+		if err != nil {
+			return nil, err
+		}
+		if len(additions) != len(desired) {
+			return nil, fmt.Errorf("mixed flat and nested notification routes for team %s require manual migration", teamSlug)
+		}
+		current := existing[parentIndex]
+		seen := make(map[string]bool, len(expected))
+		if len(current.Routes) == 0 || current.Routes[len(current.Routes)-1] == nil ||
+			!sameNotificationRoute(current.Routes[len(current.Routes)-1], fallback) {
+			return nil, fmt.Errorf("team %s fallback requires manual migration", teamSlug)
+		}
+		for _, child := range current.Routes[:len(current.Routes)-1] {
+			if child == nil || expected[child.Receiver] == nil ||
+				!sameNotificationRoute(child, expected[child.Receiver]) || seen[child.Receiver] {
+				return nil, fmt.Errorf("team %s environment route requires manual migration", teamSlug)
+			}
+			seen[child.Receiver] = true
+			parent.Routes = append(parent.Routes, child)
+		}
+		for _, route := range desired {
+			if !seen[route.Receiver] {
+				parent.Routes = append(parent.Routes, expected[route.Receiver])
+			}
+		}
+		parent.Routes = append(parent.Routes, fallback)
+		if len(seen) == len(desired) {
+			return nil, nil
+		}
+		planned := slices.Clone(existing)
+		planned[parentIndex] = parent
+		return planned, nil
+	}
+
+	if _, err := routesToAdd(existing, desired, teamSlug); err != nil {
+		return nil, err
+	}
+	for _, route := range desired {
+		parent.Routes = append(parent.Routes, expected[route.Receiver])
+	}
+	parent.Routes = append(parent.Routes, fallback)
+	var planned []*models.Route
+	inserted, interrupted := false, false
+	for _, route := range existing {
+		matches, err := routeMatchesTeam(route, teamSlug)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
+			if interrupted {
+				return nil, fmt.Errorf("interleaved notification routes for team %s require manual migration", teamSlug)
+			}
+			if !inserted {
+				planned = append(planned, parent)
+				inserted = true
+			}
+		} else {
+			planned = append(planned, route)
+			if inserted {
+				interrupted = true
+			}
+		}
+	}
+	if !inserted {
+		planned = append(planned, parent)
+	}
+	return planned, nil
 }
 
 func routesToAdd(existing, desired []*models.Route, teamSlug string) ([]*models.Route, error) {
@@ -1041,7 +1215,7 @@ func checkNestedTeamRoutes(routes []*models.Route, teamSlug string, expected map
 func sameNotificationRoute(route, want *models.Route) bool {
 	if route.Receiver != want.Receiver || route.Continue || len(route.Routes) != 0 ||
 		len(route.Match) != 0 || len(route.MatchRe) != 0 || len(route.Matchers) != 0 ||
-		len(route.MuteTimeIntervals) != 0 || len(route.ActiveTimeIntervals) != 0 ||
+		!slices.Equal(route.MuteTimeIntervals, want.MuteTimeIntervals) || !slices.Equal(route.ActiveTimeIntervals, want.ActiveTimeIntervals) ||
 		route.GroupWait != want.GroupWait || route.GroupInterval != want.GroupInterval ||
 		route.RepeatInterval != want.RepeatInterval || !slices.Equal(route.GroupBy, want.GroupBy) ||
 		len(route.ObjectMatchers) != len(want.ObjectMatchers) {
