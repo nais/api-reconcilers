@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +25,234 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 )
+
+func expectDiscardMuteTiming(provisioning *MockProvisioningClientService) {
+	provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(&grafanaprovisioning.GetMuteTimingsOK{
+		Payload: models.MuteTimings{{
+			Name: discardMuteTiming,
+			TimeIntervals: []*models.TimeIntervalItem{{
+				Times: []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+			}},
+		}},
+	}, nil)
+}
+
+func TestTeamNotificationHierarchy(t *testing.T) {
+	log, _ := test.NewNullLogger()
+	reconciler := &grafanaReconciler{}
+	environments := []*protoapi.TeamEnvironment{
+		{EnvironmentName: "dev-gcp", SlackAlertsChannel: "#traktor-dev"},
+		{EnvironmentName: "prod-gcp", SlackAlertsChannel: "#traktor-prod"},
+		{EnvironmentName: "dev-fss", SlackAlertsChannel: "#traktor-dev"},
+		{EnvironmentName: "prod-fss", SlackAlertsChannel: "#traktor-prod"},
+		{EnvironmentName: "unused"},
+	}
+	flat := reconciler.buildNotificationRoutes("traktor", environments, log)
+	before := &models.Route{Receiver: "before", Continue: true, Routes: []*models.Route{{Receiver: "nested"}}}
+	after := &models.Route{Receiver: "after", MuteTimeIntervals: []string{"night"}}
+	existing := append([]*models.Route{before}, flat...)
+	existing = append(existing, after)
+	snapshot, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned, err := planTeamNotificationRoutes(existing, flat, "traktor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(planned) != 3 || planned[0] != before || planned[2] != after {
+		t.Fatalf("unrelated route order changed: %+v", planned)
+	}
+	parent := planned[1]
+	if !reflect.DeepEqual(parent.ObjectMatchers, models.ObjectMatchers{{"team", "=", "traktor"}}) ||
+		parent.Receiver != "" || parent.Continue || len(parent.Routes) != 5 {
+		t.Fatalf("unexpected team parent: %+v", parent)
+	}
+	for i, env := range environments[:4] {
+		child := parent.Routes[i]
+		if !reflect.DeepEqual(child.ObjectMatchers, models.ObjectMatchers{{"env", "=", env.EnvironmentName}}) ||
+			child.Receiver != "team-traktor-"+env.EnvironmentName ||
+			child.Continue || len(child.MuteTimeIntervals) != 0 ||
+			!reflect.DeepEqual(child.GroupBy, flat[i].GroupBy) ||
+			child.GroupWait != flat[i].GroupWait || child.GroupInterval != flat[i].GroupInterval ||
+			child.RepeatInterval != flat[i].RepeatInterval {
+			t.Fatalf("unexpected environment child: %+v", child)
+		}
+	}
+	fallback := parent.Routes[4]
+	if !sameNotificationRoute(fallback, &models.Route{MuteTimeIntervals: []string{discardMuteTiming}}) {
+		t.Fatalf("unexpected discard fallback: %+v", fallback)
+	}
+	for _, env := range []string{"", "unknown", "unused"} {
+		for _, child := range parent.Routes[:4] {
+			if child.ObjectMatchers[0][2] == env {
+				t.Fatalf("environment %q must reach the muted fallback", env)
+			}
+		}
+	}
+	afterSnapshot, err := json.Marshal(existing)
+	if err != nil || string(snapshot) != string(afterSnapshot) {
+		t.Fatal("planning mutated the original tree")
+	}
+	again, err := planTeamNotificationRoutes(planned, flat, "traktor")
+	if err != nil || again != nil {
+		t.Fatalf("unchanged hierarchy should not be rewritten: %v, %v", again, err)
+	}
+
+	t.Run("adds environments before the fallback without mutating the parent", func(t *testing.T) {
+		initial, err := planTeamNotificationRoutes(nil, flat[:1], "traktor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		updated, err := planTeamNotificationRoutes(initial, flat, "traktor")
+		if err != nil || len(updated) != 1 || len(updated[0].Routes) != 5 ||
+			len(initial[0].Routes) != 2 || updated[0].Routes[0] != initial[0].Routes[0] {
+			t.Fatalf("unexpected added environments: %+v, %v", updated, err)
+		}
+	})
+
+	t.Run("team without channels discards all policy routed alerts", func(t *testing.T) {
+		planned, err := planTeamNotificationRoutes(nil, nil, "traktor")
+		if err != nil || len(planned) != 1 || len(planned[0].Routes) != 1 ||
+			!sameNotificationRoute(planned[0].Routes[0], fallback) {
+			t.Fatalf("unexpected fallback-only parent: %+v, %v", planned, err)
+		}
+	})
+}
+
+func TestTeamNotificationHierarchyConflicts(t *testing.T) {
+	log, _ := test.NewNullLogger()
+	desired := (&grafanaReconciler{}).buildNotificationRoutes("idm", []*protoapi.TeamEnvironment{
+		{EnvironmentName: "dev-gcp", SlackAlertsChannel: "#idm"},
+		{EnvironmentName: "prod-gcp", SlackAlertsChannel: "#idm"},
+	}, log)
+	nested, err := planTeamNotificationRoutes(nil, desired, "idm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withoutFallback := *nested[0]
+	withoutFallback.Routes = withoutFallback.Routes[:2]
+	changedParent := *nested[0]
+	changedParent.Continue = true
+	changedChild := *nested[0]
+	changedChild.Routes = slices.Clone(changedChild.Routes)
+	child := *changedChild.Routes[0]
+	child.GroupWait = "1m"
+	changedChild.Routes[0] = &child
+	duplicateChild := *nested[0]
+	duplicateChild.Routes = []*models.Route{nested[0].Routes[0], nested[0].Routes[0], nested[0].Routes[2]}
+	tests := []struct {
+		name     string
+		existing []*models.Route
+		desired  []*models.Route
+	}{
+		{"missing fallback", []*models.Route{&withoutFallback}, desired},
+		{"changed parent", []*models.Route{&changedParent}, desired},
+		{"changed child", []*models.Route{&changedChild}, desired},
+		{"duplicate parent", []*models.Route{nested[0], nested[0]}, desired},
+		{"duplicate child", []*models.Route{&duplicateChild}, desired},
+		{"removed environment", nested, desired[:1]},
+		{"all environments removed", nested, nil},
+		{"mixed layouts", []*models.Route{nested[0], desired[0]}, desired},
+		{"interleaved flat routes", []*models.Route{desired[0], {Receiver: "manual"}, desired[1]}, desired},
+		{"receiver reused outside team", []*models.Route{nested[0], {Receiver: desired[0].Receiver}}, desired},
+		{"receiver reused in nested unrelated route", []*models.Route{nested[0], {Routes: []*models.Route{{Receiver: desired[0].Receiver}}}}, desired},
+		{"nested team parent", []*models.Route{{Routes: nested}}, desired},
+		{"duplicate desired environment", nil, []*models.Route{desired[0], desired[0]}},
+		{"nil route", []*models.Route{nil}, desired},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := planTeamNotificationRoutes(tt.existing, tt.desired, "idm"); err == nil {
+				t.Fatal("expected manual migration conflict")
+			}
+		})
+	}
+}
+
+func TestDiscardMuteTiming(t *testing.T) {
+	ctx := context.Background()
+	t.Run("accepts equivalent empty restrictions and timezone", func(t *testing.T) {
+		provisioning := NewMockProvisioningClientService(t)
+		provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(&grafanaprovisioning.GetMuteTimingsOK{
+			Payload: models.MuteTimings{{
+				Name: discardMuteTiming,
+				TimeIntervals: []*models.TimeIntervalItem{{
+					Times:       []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+					DaysOfMonth: []string{}, Months: []string{}, Weekdays: []string{}, Years: []string{},
+					Location: "Europe/Oslo",
+				}},
+			}},
+		}, nil).Once()
+		if err := (&grafanaReconciler{provisioning: provisioning}).ensureDiscardMuteTiming(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("creates an all-day interval before the policy can reference it", func(t *testing.T) {
+		provisioning := NewMockProvisioningClientService(t)
+		provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(&grafanaprovisioning.GetMuteTimingsOK{}, nil).Once()
+		provisioning.EXPECT().PostMuteTiming(mock.MatchedBy(func(params *grafanaprovisioning.PostMuteTimingParams) bool {
+			return params.Context == ctx && params.XDisableProvenance == nil &&
+				params.Body.Name == discardMuteTiming && len(params.Body.TimeIntervals) == 1 &&
+				reflect.DeepEqual(params.Body.TimeIntervals[0], &models.TimeIntervalItem{
+					Times: []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+				})
+		})).Return(&grafanaprovisioning.PostMuteTimingCreated{}, nil).Once()
+		if err := (&grafanaReconciler{provisioning: provisioning}).ensureDiscardMuteTiming(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, tt := range []struct {
+		name string
+		resp *grafanaprovisioning.GetMuteTimingsOK
+		err  error
+	}{
+		{"read fails", nil, errors.New("forbidden")},
+		{"empty response", nil, nil},
+		{"null interval", &grafanaprovisioning.GetMuteTimingsOK{Payload: models.MuteTimings{nil}}, nil},
+		{"changed interval", &grafanaprovisioning.GetMuteTimingsOK{Payload: models.MuteTimings{{Name: discardMuteTiming}}}, nil},
+		{"restricted days", &grafanaprovisioning.GetMuteTimingsOK{Payload: models.MuteTimings{{
+			Name: discardMuteTiming, TimeIntervals: []*models.TimeIntervalItem{{
+				Times:    []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "24:00"}},
+				Weekdays: []string{"monday:friday"},
+			}},
+		}}}, nil},
+		{"partial day", &grafanaprovisioning.GetMuteTimingsOK{Payload: models.MuteTimings{{
+			Name: discardMuteTiming, TimeIntervals: []*models.TimeIntervalItem{{
+				Times: []*models.TimeIntervalTimeRange{{StartTime: "00:00", EndTime: "23:59"}},
+			}},
+		}}}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			provisioning := NewMockProvisioningClientService(t)
+			provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(tt.resp, tt.err).Once()
+			if err := (&grafanaReconciler{provisioning: provisioning}).ensureDiscardMuteTiming(ctx); err == nil {
+				t.Fatal("expected an explicit error without creating or updating the interval")
+			}
+		})
+	}
+	t.Run("creation failure prevents a policy write", func(t *testing.T) {
+		provisioning := NewMockProvisioningClientService(t)
+		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: &models.Route{Receiver: "default"}}, nil).Once()
+		provisioning.EXPECT().GetMuteTimingsWithParams(mock.Anything).Return(&grafanaprovisioning.GetMuteTimingsOK{}, nil).Once()
+		provisioning.EXPECT().PostMuteTiming(mock.Anything).Return(nil, errors.New("forbidden")).Once()
+		log, _ := test.NewNullLogger()
+		reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
+		if err := reconciler.updateNotificationPolicy(ctx, "idm", nil, &models.Route{Receiver: "default"}, log); err == nil {
+			t.Fatal("expected creation failure without writing a policy")
+		}
+	})
+}
+
+func TestNotificationPolicyRejectsInvalidEnvironment(t *testing.T) {
+	log, _ := test.NewNullLogger()
+	for _, env := range []*protoapi.TeamEnvironment{nil, {SlackAlertsChannel: "#idm"}} {
+		reconciler := &grafanaReconciler{provisioning: NewMockProvisioningClientService(t)}
+		if _, _, err := reconciler.notificationPolicyChanges(context.Background(), "idm", []*protoapi.TeamEnvironment{env}, log); err == nil {
+			t.Fatal("expected invalid environment to fail before any provisioning call")
+		}
+	}
+}
 
 func TestNotificationRoutesToAdd(t *testing.T) {
 	log, _ := test.NewNullLogger()
@@ -292,8 +521,9 @@ func TestNotificationPolicyWrites(t *testing.T) {
 		}
 	})
 
-	t.Run("appends only the new route and preserves existing children", func(t *testing.T) {
+	t.Run("appends the team parent and preserves existing children", func(t *testing.T) {
 		provisioning := NewMockProvisioningClientService(t)
+		expectDiscardMuteTiming(provisioning)
 		existing := &models.Route{
 			Receiver:       "tsm",
 			ObjectMatchers: models.ObjectMatchers{{"team", "=", "tsm"}},
@@ -301,11 +531,12 @@ func TestNotificationPolicyWrites(t *testing.T) {
 		}
 		tree := &models.Route{Receiver: "default", Routes: []*models.Route{existing}}
 		provisioning.EXPECT().GetPolicyTree().
-			Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: tree}, nil).Once()
+			Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: tree}, nil).Twice()
 		provisioning.EXPECT().PutPolicyTree(mock.MatchedBy(func(params *grafanaprovisioning.PutPolicyTreeParams) bool {
-			return params.XDisableProvenance != nil && *params.XDisableProvenance == "true" &&
+			return params.XDisableProvenance == nil &&
 				params.Body == tree && len(tree.Routes) == 2 && tree.Routes[0] == existing &&
-				tree.Routes[1].Receiver == "team-idm-dev-gcp" &&
+				len(tree.Routes[1].Routes) == 2 &&
+				tree.Routes[1].Routes[0].Receiver == "team-idm-dev-gcp" &&
 				len(existing.Routes) == 1 && len(existing.Routes[0].MuteTimeIntervals) == 1
 		})).Return(&grafanaprovisioning.PutPolicyTreeAccepted{}, nil).Once()
 
@@ -315,13 +546,43 @@ func TestNotificationPolicyWrites(t *testing.T) {
 		}
 	})
 
-	t.Run("does not rewrite an unchanged tree", func(t *testing.T) {
+	t.Run("does not rewrite an unchanged provisioned tree", func(t *testing.T) {
 		provisioning := NewMockProvisioningClientService(t)
+		expectDiscardMuteTiming(provisioning)
 		reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
-		route := reconciler.buildNotificationRoutes("idm", environments, log)[0]
-		tree := &models.Route{Routes: []*models.Route{route}}
+		routes, err := planTeamNotificationRoutes(nil, reconciler.buildNotificationRoutes("idm", environments, log), "idm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tree := &models.Route{Provenance: models.Provenance("api"), Routes: routes}
 		provisioning.EXPECT().GetPolicyTree().
 			Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: tree}, nil).Once()
+		if err := reconciler.updateNotificationPolicy(ctx, "idm", environments, tree, log); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("provisions an unchanged unlocked tree without altering routes", func(t *testing.T) {
+		provisioning := NewMockProvisioningClientService(t)
+		expectDiscardMuteTiming(provisioning)
+		reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
+		routes, err := planTeamNotificationRoutes(nil, reconciler.buildNotificationRoutes("idm", environments, log), "idm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		other := &models.Route{Receiver: "manual", Continue: true}
+		tree := &models.Route{Receiver: "default", Routes: append(routes, other)}
+		snapshot, err := json.Marshal(tree)
+		if err != nil {
+			t.Fatal(err)
+		}
+		provisioning.EXPECT().GetPolicyTree().
+			Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: tree}, nil).Twice()
+		provisioning.EXPECT().PutPolicyTree(mock.MatchedBy(func(params *grafanaprovisioning.PutPolicyTreeParams) bool {
+			submitted, err := json.Marshal(params.Body)
+			return err == nil && params.XDisableProvenance == nil &&
+				string(submitted) == string(snapshot) && params.Body.Routes[1] == other
+		})).Return(&grafanaprovisioning.PutPolicyTreeAccepted{}, nil).Once()
 		if err := reconciler.updateNotificationPolicy(ctx, "idm", environments, tree, log); err != nil {
 			t.Fatal(err)
 		}
@@ -358,12 +619,28 @@ func TestNotificationPolicyWrites(t *testing.T) {
 			t.Fatalf("expected a stale policy tree error, got %v", err)
 		}
 	})
+
+	t.Run("rechecks the tree after ensuring the fallback interval", func(t *testing.T) {
+		provisioning := NewMockProvisioningClientService(t)
+		expectDiscardMuteTiming(provisioning)
+		baseline := &models.Route{Receiver: "default"}
+		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: baseline}, nil).Once()
+		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{
+			Payload: &models.Route{Receiver: "changed"},
+		}, nil).Once()
+		reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
+		err := reconciler.updateNotificationPolicy(ctx, "idm", environments, baseline, log)
+		if err == nil || !strings.Contains(err.Error(), "refusing to overwrite external changes") {
+			t.Fatalf("expected the changed tree to prevent a PUT, got %v", err)
+		}
+	})
 }
 
 func TestNotificationPolicySerializesTeams(t *testing.T) {
 	ctx := context.Background()
 	log, _ := test.NewNullLogger()
 	provisioning := NewMockProvisioningClientService(t)
+	expectDiscardMuteTiming(provisioning)
 	var stateMu sync.Mutex
 	tree := &models.Route{Receiver: "default"}
 	reads := 0
@@ -381,7 +658,7 @@ func TestNotificationPolicySerializesTeams(t *testing.T) {
 			<-releaseFirstRead
 		}
 		return &grafanaprovisioning.GetPolicyTreeOK{Payload: snapshot}, nil
-	}).Times(4)
+	}).Times(6)
 	provisioning.EXPECT().GetContactpoints(mock.Anything).Return(nil, nil).Twice()
 	provisioning.EXPECT().PostContactpoints(mock.Anything).Return(&grafanaprovisioning.PostContactpointsAccepted{}, nil).Twice()
 	provisioning.EXPECT().PutPolicyTree(mock.Anything).RunAndReturn(func(params *grafanaprovisioning.PutPolicyTreeParams, _ ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutPolicyTreeAccepted, error) {
@@ -414,7 +691,7 @@ func TestNotificationPolicySerializesTeams(t *testing.T) {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 	if len(tree.Routes) != 2 || !reflect.DeepEqual(
-		[]string{tree.Routes[0].Receiver, tree.Routes[1].Receiver},
+		[]string{tree.Routes[0].Routes[0].Receiver, tree.Routes[1].Routes[0].Receiver},
 		[]string{"team-idm-dev-gcp", "team-tsm-dev-gcp"},
 	) {
 		t.Fatalf("team routes were not both retained: %+v", tree.Routes)
@@ -435,6 +712,14 @@ func TestNotificationPolicyHTTPProvenance(t *testing.T) {
 	}
 	var wrote atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/provisioning/mute-timings" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, err := w.Write([]byte(`[{"name":"nais-unconfigured-environment","time_intervals":[{"times":[{"start_time":"00:00","end_time":"24:00"}]}]}]`))
+			if err != nil {
+				t.Error(err)
+			}
+			return
+		}
 		if r.URL.Path != "/api/v1/provisioning/policies" {
 			t.Errorf("unexpected policy path %q", r.URL.Path)
 			http.Error(w, "unexpected path", http.StatusNotFound)
@@ -448,8 +733,8 @@ func TestNotificationPolicyHTTPProvenance(t *testing.T) {
 			}
 		case http.MethodPut:
 			wrote.Store(true)
-			if got := r.Header.Get("X-Disable-Provenance"); got != "true" {
-				t.Errorf("X-Disable-Provenance = %q, want true", got)
+			if got := r.Header.Get("X-Disable-Provenance"); got != "" {
+				t.Errorf("X-Disable-Provenance = %q, want omitted", got)
 			}
 			var submitted models.Route
 			if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
