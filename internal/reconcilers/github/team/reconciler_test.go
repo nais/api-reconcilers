@@ -2,7 +2,6 @@ package github_team_reconciler_test
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,8 +15,6 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/utils/ptr"
 )
 
@@ -42,17 +39,13 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 	log, _ := test.NewNullLogger()
 
-	t.Run("no existing state, github team available", func(t *testing.T) {
+	t.Run("github team available", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:    teamSlug,
 			Purpose: teamPurpose,
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(nil, status.Error(codes.NotFound, "state not found")).
-			Once()
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
 				return req.Slug == teamSlug && *req.GithubTeamSlug == teamSlug
@@ -62,28 +55,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
-			Once()
-		mockServer.Reconcilers.EXPECT().
-			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
-				st := &github_team_reconciler.GitHubState{}
-				_ = json.Unmarshal(req.Value, st)
-
-				if len(st.Repositories) != 2 {
-					return false
-				}
-
-				r1 := st.Repositories[0]
-				r2 := st.Repositories[1]
-
-				return string(r1.Name) == "org/some-repo-a" &&
-					string(r2.Name) == "org/some-repo-b" &&
-					r1.Archived == false &&
-					r2.Archived == true &&
-					r1.Permissions[0].Name == "admin" &&
-					r1.Permissions[1].Name == "pull" &&
-					r1.Permissions[2].Name == "push"
-			})).
-			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
 			Once()
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
@@ -101,46 +72,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			ListTeamMembersBySlug(mock.Anything, org, teamSlug, mock.Anything).
 			Return(
 				[]*github.User{},
-				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}},
-				nil,
-			).
-			Once()
-		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, teamSlug, mock.MatchedBy(func(opts *github.ListOptions) bool {
-				return opts.Page == 0
-			})).
-			Return(
-				[]*github.Repository{
-					{
-						FullName: ptr.To(org + "/some-repo-b"),
-						Permissions: map[string]bool{
-							"push":  true,
-							"pull":  false,
-							"admin": true,
-						},
-						Archived: new(true),
-					},
-				},
-				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}, NextPage: 1},
-				nil,
-			).
-			Once()
-		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, teamSlug, mock.MatchedBy(func(opts *github.ListOptions) bool {
-				return opts.Page == 1
-			})).
-			Return(
-				[]*github.Repository{
-					{
-						FullName: ptr.To(org + "/some-repo-a"),
-						Permissions: map[string]bool{
-							"push":  true,
-							"pull":  false,
-							"admin": true,
-						},
-						Archived: new(false),
-					},
-				},
 				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}},
 				nil,
 			).
@@ -174,7 +105,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("no existing state, github team not available", func(t *testing.T) {
+	t.Run("github team not available", func(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:    teamSlug,
 			Purpose: teamPurpose,
@@ -188,11 +119,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusUnprocessableEntity}}, nil).
 			Once()
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccoutEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
 		if err != nil {
@@ -204,7 +131,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("existing state, github team exists", func(t *testing.T) {
+	t.Run("github team exists", func(t *testing.T) {
 		gitHubSlug := "github-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
@@ -213,18 +140,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
-		mockServer.Reconcilers.EXPECT().
-			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
-				st := &github_team_reconciler.GitHubState{}
-				_ = json.Unmarshal(req.Value, st)
-				return len(st.Repositories) == 0
-			})).
-			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
@@ -240,10 +155,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		teamsService.EXPECT().
 			ListTeamMembersBySlug(mock.Anything, org, gitHubSlug, mock.Anything).
 			Return([]*github.User{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
-		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, gitHubSlug, mock.Anything).
-			Return([]*github.Repository{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, gitHubSlug, github.NewTeam{
@@ -269,7 +180,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 	})
 
-	t.Run("existing state, github team no longer exists", func(t *testing.T) {
+	t.Run("github team no longer exists", func(t *testing.T) {
 		existingSlug := "existing-slug"
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
@@ -278,18 +189,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
-		mockServer.Reconcilers.EXPECT().
-			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
-				st := &github_team_reconciler.GitHubState{}
-				_ = json.Unmarshal(req.Value, st)
-				return len(st.Repositories) == 0
-			})).
-			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
 			Return(&protoapi.ListTeamMembersResponse{}, nil).
@@ -309,10 +208,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		teamsService.EXPECT().
 			ListTeamMembersBySlug(mock.Anything, org, existingSlug, mock.Anything).
 			Return([]*github.User{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
-		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, existingSlug, mock.Anything).
-			Return([]*github.Repository{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 		teamsService.EXPECT().
 			EditTeamBySlug(mock.Anything, org, existingSlug, github.NewTeam{
@@ -360,30 +255,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 
 	httpOk := &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}
 
-	t.Run("unable to load state from database", func(t *testing.T) {
-		naisTeam := &protoapi.Team{
-			Slug:    teamSlug,
-			Purpose: teamPurpose,
-		}
-
-		graphClient := github_team_reconciler.NewMockGraphClient(t)
-		teamsService := github_team_reconciler.NewMockTeamsService(t)
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(nil, fmt.Errorf("some error")).
-			Once()
-
-		reconciler, err := github_team_reconciler.New(ctx, org, authEndpoint, serviceAccountEmail, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); !strings.Contains(err.Error(), "some error") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	// Give the reconciler enough data to create an entire team from scratch,
 	// remove members that shouldn't be present, and add members that should.
 	t.Run("create everything from scratch", func(t *testing.T) {
@@ -393,18 +264,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		}
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
-		mockServer.Reconcilers.EXPECT().
-			SaveState(mock.Anything, mock.MatchedBy(func(req *protoapi.SaveReconcilerStateRequest) bool {
-				st := &github_team_reconciler.GitHubState{}
-				_ = json.Unmarshal(req.Value, st)
-				return len(st.Repositories) == 0
-			})).
-			Return(&protoapi.SaveReconcilerStateResponse{}, nil).
-			Once()
 		mockServer.Teams.EXPECT().
 			SetTeamExternalReferences(mock.Anything, mock.MatchedBy(func(req *protoapi.SetTeamExternalReferencesRequest) bool {
 				return req.Slug == teamSlug && *req.GithubTeamSlug == teamSlug
@@ -495,14 +354,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 				httpOk,
 				nil,
 			).Once()
-		teamsService.EXPECT().
-			ListTeamReposBySlug(ctx, org, teamName, mock.Anything).
-			Return(
-				[]*github.Repository{},
-				httpOk,
-				nil,
-			).
-			Once()
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		graphClient.EXPECT().
@@ -550,20 +401,16 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 		naisTeam := &protoapi.Team{
 			Slug:           teamSlug,
 			Purpose:        teamPurpose,
-			GithubTeamSlug: new("slug-from-state"),
+			GithubTeamSlug: new("team-slug"),
 		}
 
-		apiClient, mockServer := apiclient.NewMockClient(t)
-		mockServer.Reconcilers.EXPECT().
-			State(mock.Anything, &protoapi.GetReconcilerStateRequest{ReconcilerName: "github:team", TeamSlug: teamSlug}).
-			Return(&protoapi.GetReconcilerStateResponse{}, nil).
-			Once()
+		apiClient, _ := apiclient.NewMockClient(t)
 
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		teamsService := github_team_reconciler.NewMockTeamsService(t)
 		expectParentTeam(t, teamsService, org)
 		teamsService.EXPECT().
-			GetTeamBySlug(mock.Anything, org, "slug-from-state").
+			GetTeamBySlug(mock.Anything, org, "team-slug").
 			Return(nil, &github.Response{
 				Response: &http.Response{
 					StatusCode: http.StatusTeapot,
@@ -620,7 +467,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			t.Errorf("expected one log entry, got %d", len(hook.Entries))
 		}
 
-		if !strings.Contains(hook.LastEntry().Message, "missing slug in reconciler state") {
+		if !strings.Contains(hook.LastEntry().Message, "missing external reference to GitHub team slug") {
 			t.Errorf("unexpected log message: %s", hook.LastEntry().Message)
 		}
 	})

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/google/go-github/v50/github"
@@ -88,11 +87,6 @@ func (r *githubTeamReconciler) Name() string {
 }
 
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	st, err := r.loadState(ctx, client, naisTeam.Slug)
-	if err != nil {
-		return err
-	}
-
 	parentTeam, err := r.getOrCreateParentTeam(ctx)
 	if err != nil {
 		return err
@@ -112,13 +106,14 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 		return err
 	}
 
-	st.Repositories, err = r.getTeamRepositories(ctx, *githubTeam.Slug)
-	if err != nil {
-		return err
-	}
-
-	if err := r.saveState(ctx, client, naisTeam, *githubTeam.Slug, st); err != nil {
-		return err
+	if naisTeam.GithubTeamSlug == nil || *naisTeam.GithubTeamSlug != *githubTeam.Slug {
+		_, err := client.Teams().SetTeamExternalReferences(ctx, &protoapi.SetTeamExternalReferencesRequest{
+			Slug:           naisTeam.Slug,
+			GithubTeamSlug: githubTeam.Slug,
+		})
+		if err != nil {
+			return fmt.Errorf("set GitHub team slug for team %q: %w", naisTeam.Slug, err)
+		}
 	}
 
 	if err := r.connectUsers(ctx, client, naisTeam.Slug, githubTeam, log); err != nil {
@@ -130,7 +125,7 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, client *apiclient.
 
 func (r *githubTeamReconciler) Delete(ctx context.Context, _ *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
 	if naisTeam.GithubTeamSlug == nil {
-		log.Warnf("missing slug in reconciler state, unable to delete GitHub team")
+		log.Warnf("missing external reference to GitHub team slug, unable to delete GitHub team")
 		return nil
 	}
 
@@ -447,51 +442,6 @@ func (r *githubTeamReconciler) getEmailFromGitHubUsername(ctx context.Context, u
 
 	email := strings.ToLower(string(nodes[0].SamlIdentity.Username))
 	return &email, nil
-}
-
-func (r *githubTeamReconciler) getTeamRepositories(ctx context.Context, teamSlug string) ([]*GitHubRepository, error) {
-	opts := &github.ListOptions{
-		PerPage: 100,
-	}
-
-	allRepos := make([]*GitHubRepository, 0)
-	for {
-		repos, resp, err := r.teamsService.ListTeamReposBySlug(ctx, r.org, teamSlug, opts)
-		err = httpError(http.StatusOK, resp, err)
-		if err != nil {
-			return nil, err
-		}
-		for _, repo := range repos {
-			permissions := make([]*GitHubRepositoryPermission, 0)
-			for name, granted := range repo.GetPermissions() {
-				permissions = append(permissions, &GitHubRepositoryPermission{
-					Name:    name,
-					Granted: granted,
-				})
-			}
-
-			sort.SliceStable(permissions, func(a, b int) bool {
-				return permissions[a].Name < permissions[b].Name
-			})
-
-			allRepos = append(allRepos, &GitHubRepository{
-				Name:        repo.GetFullName(),
-				Permissions: permissions,
-				Archived:    repo.GetArchived(),
-				RoleName:    repo.GetRoleName(),
-			})
-		}
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
-	}
-
-	sort.SliceStable(allRepos, func(a, b int) bool {
-		return allRepos[a].Name < allRepos[b].Name
-	})
-
-	return allRepos, nil
 }
 
 // httpError Return an error if the response status code is not as expected, or if the passed err is already set to an
