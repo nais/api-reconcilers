@@ -10,7 +10,6 @@ import (
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus/hooks/test"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -141,9 +140,7 @@ func TestReconcileStopsWithoutParent(t *testing.T) {
 					naisTeam.GithubTeamSlug = new("team")
 				}
 
-				client, server := apiclient.NewMockClient(t)
-				server.Reconcilers.EXPECT().State(mock.Anything, mock.Anything).
-					Return(&protoapi.GetReconcilerStateResponse{}, nil).Once()
+				client, _ := apiclient.NewMockClient(t)
 
 				err := r.Reconcile(ctx, client, naisTeam, log)
 				if failure == "lookup" {
