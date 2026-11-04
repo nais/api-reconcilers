@@ -103,6 +103,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
@@ -151,6 +152,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
@@ -193,6 +195,7 @@ func TestReconcile(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
@@ -210,6 +213,106 @@ func TestReconcile(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "some error") {
 			t.Errorf("expected error to contain 'some error', got: %v", err)
+		}
+	})
+}
+
+func expectNoDatabases(mockServer *apiclient.MockServers) {
+	expectDatabases(mockServer)
+}
+
+func expectDatabases(mockServer *apiclient.MockServers, databases ...*protoapi.Database) {
+	mockServer.Databases.EXPECT().
+		List(mock.Anything, &protoapi.ListDatabasesRequest{TeamSlug: teamSlug, Limit: 100}).
+		Return(&protoapi.ListDatabasesResponse{
+			Nodes:    databases,
+			PageInfo: &protoapi.PageInfo{TotalCount: int64(len(databases))},
+		}, nil).
+		Maybe()
+}
+
+func TestReconcileNaisPostgres(t *testing.T) {
+	noSQLInstances := func(t *testing.T) *httptest.Server {
+		return test.HttpServerWithHandlers(t, []http.HandlerFunc{
+			func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewEncoder(w).Encode(&sqladmin.InstancesListResponse{}); err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			},
+		})
+	}
+
+	expectEnvironment := func(mockServer *apiclient.MockServers) {
+		mockServer.Teams.EXPECT().
+			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
+			Return(&protoapi.ListTeamEnvironmentsResponse{
+				Nodes: []*protoapi.TeamEnvironment{{EnvironmentName: environment, GcpProjectId: new(teamProjectID)}},
+			}, nil).
+			Once()
+	}
+
+	t.Run("environment with Nais Postgres creates bucket", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectDatabases(mockServer, &protoapi.Database{
+			Name:        "vegar-test",
+			Database:    "app",
+			Environment: environment,
+			TeamSlug:    teamSlug,
+			Type:        protoapi.DatabaseType_NAIS_POSTGRES,
+		})
+		expectEnvironment(mockServer)
+
+		services := (&mocks{sqlAdmin: noSQLInstances(t)}).start(t, ctx)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// The logging client is not mocked, so reaching bucket creation proves the environment was not skipped.
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err == nil || !strings.Contains(err.Error(), "create or update log bucket") {
+			t.Fatalf("expected bucket creation to be attempted, got: %v", err)
+		}
+	})
+
+	t.Run("Nais Postgres in other environment or other database types are ignored", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectDatabases(mockServer,
+			&protoapi.Database{Name: "pg", Environment: "dev", TeamSlug: teamSlug, Type: protoapi.DatabaseType_NAIS_POSTGRES},
+			&protoapi.Database{Name: "zalando", Environment: environment, TeamSlug: teamSlug, Type: protoapi.DatabaseType_ZALANDO_POSTGRES},
+			&protoapi.Database{Name: "cloudsql", Environment: environment, TeamSlug: teamSlug, Type: protoapi.DatabaseType_CLOUD_SQL},
+		)
+		expectEnvironment(mockServer)
+
+		services := (&mocks{sqlAdmin: noSQLInstances(t)}).start(t, ctx)
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(services))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("error listing databases", func(t *testing.T) {
+		log, _ := logrustest.NewNullLogger()
+		apiClient, mockServer := apiclient.NewMockClient(t)
+		mockServer.Databases.EXPECT().
+			List(mock.Anything, &protoapi.ListDatabasesRequest{TeamSlug: teamSlug, Limit: 100}).
+			Return(nil, fmt.Errorf("some error")).
+			Once()
+
+		reconciler, err := audit.New(ctx, serviceAccountEmail, audit.Config{ProjectID: managementProjectID, Location: location}, audit.WithServices(&audit.Services{}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		err = reconciler.Reconcile(ctx, apiClient, naisTeam, log)
+		if err == nil || !strings.Contains(err.Error(), "list Nais Postgres databases") {
+			t.Fatalf("expected database listing error, got: %v", err)
 		}
 	})
 }
@@ -290,8 +393,8 @@ func TestConfiguration(t *testing.T) {
 		t.Errorf("expected display name 'Google Audit Log', got %q", config.DisplayName)
 	}
 
-	if config.Description != "Create audit log buckets for SQL instances" {
-		t.Errorf("expected description 'Create audit log buckets for SQL instances', got %q", config.Description)
+	if config.Description != "Create audit log buckets for SQL instances and Nais Postgres clusters" {
+		t.Errorf("expected description 'Create audit log buckets for SQL instances and Nais Postgres clusters', got %q", config.Description)
 	}
 
 	if config.MemberAware {
@@ -481,6 +584,7 @@ func TestIntegrationLogBucketOperations(t *testing.T) {
 		log, _ := logrustest.NewNullLogger()
 
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100}).
@@ -749,6 +853,7 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("only includes instances with pgaudit enabled", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -816,6 +921,7 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("only accepts 'on' value for pgaudit, logs warnings for others", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -880,6 +986,7 @@ func TestPgAuditFiltering(t *testing.T) {
 
 	t.Run("logs warnings for unsupported pgaudit values", func(t *testing.T) {
 		apiClient, mockServer := apiclient.NewMockClient(t)
+		expectNoDatabases(mockServer)
 		mockServer.Teams.EXPECT().
 			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
 			Return(&protoapi.ListTeamEnvironmentsResponse{
@@ -1151,6 +1258,33 @@ func TestGenerateLogSinkName(t *testing.T) {
 
 		t.Logf("Generated sink name for long inputs: %s (len=%d)", result, len(result))
 	})
+}
+
+func TestGenerateCNPGLogSinkName(t *testing.T) {
+	if got := audit.GenerateCNPGLogSinkName("myteam", "prod"); got != "cnpg-audit-sink-myteam-prod" {
+		t.Errorf("GenerateCNPGLogSinkName() = %q, expected %q", got, "cnpg-audit-sink-myteam-prod")
+	}
+
+	if audit.GenerateCNPGLogSinkName("myteam", "prod") == audit.GenerateLogSinkName("myteam", "prod") {
+		t.Error("CNPG sink name must differ from SQL audit sink name")
+	}
+
+	long := audit.GenerateCNPGLogSinkName(strings.Repeat("t", 60), strings.Repeat("e", 60))
+	if !strings.HasPrefix(long, "cnpg-audit-sink-") {
+		t.Errorf("expected cnpg-audit-sink- prefix, got %q", long)
+	}
+	if err := audit.ValidateLogSinkName(long); err != nil {
+		t.Errorf("generated long sink name is invalid: %v (%q)", err, long)
+	}
+}
+
+func TestBuildCNPGLogFilter(t *testing.T) {
+	const want = `jsonPayload.logger="pgaudit"
+AND jsonPayload.record.user_name=~".+@.+"`
+
+	if got := audit.BuildCNPGLogFilter(); got != want {
+		t.Errorf("unexpected CNPG filter.\nwant: %q\n got: %q", want, got)
+	}
 }
 
 func TestValidateLogSinkName(t *testing.T) {

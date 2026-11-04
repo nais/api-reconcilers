@@ -44,9 +44,23 @@ func truncateToLength(s string, maxLen int) string {
 	return s[:maxLen]
 }
 
+const (
+	sqlAuditSinkPrefix  = "sql-audit-sink-"
+	cnpgAuditSinkPrefix = "cnpg-audit-sink-"
+)
+
 // GenerateLogSinkName generates a unique sink name with hash collision resistance. Creates one sink per team environment (not per SQL instance).
 func GenerateLogSinkName(teamSlug, envName string) string {
-	naturalName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
+	return generateSinkName(sqlAuditSinkPrefix, teamSlug, envName)
+}
+
+// GenerateCNPGLogSinkName generates a unique sink name for CNPG pgaudit logs with hash collision resistance. Creates one sink per team environment.
+func GenerateCNPGLogSinkName(teamSlug, envName string) string {
+	return generateSinkName(cnpgAuditSinkPrefix, teamSlug, envName)
+}
+
+func generateSinkName(prefix, teamSlug, envName string) string {
+	naturalName := fmt.Sprintf("%s%s-%s", prefix, teamSlug, envName)
 
 	if len(naturalName) <= 100 {
 		return naturalName
@@ -56,13 +70,13 @@ func GenerateLogSinkName(teamSlug, envName string) string {
 	hash := sha256.Sum256([]byte(fullIdentifier))
 	hashSuffix := fmt.Sprintf("%x", hash)[:8]
 
-	availableForComponents := 100 - 15 - 8 - 2 // 15 for "sql-audit-sink-", 8 for hash, 2 for separators
+	availableForComponents := 100 - len(prefix) - 8 - 2 // 8 for hash, 2 for separators
 	maxComponentLen := availableForComponents / 2
 
 	shortTeam := truncateToLength(teamSlug, maxComponentLen)
 	shortEnv := truncateToLength(envName, maxComponentLen)
 
-	return fmt.Sprintf("sql-audit-sink-%s-%s-%s", shortTeam, shortEnv, hashSuffix)
+	return fmt.Sprintf("%s%s-%s-%s", prefix, shortTeam, shortEnv, hashSuffix)
 }
 
 // ValidateLogBucketName validates a log bucket name against Google Cloud naming rules.

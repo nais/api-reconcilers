@@ -15,12 +15,9 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName string, hasCloudSQLAudit, requiresOnPremPostgresLogging bool, log logrus.FieldLogger) (string, string, error) {
+func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, teamProjectID, teamSlug, envName, bucketName, sinkName, filter string, log logrus.FieldLogger) (string, string, error) {
 	parent := fmt.Sprintf("projects/%s", teamProjectID)
-	sinkName := GenerateLogSinkName(teamSlug, envName)
 	destination := fmt.Sprintf("logging.googleapis.com/projects/%s/locations/%s/buckets/%s", r.config.ProjectID, r.config.Location, bucketName)
-
-	filter := BuildLogFilter(teamProjectID, hasCloudSQLAudit, requiresOnPremPostgresLogging)
 
 	if err := ValidateLogSinkName(sinkName); err != nil {
 		return "", "", fmt.Errorf("invalid sink name %q: %w", sinkName, err)
@@ -53,6 +50,7 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 		log.WithFields(logrus.Fields{
 			"team":        teamSlug,
 			"environment": envName,
+			"sink":        sinkName,
 		}).Info("created log sink")
 		writerIdentity = sink.WriterIdentity
 	} else {
@@ -107,6 +105,7 @@ func (r *auditLogReconciler) createOrUpdateLogSinkIfNeeded(ctx context.Context, 
 			log.WithFields(logrus.Fields{
 				"team":        teamSlug,
 				"environment": envName,
+				"sink":        sinkName,
 			}).Info("updated log sink")
 			writerIdentity = updatedSink.WriterIdentity
 		} else {
@@ -156,18 +155,23 @@ func (r *auditLogReconciler) deleteSink(ctx context.Context, teamProjectID, sink
 
 // isManagedSink checks if a sink was created by this reconciler for the given team and environment.
 func (r *auditLogReconciler) isManagedSink(sink *loggingpb.LogSink, teamSlug, envName string) bool {
-	// Check if the sink name follows our naming convention (sql-audit-sink-<team>-<env>)
-	expectedName := fmt.Sprintf("sql-audit-sink-%s-%s", teamSlug, envName)
+	for _, prefix := range []string{sqlAuditSinkPrefix, cnpgAuditSinkPrefix} {
+		// Exact match: <prefix><team>-<env>
+		expectedName := fmt.Sprintf("%s%s-%s", prefix, teamSlug, envName)
+		if sink.Name == expectedName {
+			return true
+		}
 
-	// For exact match
-	if sink.Name == expectedName {
-		return true
-	}
+		// Hash-based names: <prefix><team>-<env>-<hash>
+		expectedPrefixWithHash := expectedName + "-"
+		if strings.HasPrefix(sink.Name, expectedPrefixWithHash) && len(sink.Name) > len(expectedPrefixWithHash) {
+			return true
+		}
 
-	// For hash-based names, check if it matches the pattern sql-audit-sink-<team>-<env>-<hash>
-	expectedPrefixWithHash := fmt.Sprintf("sql-audit-sink-%s-%s-", teamSlug, envName)
-	if strings.HasPrefix(sink.Name, expectedPrefixWithHash) && len(sink.Name) > len(expectedPrefixWithHash) {
-		return true
+		// Truncated hash-based names for long team/env combinations
+		if generated := generateSinkName(prefix, teamSlug, envName); sink.Name == generated {
+			return true
+		}
 	}
 
 	return false
