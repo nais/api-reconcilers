@@ -48,7 +48,20 @@ func TestGrafanaAlertPilotDefaultsToEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(cfg.FeatureFlags.GrafanaAlertPilotTeams) != 0 {
 		t.Fatalf("expected no Grafana alert pilot teams, got %v", cfg.FeatureFlags.GrafanaAlertPilotTeams)
+	}
+}
+
+func TestGrafanaAlertPilotWildcard(t *testing.T) {
+	cfg, err := config.NewConfig(context.Background(), envconfig.MapLookuper(map[string]string{
+		"FEATURE_GRAFANA_ALERT_PILOT_TEAMS": "*",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected := []string{"*"}; !slices.Equal(cfg.FeatureFlags.GrafanaAlertPilotTeams, expected) {
+		t.Fatalf("expected Grafana alert pilot teams %v, got %v", expected, cfg.FeatureFlags.GrafanaAlertPilotTeams)
 	}
 }
