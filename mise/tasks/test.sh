@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Test all code"
+#MISE wait_for=["fix", "fmt", "generate"]
 #USAGE flag "--coverage" help="Generate a coverage profile"
 
 set -e

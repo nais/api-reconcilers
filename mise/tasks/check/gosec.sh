@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Run gosec"
+#MISE wait_for=["fix", "fmt", "generate"]
 
 set -e
 
