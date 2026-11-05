@@ -159,37 +159,28 @@ func (s *client) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, 
 }
 
 func (s *client) ListGroupOwners(ctx context.Context, grp *Group) ([]*Member, error) {
-	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/owners"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		text, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("list group owners %q: %s: %s", grp.MailNickname, resp.Status, string(text))
-	}
-
-	defer resp.Body.Close()
-	dec := json.NewDecoder(resp.Body)
-	owners := &MemberResponse{}
-	err = dec.Decode(owners)
-	if err != nil {
-		return nil, err
-	}
-
-	return owners.Value, nil
+	return s.listGroupMembers(ctx, grp, "owners")
 }
 
 func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, error) {
-	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/members"
+	return s.listGroupMembers(ctx, grp, "members")
+}
 
+func (s *client) listGroupMembers(ctx context.Context, grp *Group, relationship string) ([]*Member, error) {
+	u := "https://graph.microsoft.com/v1.0/groups/" + grp.ID + "/" + relationship
+	var members []*Member
+	for u != "" {
+		page, err := s.getGroupMembersPage(ctx, grp, relationship, u)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, page.Value...)
+		u = page.NextLink
+	}
+	return members, nil
+}
+
+func (s *client) getGroupMembersPage(ctx context.Context, grp *Group, relationship, u string) (*MemberResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
@@ -199,13 +190,13 @@ func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, e
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("list group members %q: %s: %s", grp.MailNickname, resp.Status, string(text))
+		return nil, fmt.Errorf("list group %s %q: %s: %s", relationship, grp.MailNickname, resp.Status, string(text))
 	}
 
-	defer resp.Body.Close()
 	dec := json.NewDecoder(resp.Body)
 	members := &MemberResponse{}
 	err = dec.Decode(members)
@@ -213,7 +204,7 @@ func (s *client) ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, e
 		return nil, err
 	}
 
-	return members.Value, nil
+	return members, nil
 }
 
 func (s *client) AddMemberToGroup(ctx context.Context, grp *Group, member *Member) error {
