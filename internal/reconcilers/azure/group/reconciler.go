@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	reconcilerName = "azure:group"
+	reconcilerName  = "azure:group"
+	parentGroupName = "nais-teams"
 
 	configClientSecret = "azure:client_secret"
 	configClientID     = "azure:client_id"
@@ -36,6 +37,7 @@ type azureGroupReconciler struct {
 	lockedAzureClient azureclient.Client
 	lastConfig        clientcredentials.Config
 	azureGroupPrefix  string
+	parentLock        sync.Mutex
 }
 
 type reconcilerConfig struct {
@@ -83,7 +85,7 @@ func (r *azureGroupReconciler) Configuration() *protoapi.NewReconciler {
 			{
 				Key:         configClientID,
 				DisplayName: "Client ID",
-				Description: "The client ID of the application registration that Console will use when communicating with the Azure AD APIs. The application must have the following API permissions: Group.Create, GroupMember.ReadWrite.All.",
+				Description: "The client ID of the application registration that Console will use when communicating with the Azure AD APIs. The application must have the following API permissions: Group.Create, Group.Read.All, GroupMember.ReadWrite.All.",
 				Secret:      false,
 			},
 			{
@@ -109,6 +111,14 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 	log.Debug("client updated")
 
 	prefixedName := r.azureGroupPrefix + naisTeam.Slug
+	if prefixedName == parentGroupName {
+		return fmt.Errorf("group name %q is reserved for the parent group in Azure", parentGroupName)
+	}
+	parentGroupID, err := r.getOrCreateParentGroup(ctx, azureClient)
+	if err != nil {
+		return err
+	}
+
 	azureGroup, created, err := azureClient.GetOrCreateGroup(ctx, naisTeam, prefixedName)
 	if err != nil {
 		return err
@@ -125,10 +135,62 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 		}
 	}
 
+	if err := r.connectParentGroup(ctx, azureClient, parentGroupID, azureGroup); err != nil {
+		return err
+	}
+
 	if err := r.connectUsers(ctx, client, azureClient, naisTeam.Slug, azureGroup, log); err != nil {
 		return fmt.Errorf("add members to group: %w", err)
 	}
 
+	return nil
+}
+
+func (r *azureGroupReconciler) getOrCreateParentGroup(ctx context.Context, azureClient azureclient.Client) (string, error) {
+	// Serialize shared parent lookup and creation across team workers.
+	// Do not cache the parent: recreating a deleted parent must repair membership.
+	r.parentLock.Lock()
+	defer r.parentLock.Unlock()
+
+	parent, err := azureClient.GetGroupByMailNickname(ctx, parentGroupName)
+	if err != nil {
+		return "", fmt.Errorf("get Azure parent group %q: %w", parentGroupName, err)
+	}
+	if parent == nil {
+		parent, err = azureClient.CreateGroup(ctx, &azureclient.Group{
+			Description:     "Parent group for all teams synced by Nais.",
+			DisplayName:     parentGroupName,
+			MailNickname:    parentGroupName,
+			SecurityEnabled: true,
+		})
+		if err != nil {
+			return "", fmt.Errorf("create Azure parent group %q: %w", parentGroupName, err)
+		}
+	}
+	if parent.ID == "" || !parent.SecurityEnabled || parent.MailEnabled || len(parent.GroupTypes) != 0 {
+		return "", fmt.Errorf("parent group %q in Azure must be an assigned, mail-disabled security group", parentGroupName)
+	}
+	return parent.ID, nil
+}
+
+func (r *azureGroupReconciler) connectParentGroup(ctx context.Context, azureClient azureclient.Client, parentGroupID string, group *azureclient.Group) error {
+	if group.ID == parentGroupID {
+		return fmt.Errorf("group ID %q is reserved for the parent group in Azure", group.ID)
+	}
+
+	parent := &azureclient.Group{ID: parentGroupID, MailNickname: parentGroupName}
+	members, err := azureClient.ListGroupMembers(ctx, parent)
+	if err != nil {
+		return fmt.Errorf("list members of Azure parent group %q: %w", parentGroupName, err)
+	}
+	for _, member := range members {
+		if member.ID == group.ID {
+			return nil
+		}
+	}
+	if err := azureClient.AddMemberToGroup(ctx, parent, &azureclient.Member{ID: group.ID}); err != nil {
+		return fmt.Errorf("add Azure group %q to parent group %q: %w", group.MailNickname, parentGroupName, err)
+	}
 	return nil
 }
 

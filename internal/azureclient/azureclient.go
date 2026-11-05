@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient/protoapi"
@@ -20,6 +22,7 @@ type Client interface {
 	AddMemberToGroup(ctx context.Context, grp *Group, member *Member) error
 	CreateGroup(ctx context.Context, grp *Group) (*Group, error)
 	GetGroupById(ctx context.Context, id uuid.UUID) (*Group, error)
+	GetGroupByMailNickname(ctx context.Context, nickname string) (*Group, error)
 	GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, groupName string) (*Group, bool, error)
 	GetUser(ctx context.Context, email string) (*Member, error)
 	ListGroupMembers(ctx context.Context, grp *Group) ([]*Member, error)
@@ -47,7 +50,7 @@ func (s *client) GetUser(ctx context.Context, email string) (*Member, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
@@ -76,7 +79,7 @@ func (s *client) GetGroupById(ctx context.Context, id uuid.UUID) (*Group, error)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("azure group with ID %q does not exist", id.String())
@@ -90,6 +93,52 @@ func (s *client) GetGroupById(ctx context.Context, id uuid.UUID) (*Group, error)
 	}
 
 	return grp, nil
+}
+
+// GetGroupByMailNickname returns nil if no group exists. Azure does not enforce unique nicknames for security groups,
+// so ambiguous or paginated results are an error.
+func (s *client) GetGroupByMailNickname(ctx context.Context, nickname string) (*Group, error) {
+	query := url.Values{
+		"$filter": {"mailNickname eq '" + strings.ReplaceAll(nickname, "'", "''") + "'"},
+		"$top":    {"2"},
+	}
+	u := "https://graph.microsoft.com/v1.0/groups?" + query.Encode()
+	page, err := s.getGroupsPage(ctx, u)
+	if err != nil {
+		return nil, fmt.Errorf("get Azure group with nickname %q: %w", nickname, err)
+	}
+	if page.NextLink != "" {
+		return nil, fmt.Errorf("cannot confirm unique Azure group with nickname %q: response contains a next link", nickname)
+	}
+	switch len(page.Value) {
+	case 0:
+		return nil, nil
+	case 1:
+		return page.Value[0], nil
+	default:
+		return nil, fmt.Errorf("multiple Azure groups with nickname %q", nickname)
+	}
+}
+
+func (s *client) getGroupsPage(ctx context.Context, u string) (*GroupResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%s: %s", resp.Status, body)
+	}
+	page := &GroupResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(page); err != nil {
+		return nil, err
+	}
+	return page, nil
 }
 
 func (s *client) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
@@ -110,7 +159,7 @@ func (s *client) CreateGroup(ctx context.Context, grp *Group) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		text, _ := io.ReadAll(resp.Body)
@@ -190,7 +239,7 @@ func (s *client) getGroupMembersPage(ctx context.Context, grp *Group, relationsh
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		text, _ := io.ReadAll(resp.Body)
@@ -229,7 +278,7 @@ func (s *client) AddMemberToGroup(ctx context.Context, grp *Group, member *Membe
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		text, _ := io.ReadAll(resp.Body)
@@ -251,7 +300,7 @@ func (s *client) RemoveMemberFromGroup(ctx context.Context, grp *Group, member *
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNoContent {
 		text, _ := io.ReadAll(resp.Body)
@@ -262,8 +311,8 @@ func (s *client) RemoveMemberFromGroup(ctx context.Context, grp *Group, member *
 }
 
 func (s *client) DeleteGroup(ctx context.Context, grpID uuid.UUID) error {
-	url := "https://graph.microsoft.com/v1.0/groups/" + grpID.String()
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	u := "https://graph.microsoft.com/v1.0/groups/" + grpID.String()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
 	if err != nil {
 		return err
 	}
@@ -272,7 +321,7 @@ func (s *client) DeleteGroup(ctx context.Context, grpID uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil
