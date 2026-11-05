@@ -36,7 +36,7 @@ type Services struct {
 type auditLogReconciler struct {
 	services                *Services
 	config                  Config
-	onPremPostgresLogClient OnPremPostgresLogClient
+	onPremPostgresLogClient OnPremLogClient
 }
 
 // Config holds the configuration for the audit log reconciler.
@@ -89,7 +89,7 @@ func (r *auditLogReconciler) Configuration() *protoapi.NewReconciler {
 	return &protoapi.NewReconciler{
 		Name:        r.Name(),
 		DisplayName: "Google Audit Log",
-		Description: "Create audit log buckets for SQL instances",
+		Description: "Create audit log buckets for SQL instances and Nais Postgres clusters",
 		MemberAware: false,
 		Config: []*protoapi.ReconcilerConfigSpec{
 			{
@@ -198,9 +198,14 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	// according to loggkamel. When true we must ensure a log bucket and a log
 	// sink (with the dbAuditEntry filter) exist for the team, even if it has no
 	// Cloud SQL instances.
-	requiresOnPremPostgresLogging, err := r.requiresOnPremPostgresLogging(ctx, naisTeam.Slug)
+	requiresOnPremPostgresLogging, err := r.requiresOnPremLogging(ctx, naisTeam.Slug)
 	if err != nil {
 		return fmt.Errorf("check on-prem Postgres logging requirement for team %s: %w", naisTeam.Slug, err)
+	}
+
+	naisPostgresEnvs, err := naisPostgresEnvironments(ctx, client, naisTeam.Slug)
+	if err != nil {
+		return fmt.Errorf("list Nais Postgres databases for team %s: %w", naisTeam.Slug, err)
 	}
 
 	it := iterator.New(ctx, 100, func(limit, offset int64) (*protoapi.ListTeamEnvironmentsResponse, error) {
@@ -233,20 +238,19 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		if err != nil {
 			return fmt.Errorf("get sql instances for team %s: %w", naisTeam.Slug, err)
 		}
-
-		// Skip only if there are no Cloud SQL instances with pgaudit enabled AND
-		// the team does not require on-prem Postgres log collection according to
-		// loggkamel.
 		hasCloudSQLAudit := len(listSQLInstances) > 0
-		if !hasCloudSQLAudit && !requiresOnPremPostgresLogging {
+		hasNaisPostgres := naisPostgresEnvs[env.EnvironmentName]
+
+		// Skip if there are no on-premises, Cloud SQL or Nais Postgres audit logs
+		if !hasCloudSQLAudit && !hasNaisPostgres && !requiresOnPremPostgresLogging {
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
 				"environment": env.EnvironmentName,
-			}).Debug("skipping environment without SQL instances with pgaudit enabled and not required by loggkamel")
+			}).Debug("skipping environment without SQL instances with pgaudit enabled, without Nais Postgres and not required by loggkamel")
 			continue
 		}
 
-		// Create one log bucket per team environment (shared by all SQL instances)
+		// Create one log bucket per team environment (shared by all databases)
 		bucketName, err := r.createOrUpdateLogBucketIfNeeded(ctx, client, naisTeam.Slug, env.EnvironmentName, r.config.Location, log)
 		if err != nil {
 			return fmt.Errorf("create or update log bucket for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
@@ -258,20 +262,25 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		// Create one log sink per team environment covering all SQL instances (auditing all database users)
-		_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, hasCloudSQLAudit, requiresOnPremPostgresLogging, log)
-		if err != nil {
-			return fmt.Errorf("create or update log sink for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
-		}
-
-		if writerIdentity != "" {
-			log.WithField("identity", writerIdentity).Debug("granting bucket write permission for sink writer identity")
-			err = r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log)
-			if err != nil {
-				return fmt.Errorf("grant bucket write permission for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
+		// The SQL audit sink is only needed when there are on-premises or Cloud SQL instances
+		if hasCloudSQLAudit || requiresOnPremPostgresLogging {
+			sinkName := GenerateLogSinkName(naisTeam.Slug, env.EnvironmentName)
+			filter := BuildLogFilter(teamProjectID, hasCloudSQLAudit, requiresOnPremPostgresLogging)
+			if err := r.ensureSinkWithWritePermission(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, sinkName, filter, log); err != nil {
+				return err
 			}
 		} else {
-			log.Debug("no writer identity found for sink, skipping permission grant")
+			log.WithFields(logrus.Fields{
+				"team":        naisTeam.Slug,
+				"environment": env.EnvironmentName,
+			}).Debug("skipping SQL audit sink: no SQL instances with pgaudit enabled and not required by loggkamel")
+		}
+
+		if hasNaisPostgres {
+			naisPostgresSinkName := GenerateNaisPostgresLogSinkName(naisTeam.Slug, env.EnvironmentName)
+			if err := r.ensureSinkWithWritePermission(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, naisPostgresSinkName, BuildNaisPostgresLogFilter(), log); err != nil {
+				return err
+			}
 		}
 
 		// Grant log view permission to team members
@@ -289,19 +298,36 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	return it.Err()
 }
 
-// requiresOnPremPostgresLogging asks loggkamel whether the given team's on-prem
-// Postgres logs must be collected. If no loggkamel client is configured, it
-// returns false.
-func (r *auditLogReconciler) requiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error) {
+func (r *auditLogReconciler) ensureSinkWithWritePermission(ctx context.Context, teamProjectID, teamSlug, envName, bucketName, sinkName, filter string, log logrus.FieldLogger) error {
+	_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(ctx, teamProjectID, teamSlug, envName, bucketName, sinkName, filter, log)
+	if err != nil {
+		return fmt.Errorf("create or update log sink %s for team %s environment %s: %w", sinkName, teamSlug, envName, err)
+	}
+
+	if writerIdentity == "" {
+		log.WithField("sink", sinkName).Debug("no writer identity found for sink, skipping permission grant")
+		return nil
+	}
+
+	log.WithFields(logrus.Fields{"sink": sinkName, "identity": writerIdentity}).Debug("granting bucket write permission for sink writer identity")
+	if err := r.grantBucketWritePermission(ctx, bucketName, writerIdentity, log); err != nil {
+		return fmt.Errorf("grant bucket write permission for sink %s team %s environment %s: %w", sinkName, teamSlug, envName, err)
+	}
+	return nil
+}
+
+// requiresOnPremLogging asks loggkamel whether the given team's on-premises logs must be collected.
+// If no loggkamel client is configured, it returns false.
+func (r *auditLogReconciler) requiresOnPremLogging(ctx context.Context, teamSlug string) (bool, error) {
 	if r.onPremPostgresLogClient == nil {
 		return false, nil
 	}
-	return r.onPremPostgresLogClient.RequiresOnPremPostgresLogging(ctx, teamSlug)
+	return r.onPremPostgresLogClient.RequiresOnPremLogging(ctx, teamSlug)
 }
 
-// WithOnPremPostgresLogClient is a test override function for dependency
+// WithOnPremLogClient is a test override function for dependency
 // injection of the loggkamel on-prem Postgres log client.
-func WithOnPremPostgresLogClient(client OnPremPostgresLogClient) OverrideFunc {
+func WithOnPremLogClient(client OnPremLogClient) OverrideFunc {
 	return func(reconciler *auditLogReconciler) {
 		reconciler.onPremPostgresLogClient = client
 	}
