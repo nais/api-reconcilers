@@ -446,11 +446,7 @@ func (r *grafanaReconciler) setFolderTeamPermissions(ctx context.Context, folder
 		permission := viewPermission
 		if entry.TeamID == teamID {
 			teamPermissionFound = true
-			if entry.Permission >= editPermission {
-				permission = entry.Permission
-			} else {
-				permission = editPermission
-			}
+			permission = max(entry.Permission, editPermission)
 		}
 		if permission != entry.Permission {
 			changed = true

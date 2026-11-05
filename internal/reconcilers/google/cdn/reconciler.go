@@ -486,9 +486,7 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		var gapiError *googleapi.Error
-
-		if errors.As(err, &gapiError) {
+		if gapiError, ok := errors.AsType[*googleapi.Error](err); ok {
 			// retry transient errors
 			if gapiError.Code != http.StatusNotFound {
 				return nil, fmt.Errorf("googleapi error: %w", err)
