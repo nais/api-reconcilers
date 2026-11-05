@@ -323,9 +323,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 func (r *githubTeamReconciler) getTeamMembers(ctx context.Context, slug string) ([]*github.User, error) {
 	const maxPerPage = 100
 	opt := &github.TeamListTeamMembersOptions{
-		ListOptions: github.ListOptions{
-			PerPage: maxPerPage,
-		},
+		PerPage: maxPerPage,
 	}
 
 	allMembers := make([]*github.User, 0)

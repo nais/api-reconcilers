@@ -360,10 +360,8 @@ func (r *naisNamespaceReconciler) ensureResourceQuota(ctx context.Context, naisT
 
 	if errors.IsNotFound(err) {
 		quota := &corev1.ResourceQuota{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      quotaName,
-				Namespace: naisTeam.Slug,
-			},
+			Name:      quotaName,
+			Namespace: naisTeam.Slug,
 			Spec: corev1.ResourceQuotaSpec{
 				Hard: corev1.ResourceList{
 					corev1.ResourcePods: resource.MustParse("200"),
