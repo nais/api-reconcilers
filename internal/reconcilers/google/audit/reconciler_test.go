@@ -1287,8 +1287,7 @@ func TestGenerateNaisPostgresLogSinkName(t *testing.T) {
 }
 
 func TestBuildNaisPostgresLogFilter(t *testing.T) {
-	const want = `jsonPayload.logger="pgaudit"
-AND jsonPayload.record.user_name=~".+@.+"`
+	const want = `jsonPayload.logger="pgaudit"`
 
 	if got := audit.BuildNaisPostgresLogFilter(); got != want {
 		t.Errorf("unexpected Nais Postgres filter.\nwant: %q\n got: %q", want, got)

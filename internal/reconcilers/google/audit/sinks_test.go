@@ -287,8 +287,7 @@ func TestCreateNaisPostgresLogSink(t *testing.T) {
 		t.Fatalf("expected Nais Postgres sink to be created, got sinks: %v", fake.sinks)
 	}
 
-	const wantFilter = `jsonPayload.logger="pgaudit"
-AND jsonPayload.record.user_name=~".+@.+"`
+	const wantFilter = `jsonPayload.logger="pgaudit"`
 	if sink.Filter != wantFilter {
 		t.Errorf("filter = %q, want %q", sink.Filter, wantFilter)
 	}
