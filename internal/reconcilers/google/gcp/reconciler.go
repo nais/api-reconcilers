@@ -261,7 +261,7 @@ func (r *googleGcpReconciler) Delete(ctx context.Context, client *apiclient.APIC
 		if err != nil {
 			var googleError *googleapi.Error
 			ok := errors.As(err, &googleError)
-			if !(ok && (googleError.Code == 400 || googleError.Code == 404 || googleError.Code == 403)) {
+			if !ok || (googleError.Code != 400 && googleError.Code != 404 && googleError.Code != 403) {
 				retErrors = append(retErrors, err)
 				continue
 			}

@@ -31,6 +31,7 @@ jobs:
         mise-task:
           - test
           - check:deadcode
+          - check:golangci-lint
           - check:gosec
           - check:helm-lint
           - check:ratchet
