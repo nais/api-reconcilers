@@ -303,7 +303,6 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, client *apiclie
 			})
 			if err != nil {
 				log.WithError(err).Warnf("get Nais teams user with email %q", *email)
-				email = nil
 			}
 		}
 	}

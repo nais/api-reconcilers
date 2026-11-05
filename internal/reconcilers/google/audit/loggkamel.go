@@ -45,7 +45,7 @@ func (c *loggkamelClient) RequiresOnPremPostgresLogging(ctx context.Context, tea
 	if err != nil {
 		return false, fmt.Errorf("call loggkamel for team %s: %w", teamSlug, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("unexpected status code %d from loggkamel for team %s", resp.StatusCode, teamSlug)

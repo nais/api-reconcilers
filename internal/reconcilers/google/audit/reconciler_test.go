@@ -169,7 +169,9 @@ func TestReconcile(t *testing.T) {
 				// list SQL instances - return error
 				func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte(`{"error": {"message": "internal server error"}}`))
+					if _, err := w.Write([]byte(`{"error": {"message": "internal server error"}}`)); err != nil {
+						t.Errorf("write SQL Admin error response: %v", err)
+					}
 				},
 			}),
 		}
@@ -789,7 +791,9 @@ func TestPgAuditFiltering(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(response)
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						t.Errorf("encode SQL Admin response: %v", err)
+					}
 				},
 			}),
 		}
@@ -855,7 +859,9 @@ func TestPgAuditFiltering(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(response)
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						t.Errorf("encode SQL Admin response: %v", err)
+					}
 				},
 			}),
 		}
@@ -937,7 +943,9 @@ func TestPgAuditFiltering(t *testing.T) {
 							},
 						},
 					}
-					json.NewEncoder(w).Encode(response)
+					if err := json.NewEncoder(w).Encode(response); err != nil {
+						t.Errorf("encode SQL Admin response: %v", err)
+					}
 				},
 			}),
 		}

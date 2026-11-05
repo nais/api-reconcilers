@@ -407,12 +407,13 @@ func TestManagerRetriesDataFetchFailures(t *testing.T) {
 				} else {
 					expectManagerReconcilers(servers, 1)
 				}
-				if stage == "successful sync persistence" {
+				switch stage {
+				case "successful sync persistence":
 					servers.Reconcilers.EXPECT().RemoveReconcilerErrorForTeam(mock.Anything, mock.Anything).
 						Return(&protoapi.RemoveReconcilerErrorForTeamResponse{}, nil).Once()
 					servers.Reconcilers.EXPECT().SuccessfulTeamSync(mock.Anything, &protoapi.SuccessfulTeamSyncRequest{TeamSlug: slug}).
 						Return(nil, transient).Once()
-				} else if stage == "clear reconciler error persistence" {
+				case "clear reconciler error persistence":
 					servers.Reconcilers.EXPECT().RemoveReconcilerErrorForTeam(mock.Anything,
 						&protoapi.RemoveReconcilerErrorForTeamRequest{ReconcilerName: "manager-test", TeamSlug: slug}).
 						Return(nil, transient).Once()

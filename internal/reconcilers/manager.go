@@ -137,11 +137,12 @@ func (m *Manager) ListenForEvents(ctx context.Context) {
 					CorrelationID: correlationID.String(),
 				}
 
-				if event == protoapi.EventTypes_EVENT_TEAM_DELETED {
+				switch event {
+				case protoapi.EventTypes_EVENT_TEAM_DELETED:
 					obj = &protoapi.EventTeamDeleted{}
-				} else if event == protoapi.EventTypes_EVENT_TEAM_CREATED {
+				case protoapi.EventTypes_EVENT_TEAM_CREATED:
 					obj = &protoapi.EventTeamCreated{}
-				} else {
+				default:
 					obj = &protoapi.EventTeamUpdated{}
 				}
 

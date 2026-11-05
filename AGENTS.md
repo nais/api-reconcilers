@@ -24,7 +24,8 @@ Guidelines for AI agents working on this project.
 | Generate mocks | `mise run generate` |
 | Format code | `mise run fmt` |
 | Check formatting and generated mocks (clean working tree) | `mise run fmt:ci` |
-| Run all static checks | `mise run check` |
+| Run all checks | `mise run check` |
+| Lint Go code | `mise run check:golangci-lint` |
 | Static analysis | `mise run check:staticcheck` |
 | Go vet | `mise run check:govet` |
 | Vulnerability scan | `mise run check:govulncheck` |
@@ -42,7 +43,7 @@ go test -race -run TestName ./internal/reconcilers/...
 - Read the relevant implementation and tests before changing code; follow existing package patterns.
 - Preserve unrelated working-tree changes. Do not overwrite local configuration or credentials.
 - After changing mocked interfaces, update `.configs/mockery.yaml` if needed and run `mise run generate`. Do not edit generated `mock_*.go` files by hand. The generation task deletes existing `internal/**/mock_*.go` files before recreating them, so inspect local changes first.
-- After Go changes, run `mise run fmt` and `mise run test`, plus relevant static checks. Report any checks that could not be run.
+- After Go changes, run `mise run fmt`, `mise run test`, and `mise run check:golangci-lint`, plus other relevant static checks. Report any checks that could not be run.
 - Before delivering PR work, regenerate mocks and review `git status --short`, including generated files. CI's `mise run fmt:ci` formats, regenerates, and checks for tracked differences; it expects a clean, committed working tree.
 
 ## Reconciler Conventions
