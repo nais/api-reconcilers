@@ -1,7 +1,6 @@
 package azureclient_test
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,8 +72,7 @@ func Test_ListGroupMembersAndOwnersPagination(t *testing.T) {
 				},
 			} {
 				t.Run(tt.name, func(t *testing.T) {
-					ctx, cancel := context.WithCancel(context.Background())
-					defer cancel()
+					ctx := t.Context()
 					var bodies []*trackedResponseBody
 					var handlers []test.RoundTripFunc
 					for i, response := range tt.responses {
