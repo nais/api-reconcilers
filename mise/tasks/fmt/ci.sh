@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-#MISE description="Ensure all code is formatted"
+#MISE description="Ensure all code is fixed, formatted, and generated"
+#MISE depends=["fix", "fmt", "generate"]
 
 set -e
 
-mise run fmt
-mise run generate
-
 if ! git diff --exit-code --name-only; then
-	echo "The file(s) listed above are not formatted correctly. Please run \`mise run fmt\` and commit the changes."
+	echo "The file(s) listed above need fixing, formatting, or regeneration. Please run \`mise run fix\`, \`mise run fmt\`, and \`mise run generate\`, then commit the changes."
 	exit 1
 fi

@@ -32,7 +32,13 @@ mise run local
 This will build the reconciler and run it locally.
 It sets an environment variable to communicate with the nais/api project running locally.
 
-Run `mise run test` to run the tests.
+### Tests and checks
+
+Run `mise run test` to run the tests with the race detector.
+
+Run `mise run check:golangci-lint` to lint the Go code. The tool version is pinned
+in `mise/config.toml` and installed by `mise install`. This check is also included
+in `mise run check` and the CI workflow for pull requests and pushes to `main`.
 
 ### Local kind cluster setup (only relevant if doing stuff against Kubernetes, e.g. the namespace reconciler)
 

@@ -280,9 +280,11 @@ func (r *cdnReconciler) Delete(ctx context.Context, _ *apiclient.APIClient, nais
 	for _, binding := range projectPolicy.Bindings {
 		if binding.Role == r.cacheReconcilerRoleID {
 			numMembers := len(binding.Members)
-			binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
-				return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
-			})
+			if naisTeam.GoogleGroupEmail != nil {
+				binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
+					return member == fmt.Sprintf("group:%s", *naisTeam.GoogleGroupEmail)
+				})
+			}
 			if serviceAccount != nil {
 				binding.Members = slices.DeleteFunc(binding.Members, func(member string) bool {
 					return member == fmt.Sprintf("serviceAccount:%s", serviceAccount.Email)
@@ -484,9 +486,7 @@ func (r *cdnReconciler) getOrCreateBackendBucket(ctx context.Context, naisTeam *
 		Project:       r.googleManagementProjectID,
 	})
 	if err != nil {
-		var gapiError *googleapi.Error
-
-		if errors.As(err, &gapiError) {
+		if gapiError, ok := errors.AsType[*googleapi.Error](err); ok {
 			// retry transient errors
 			if gapiError.Code != http.StatusNotFound {
 				return nil, fmt.Errorf("googleapi error: %w", err)

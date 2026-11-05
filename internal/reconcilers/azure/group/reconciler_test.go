@@ -53,9 +53,16 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		Slug:    teamSlug,
 		Purpose: teamPurpose,
 	}
+	expectParentGroup := func(client *azureclient.MockClient) {
+		parent := &azureclient.Group{ID: "parent-id", MailNickname: "nais-teams"}
+		client.EXPECT().GetGroupByUniqueName(mock.Anything, "nais-teams").Return(&azureclient.GroupReference{ID: parent.ID}, nil).Once()
+		client.EXPECT().ListGroupMembers(mock.Anything, parent).Return([]*azureclient.Member{}, nil).Once()
+		client.EXPECT().AddMemberToGroup(mock.Anything, parent, &azureclient.Member{ID: group.ID}).Return(nil).Once()
+	}
 
 	t.Run("happy case", func(t *testing.T) {
 		mockClient := azureclient.NewMockClient(t)
+		expectParentGroup(mockClient)
 		mockClient.EXPECT().
 			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
 			Return(group, true, nil).
@@ -103,6 +110,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	t.Run("GetOrCreateGroup fail", func(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
+		mockClient.EXPECT().GetGroupByUniqueName(ctx, "nais-teams").
+			Return(&azureclient.GroupReference{ID: "parent-id"}, nil).Once()
 
 		mockClient.EXPECT().
 			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
@@ -121,6 +130,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	t.Run("ListGroupMembers fail", func(t *testing.T) {
 		client, mockServer := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
+		expectParentGroup(mockClient)
 
 		mockServer.Teams.EXPECT().
 			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Limit: 100, Offset: 0, Slug: teamSlug}).
@@ -150,6 +160,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	t.Run("RemoveMemberFromGroup fail", func(t *testing.T) {
 		client, mockServer := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
+		expectParentGroup(mockClient)
 		removeMemberFromGroupErr := errors.New("RemoveMemberFromGroup failed")
 
 		mockServer.Teams.EXPECT().
@@ -183,6 +194,7 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	t.Run("AddMemberToGroup fail", func(t *testing.T) {
 		client, mockServer := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
+		expectParentGroup(mockClient)
 		addMemberToGroupError := errors.New("AddMemberToGroup failed")
 
 		mockServer.Teams.EXPECT().

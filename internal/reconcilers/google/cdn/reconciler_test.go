@@ -374,7 +374,7 @@ func TestReconcile(t *testing.T) {
 					expected := `{"policy":{"bindings":[{"members":["group:slug@example.com","serviceAccount:slug@management-project-123.iam.gserviceaccount.com"],"role":"projects/management-project-123/roles/cdnCacheInvalidator"}]}}`
 
 					body, err := io.ReadAll(r.Body)
-					defer r.Body.Close()
+					defer func() { _ = r.Body.Close() }()
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -382,7 +382,9 @@ func TestReconcile(t *testing.T) {
 						t.Errorf("expected %q, got %q", expected, string(body))
 					}
 
-					w.Write(body)
+					if _, err := w.Write(body); err != nil {
+						t.Errorf("write response body: %v", err)
+					}
 				},
 			}),
 			urlMap: test.HttpServerWithHandlers(t, []http.HandlerFunc{
@@ -404,7 +406,7 @@ func TestReconcile(t *testing.T) {
 					expected := `{"pathMatchers":[{"defaultService":"some-default-service","pathRules":[{"paths":["/slug/*"],"service":"self/link/some-backend-bucket"}]}]}`
 
 					body, err := io.ReadAll(r.Body)
-					defer r.Body.Close()
+					defer func() { _ = r.Body.Close() }()
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -412,7 +414,9 @@ func TestReconcile(t *testing.T) {
 						t.Errorf("expected %q, got %q", expected, string(body))
 					}
 
-					w.Write(body)
+					if _, err := w.Write(body); err != nil {
+						t.Errorf("write response body: %v", err)
+					}
 				},
 			}),
 		}
@@ -437,7 +441,8 @@ func TestDelete(t *testing.T) {
 		Description: fmt.Sprintf("service account for uploading to cdn buckets and cache invalidation for %s", teamSlug),
 		DisplayName: fmt.Sprintf("CDN uploader for %s", teamSlug),
 	}
-	t.Run("Deletion calls the right endpoints in the right order", func(t *testing.T) {
+	testDelete := func(t *testing.T, naisTeam *protoapi.Team, expected string) {
+		t.Helper()
 		log := logrus.StandardLogger()
 
 		apiClient, _ := apiclient.NewMockClient(t)
@@ -520,10 +525,8 @@ func TestDelete(t *testing.T) {
 
 				// set iam policy for project
 				func(w http.ResponseWriter, r *http.Request) {
-					expected := `{"policy":{"bindings":[{"role":"projects/management-project-123/roles/cdnCacheInvalidator"}]}}`
-
 					body, err := io.ReadAll(r.Body)
-					defer r.Body.Close()
+					defer func() { _ = r.Body.Close() }()
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -531,7 +534,9 @@ func TestDelete(t *testing.T) {
 						t.Errorf("expected %q, got %q", expected, string(body))
 					}
 
-					w.Write(body)
+					if _, err := w.Write(body); err != nil {
+						t.Errorf("write response body: %v", err)
+					}
 				},
 			}),
 
@@ -562,7 +567,7 @@ func TestDelete(t *testing.T) {
 				func(w http.ResponseWriter, r *http.Request) {
 					expected := `{"pathMatchers":[{"defaultService":"some-default-service","pathRules":[{"paths":["/second-slug/*"],"service":"self/link/some-other-backend-bucket"}]}]}`
 					body, err := io.ReadAll(r.Body)
-					defer r.Body.Close()
+					defer func() { _ = r.Body.Close() }()
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -570,7 +575,9 @@ func TestDelete(t *testing.T) {
 						t.Errorf("expected %q, got %q", expected, string(body))
 					}
 
-					w.Write(body)
+					if _, err := w.Write(body); err != nil {
+						t.Errorf("write response body: %v", err)
+					}
 				},
 			}),
 		}
@@ -590,5 +597,13 @@ func TestDelete(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+	}
+
+	t.Run("Deletion calls the right endpoints in the right order", func(t *testing.T) {
+		testDelete(t, naisTeam, `{"policy":{"bindings":[{"role":"projects/management-project-123/roles/cdnCacheInvalidator"}]}}`)
+	})
+
+	t.Run("Deletion continues without a Google group email", func(t *testing.T) {
+		testDelete(t, naisTeamWithoutGoogleGroupEmail, `{"policy":{"bindings":[{"members":["group:slug@example.com"],"role":"projects/management-project-123/roles/cdnCacheInvalidator"}]}}`)
 	})
 }

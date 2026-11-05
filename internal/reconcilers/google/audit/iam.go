@@ -379,8 +379,8 @@ func (r *auditLogReconciler) removeTeamLogViewPermission(ctx context.Context, te
 		}
 
 		// Remove empty conditional bindings (in reverse order to maintain indices)
-		for i := len(bindingsToRemove) - 1; i >= 0; i-- {
-			bindingIndex := bindingsToRemove[i]
+		for _, bindingIndex := range slices.Backward(bindingsToRemove) {
+
 			policy.Bindings = append(policy.Bindings[:bindingIndex], policy.Bindings[bindingIndex+1:]...)
 			log.WithField("role", role).Debug("removed empty conditional binding")
 		}

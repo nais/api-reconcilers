@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Generate mocks using mockery"
+#MISE wait_for=["fix", "fmt"]
 
 set -e
 

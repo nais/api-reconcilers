@@ -305,6 +305,74 @@ func (_c *MockClient_GetGroupById_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// GetGroupByUniqueName provides a mock function for the type MockClient
+func (_mock *MockClient) GetGroupByUniqueName(ctx context.Context, uniqueName string) (*GroupReference, error) {
+	ret := _mock.Called(ctx, uniqueName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupByUniqueName")
+	}
+
+	var r0 *GroupReference
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*GroupReference, error)); ok {
+		return returnFunc(ctx, uniqueName)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *GroupReference); ok {
+		r0 = returnFunc(ctx, uniqueName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*GroupReference)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, uniqueName)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetGroupByUniqueName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetGroupByUniqueName'
+type MockClient_GetGroupByUniqueName_Call struct {
+	*mock.Call
+}
+
+// GetGroupByUniqueName is a helper method to define mock.On call
+//   - ctx context.Context
+//   - uniqueName string
+func (_e *MockClient_Expecter) GetGroupByUniqueName(ctx any, uniqueName any) *MockClient_GetGroupByUniqueName_Call {
+	return &MockClient_GetGroupByUniqueName_Call{Call: _e.mock.On("GetGroupByUniqueName", ctx, uniqueName)}
+}
+
+func (_c *MockClient_GetGroupByUniqueName_Call) Run(run func(ctx context.Context, uniqueName string)) *MockClient_GetGroupByUniqueName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetGroupByUniqueName_Call) Return(groupReference *GroupReference, err error) *MockClient_GetGroupByUniqueName_Call {
+	_c.Call.Return(groupReference, err)
+	return _c
+}
+
+func (_c *MockClient_GetGroupByUniqueName_Call) RunAndReturn(run func(ctx context.Context, uniqueName string) (*GroupReference, error)) *MockClient_GetGroupByUniqueName_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetOrCreateGroup provides a mock function for the type MockClient
 func (_mock *MockClient) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, groupName string) (*Group, bool, error) {
 	ret := _mock.Called(ctx, naisTeam, groupName)
@@ -648,6 +716,80 @@ func (_c *MockClient_RemoveMemberFromGroup_Call) Return(err error) *MockClient_R
 }
 
 func (_c *MockClient_RemoveMemberFromGroup_Call) RunAndReturn(run func(ctx context.Context, grp *Group, member *Member) error) *MockClient_RemoveMemberFromGroup_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpsertGroupByUniqueName provides a mock function for the type MockClient
+func (_mock *MockClient) UpsertGroupByUniqueName(ctx context.Context, uniqueName string, grp *Group) (*GroupReference, error) {
+	ret := _mock.Called(ctx, uniqueName, grp)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpsertGroupByUniqueName")
+	}
+
+	var r0 *GroupReference
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *Group) (*GroupReference, error)); ok {
+		return returnFunc(ctx, uniqueName, grp)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *Group) *GroupReference); ok {
+		r0 = returnFunc(ctx, uniqueName, grp)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*GroupReference)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, *Group) error); ok {
+		r1 = returnFunc(ctx, uniqueName, grp)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_UpsertGroupByUniqueName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpsertGroupByUniqueName'
+type MockClient_UpsertGroupByUniqueName_Call struct {
+	*mock.Call
+}
+
+// UpsertGroupByUniqueName is a helper method to define mock.On call
+//   - ctx context.Context
+//   - uniqueName string
+//   - grp *Group
+func (_e *MockClient_Expecter) UpsertGroupByUniqueName(ctx any, uniqueName any, grp any) *MockClient_UpsertGroupByUniqueName_Call {
+	return &MockClient_UpsertGroupByUniqueName_Call{Call: _e.mock.On("UpsertGroupByUniqueName", ctx, uniqueName, grp)}
+}
+
+func (_c *MockClient_UpsertGroupByUniqueName_Call) Run(run func(ctx context.Context, uniqueName string, grp *Group)) *MockClient_UpsertGroupByUniqueName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 *Group
+		if args[2] != nil {
+			arg2 = args[2].(*Group)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_UpsertGroupByUniqueName_Call) Return(groupReference *GroupReference, err error) *MockClient_UpsertGroupByUniqueName_Call {
+	_c.Call.Return(groupReference, err)
+	return _c
+}
+
+func (_c *MockClient_UpsertGroupByUniqueName_Call) RunAndReturn(run func(ctx context.Context, uniqueName string, grp *Group) (*GroupReference, error)) *MockClient_UpsertGroupByUniqueName_Call {
 	_c.Call.Return(run)
 	return _c
 }

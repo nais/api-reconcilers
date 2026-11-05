@@ -1,11 +1,17 @@
-name: Build and push image and chart
+name: Check, build and deploy
 on:
+  pull_request:
   push:
     branches:
       - main
+permissions:
+  contents: read
 env:
   NAME: nais-api-reconcilers
   IMAGE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   version-info:
     outputs:
@@ -13,10 +19,8 @@ jobs:
     name: Get version info
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
-      - uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # ratchet:jdx/mise-action@v3
-        with:
-          cache: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # ratchet:jdx/mise-action@v5
       - id: go-version
         run: echo "version=$(mise current go)" >> $GITHUB_OUTPUT
 
@@ -27,17 +31,17 @@ jobs:
         mise-task:
           - test
           - check:deadcode
+          - check:golangci-lint
           - check:gosec
           - check:helm-lint
+          - check:ratchet
           - check:staticcheck
           - check:govulncheck
           - check:govet
           - fmt:ci
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
-      - uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # ratchet:jdx/mise-action@v3
-        with:
-          cache: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # ratchet:jdx/mise-action@v5
       - run: mise run ${{ matrix.mise-task }}
 
   build-push:
@@ -52,11 +56,9 @@ jobs:
     name: Build and push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # ratchet:actions/checkout@v5
-      - uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # ratchet:jdx/mise-action@v3
-        with:
-          cache: false
-      - uses: nais/platform-build-push-sign@a16d89d06262f12e3468a20b9cc70f5317290bab # ratchet:nais/platform-build-push-sign@main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # ratchet:jdx/mise-action@v5
+      - uses: nais/platform-build-push-sign@0f74f19fb291a0563f7d30e23fb83de3c4c7c851 # ratchet:nais/platform-build-push-sign@main
         id: build-push-sign
         with:
           name: ${{ env.NAME }}
@@ -87,22 +89,32 @@ jobs:
           echo "version=$chart_version" >> $GITHUB_OUTPUT
           echo "archive=$name-$chart_version.tgz" >> $GITHUB_OUTPUT
       - name: Push Chart
-        if: github.ref == 'refs/heads/main'
         run: |-
           chart="${{ steps.package-chart.outputs.archive }}"
           echo "Pushing: $chart"
           helm push "$chart" ${{ env.IMAGE_REPOSITORY }}
 
+  # Used by GitHub to determine if all checks and builds have passed.
+  branch-protection-checkpoint:
+    runs-on: ubuntu-latest
+    needs: [check, build-push]
+    if: ${{ always() }}
+    steps:
+      - if: ${{ needs.check.result != 'success' || needs.build-push.result != 'success' }}
+        run: exit 1
+      - run: echo "All checks and builds passed."
+
   deploy:
     name: Deploy
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: fasit-deploy
     permissions:
       id-token: write
     needs:
       - build-push
+      - branch-protection-checkpoint
     steps:
-      - uses: nais/fasit-deploy@58a70a338b16dc646373c91724fc7e7522d085a4 # ratchet:nais/fasit-deploy@v4.0.1
+      - uses: nais/fasit-deploy@53e433b1bdd08fc622e03a78584c0832c9083bd3 # ratchet:nais/fasit-deploy@v4
         with:
           chart: ${{ env.IMAGE_REPOSITORY }}/${{ env.NAME }}
           version: ${{ needs.build-push.outputs.chart-version }}
