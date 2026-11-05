@@ -1260,30 +1260,30 @@ func TestGenerateLogSinkName(t *testing.T) {
 	})
 }
 
-func TestGenerateCNPGLogSinkName(t *testing.T) {
-	if got := audit.GenerateCNPGLogSinkName("myteam", "prod"); got != "cnpg-audit-sink-myteam-prod" {
-		t.Errorf("GenerateCNPGLogSinkName() = %q, expected %q", got, "cnpg-audit-sink-myteam-prod")
+func TestGenerateNaisPostgresLogSinkName(t *testing.T) {
+	if got := audit.GenerateNaisPostgresLogSinkName("myteam", "prod"); got != "npg-audit-sink-myteam-prod" {
+		t.Errorf("GenerateNaisPostgresLogSinkName() = %q, expected %q", got, "npg-audit-sink-myteam-prod")
 	}
 
-	if audit.GenerateCNPGLogSinkName("myteam", "prod") == audit.GenerateLogSinkName("myteam", "prod") {
-		t.Error("CNPG sink name must differ from SQL audit sink name")
+	if audit.GenerateNaisPostgresLogSinkName("myteam", "prod") == audit.GenerateLogSinkName("myteam", "prod") {
+		t.Error("Nais Postgres sink name must differ from SQL audit sink name")
 	}
 
-	long := audit.GenerateCNPGLogSinkName(strings.Repeat("t", 60), strings.Repeat("e", 60))
-	if !strings.HasPrefix(long, "cnpg-audit-sink-") {
-		t.Errorf("expected cnpg-audit-sink- prefix, got %q", long)
+	long := audit.GenerateNaisPostgresLogSinkName(strings.Repeat("t", 60), strings.Repeat("e", 60))
+	if !strings.HasPrefix(long, "npg-audit-sink-") {
+		t.Errorf("expected npg-audit-sink- prefix, got %q", long)
 	}
 	if err := audit.ValidateLogSinkName(long); err != nil {
 		t.Errorf("generated long sink name is invalid: %v (%q)", err, long)
 	}
 }
 
-func TestBuildCNPGLogFilter(t *testing.T) {
+func TestBuildNaisPostgresLogFilter(t *testing.T) {
 	const want = `jsonPayload.logger="pgaudit"
 AND jsonPayload.record.user_name=~".+@.+"`
 
-	if got := audit.BuildCNPGLogFilter(); got != want {
-		t.Errorf("unexpected CNPG filter.\nwant: %q\n got: %q", want, got)
+	if got := audit.BuildNaisPostgresLogFilter(); got != want {
+		t.Errorf("unexpected Nais Postgres filter.\nwant: %q\n got: %q", want, got)
 	}
 }
 

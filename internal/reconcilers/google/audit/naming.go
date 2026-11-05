@@ -45,8 +45,8 @@ func truncateToLength(s string, maxLen int) string {
 }
 
 const (
-	sqlAuditSinkPrefix  = "sql-audit-sink-"
-	cnpgAuditSinkPrefix = "cnpg-audit-sink-"
+	sqlAuditSinkPrefix          = "sql-audit-sink-"
+	naisPostgresAuditSinkPrefix = "npg-audit-sink-"
 )
 
 // GenerateLogSinkName generates a unique sink name with hash collision resistance. Creates one sink per team environment (not per SQL instance).
@@ -54,9 +54,9 @@ func GenerateLogSinkName(teamSlug, envName string) string {
 	return generateSinkName(sqlAuditSinkPrefix, teamSlug, envName)
 }
 
-// GenerateCNPGLogSinkName generates a unique sink name for CNPG pgaudit logs with hash collision resistance. Creates one sink per team environment.
-func GenerateCNPGLogSinkName(teamSlug, envName string) string {
-	return generateSinkName(cnpgAuditSinkPrefix, teamSlug, envName)
+// GenerateNaisPostgresLogSinkName generates a unique sink name for NAIS Postgres pgaudit logs with hash collision resistance. Creates one sink per team environment.
+func GenerateNaisPostgresLogSinkName(teamSlug, envName string) string {
+	return generateSinkName(naisPostgresAuditSinkPrefix, teamSlug, envName)
 }
 
 func generateSinkName(prefix, teamSlug, envName string) string {

@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-type OnPremPostgresLogClient interface {
-	RequiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error)
+type OnPremLogClient interface {
+	RequiresOnPremLogging(ctx context.Context, teamSlug string) (bool, error)
 }
 
 type loggkamelClient struct {
@@ -19,7 +19,7 @@ type loggkamelClient struct {
 	httpClient *http.Client
 }
 
-func NewLoggkamelClientForTesting(baseURL string) OnPremPostgresLogClient {
+func NewLoggkamelClientForTesting(baseURL string) OnPremLogClient {
 	return newLoggkamelClient(baseURL)
 }
 
@@ -32,7 +32,7 @@ func newLoggkamelClient(baseURL string) *loggkamelClient {
 	}
 }
 
-func (c *loggkamelClient) RequiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error) {
+func (c *loggkamelClient) RequiresOnPremLogging(ctx context.Context, teamSlug string) (bool, error) {
 	endpoint := fmt.Sprintf("%s/api/v1/naisteam/active/%s", c.baseURL, url.PathEscape(teamSlug))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)

@@ -9,7 +9,7 @@ import (
 )
 
 // naisPostgresEnvironments returns the set of environments where the team has
-// at least one Nais Postgres (CNPG) database.
+// at least one Nais Postgres database.
 func naisPostgresEnvironments(ctx context.Context, client *apiclient.APIClient, teamSlug string) (map[string]bool, error) {
 	envs := make(map[string]bool)
 

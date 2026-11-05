@@ -62,9 +62,9 @@ AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.Pg
 	}
 }
 
-// BuildCNPGLogFilter constructs a Logs Explorer filter matching pgaudit logs
-// from CNPG pods where the database user is a person (user_name contains "@").
-func BuildCNPGLogFilter() string {
+// BuildNaisPostgresLogFilter constructs a Logs Explorer filter matching pgaudit logs
+// from Nais Postgres pods where the database user is a person (user_name contains "@").
+func BuildNaisPostgresLogFilter() string {
 	return `jsonPayload.logger="pgaudit"
 AND jsonPayload.record.user_name=~".+@.+"`
 }

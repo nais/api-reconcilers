@@ -155,7 +155,7 @@ func (r *auditLogReconciler) deleteSink(ctx context.Context, teamProjectID, sink
 
 // isManagedSink checks if a sink was created by this reconciler for the given team and environment.
 func (r *auditLogReconciler) isManagedSink(sink *loggingpb.LogSink, teamSlug, envName string) bool {
-	for _, prefix := range []string{sqlAuditSinkPrefix, cnpgAuditSinkPrefix} {
+	for _, prefix := range []string{sqlAuditSinkPrefix, naisPostgresAuditSinkPrefix} {
 		// Exact match: <prefix><team>-<env>
 		expectedName := fmt.Sprintf("%s%s-%s", prefix, teamSlug, envName)
 		if sink.Name == expectedName {

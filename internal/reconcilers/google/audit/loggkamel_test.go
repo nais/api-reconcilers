@@ -34,7 +34,7 @@ func TestLoggkamelRequiresOnPremPostgresLogging(t *testing.T) {
 			defer srv.Close()
 
 			client := audit.NewLoggkamelClientForTesting(srv.URL)
-			got, err := client.RequiresOnPremPostgresLogging(context.Background(), "my-team")
+			got, err := client.RequiresOnPremLogging(context.Background(), "my-team")
 
 			if tt.wantErr {
 				if err == nil {

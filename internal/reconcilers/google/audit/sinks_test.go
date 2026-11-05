@@ -40,10 +40,10 @@ func TestIsManagedSink(t *testing.T) {
 		expected bool
 	}{
 		{"sql audit sink", "sql-audit-sink-myteam-prod", "myteam", "prod", true},
-		{"cnpg audit sink", "cnpg-audit-sink-myteam-prod", "myteam", "prod", true},
-		{"hashed cnpg audit sink", GenerateCNPGLogSinkName(longTeam, longEnv), longTeam, longEnv, true},
+		{"nais postgres audit sink", "npg-audit-sink-myteam-prod", "myteam", "prod", true},
+		{"hashed nais postgres audit sink", GenerateNaisPostgresLogSinkName(longTeam, longEnv), longTeam, longEnv, true},
 		{"hashed sql audit sink", GenerateLogSinkName(longTeam, longEnv), longTeam, longEnv, true},
-		{"other team", "cnpg-audit-sink-otherteam-prod", "myteam", "prod", false},
+		{"other team", "npg-audit-sink-otherteam-prod", "myteam", "prod", false},
 		{"unmanaged sink", "some-other-sink", "myteam", "prod", false},
 	}
 
@@ -142,20 +142,20 @@ func TestReconcileNaisPostgresCreatesExpectedSinksAndWriterPermissions(t *testin
 		wantWriters []string
 	}{
 		{
-			name:        "CNPG only",
-			wantSinks:   []string{"cnpg-audit-sink-myteam-prod"},
-			wantWriters: []string{"serviceAccount:cnpg-writer@example.com"},
+			name:        "Nais Postgres only",
+			wantSinks:   []string{"npg-audit-sink-myteam-prod"},
+			wantWriters: []string{"serviceAccount:npg-writer@example.com"},
 		},
 		{
-			name:        "CNPG and SQL",
+			name:        "Nais Postgres and SQL",
 			sqlAudit:    true,
-			wantSinks:   []string{"cnpg-audit-sink-myteam-prod", "sql-audit-sink-myteam-prod"},
-			wantWriters: []string{"serviceAccount:cnpg-writer@example.com", "serviceAccount:sql-writer@example.com"},
+			wantSinks:   []string{"npg-audit-sink-myteam-prod", "sql-audit-sink-myteam-prod"},
+			wantWriters: []string{"serviceAccount:npg-writer@example.com", "serviceAccount:sql-writer@example.com"},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r, fake := newReconcilerWithFakeConfigServer(t)
-			fake.writerIdentities["cnpg-audit-sink-myteam-prod"] = "serviceAccount:cnpg-writer@example.com"
+			fake.writerIdentities["npg-audit-sink-myteam-prod"] = "serviceAccount:npg-writer@example.com"
 			fake.writerIdentities["sql-audit-sink-myteam-prod"] = "serviceAccount:sql-writer@example.com"
 
 			iamPolicy := &cloudresourcemanager.Policy{}
@@ -262,7 +262,7 @@ func TestReconcileNaisPostgresCreatesExpectedSinksAndWriterPermissions(t *testin
 	}
 }
 
-func TestCreateCNPGLogSink(t *testing.T) {
+func TestCreateNaisPostgresLogSink(t *testing.T) {
 	const (
 		teamProjectID = "team-project"
 		teamSlug      = "myteam"
@@ -273,8 +273,8 @@ func TestCreateCNPGLogSink(t *testing.T) {
 	r, fake := newReconcilerWithFakeConfigServer(t)
 	log, _ := logrustest.NewNullLogger()
 
-	sinkName := GenerateCNPGLogSinkName(teamSlug, envName)
-	_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(context.Background(), teamProjectID, teamSlug, envName, bucketName, sinkName, BuildCNPGLogFilter(), log)
+	sinkName := GenerateNaisPostgresLogSinkName(teamSlug, envName)
+	_, writerIdentity, err := r.createOrUpdateLogSinkIfNeeded(context.Background(), teamProjectID, teamSlug, envName, bucketName, sinkName, BuildNaisPostgresLogFilter(), log)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,9 +282,9 @@ func TestCreateCNPGLogSink(t *testing.T) {
 		t.Errorf("unexpected writer identity %q", writerIdentity)
 	}
 
-	sink, ok := fake.sinks["projects/team-project/sinks/cnpg-audit-sink-myteam-prod"]
+	sink, ok := fake.sinks["projects/team-project/sinks/npg-audit-sink-myteam-prod"]
 	if !ok {
-		t.Fatalf("expected CNPG sink to be created, got sinks: %v", fake.sinks)
+		t.Fatalf("expected Nais Postgres sink to be created, got sinks: %v", fake.sinks)
 	}
 
 	const wantFilter = `jsonPayload.logger="pgaudit"
@@ -298,7 +298,7 @@ AND jsonPayload.record.user_name=~".+@.+"`
 		t.Errorf("destination = %q, want %q", sink.Destination, wantDestination)
 	}
 
-	if _, _, err := r.createOrUpdateLogSinkIfNeeded(context.Background(), teamProjectID, teamSlug, envName, bucketName, sinkName, BuildCNPGLogFilter(), log); err != nil {
+	if _, _, err := r.createOrUpdateLogSinkIfNeeded(context.Background(), teamProjectID, teamSlug, envName, bucketName, sinkName, BuildNaisPostgresLogFilter(), log); err != nil {
 		t.Fatalf("second reconcile should be a no-op, got: %v", err)
 	}
 }

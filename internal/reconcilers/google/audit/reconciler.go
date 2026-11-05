@@ -36,7 +36,7 @@ type Services struct {
 type auditLogReconciler struct {
 	services                *Services
 	config                  Config
-	onPremPostgresLogClient OnPremPostgresLogClient
+	onPremPostgresLogClient OnPremLogClient
 }
 
 // Config holds the configuration for the audit log reconciler.
@@ -198,7 +198,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 	// according to loggkamel. When true we must ensure a log bucket and a log
 	// sink (with the dbAuditEntry filter) exist for the team, even if it has no
 	// Cloud SQL instances.
-	requiresOnPremPostgresLogging, err := r.requiresOnPremPostgresLogging(ctx, naisTeam.Slug)
+	requiresOnPremPostgresLogging, err := r.requiresOnPremLogging(ctx, naisTeam.Slug)
 	if err != nil {
 		return fmt.Errorf("check on-prem Postgres logging requirement for team %s: %w", naisTeam.Slug, err)
 	}
@@ -241,9 +241,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		hasCloudSQLAudit := len(listSQLInstances) > 0
 		hasNaisPostgres := naisPostgresEnvs[env.EnvironmentName]
 
-		// Skip if there are no Cloud SQL instances with pgaudit enabled, no Nais
-		// Postgres (CNPG) clusters, and loggkamel does not require on-prem
-		// Postgres log collection.
+		// Skip if there are no on-premises, Cloud SQL or Nais Postgres audit logs
 		if !hasCloudSQLAudit && !hasNaisPostgres && !requiresOnPremPostgresLogging {
 			log.WithFields(logrus.Fields{
 				"team":        naisTeam.Slug,
@@ -264,8 +262,7 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 			return fmt.Errorf("verify _AllLogs view exists for team %s environment %s: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		// The SQL audit sink is only needed when there are Cloud SQL instances
-		// with pgaudit enabled or loggkamel requires on-prem Postgres logging.
+		// The SQL audit sink is only needed when there are on-premises or Cloud SQL instances
 		if hasCloudSQLAudit || requiresOnPremPostgresLogging {
 			sinkName := GenerateLogSinkName(naisTeam.Slug, env.EnvironmentName)
 			filter := BuildLogFilter(teamProjectID, hasCloudSQLAudit, requiresOnPremPostgresLogging)
@@ -280,8 +277,8 @@ func (r *auditLogReconciler) Reconcile(ctx context.Context, client *apiclient.AP
 		}
 
 		if hasNaisPostgres {
-			cnpgSinkName := GenerateCNPGLogSinkName(naisTeam.Slug, env.EnvironmentName)
-			if err := r.ensureSinkWithWritePermission(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, cnpgSinkName, BuildCNPGLogFilter(), log); err != nil {
+			naisPostgresSinkName := GenerateNaisPostgresLogSinkName(naisTeam.Slug, env.EnvironmentName)
+			if err := r.ensureSinkWithWritePermission(ctx, teamProjectID, naisTeam.Slug, env.EnvironmentName, bucketName, naisPostgresSinkName, BuildNaisPostgresLogFilter(), log); err != nil {
 				return err
 			}
 		}
@@ -319,19 +316,18 @@ func (r *auditLogReconciler) ensureSinkWithWritePermission(ctx context.Context, 
 	return nil
 }
 
-// requiresOnPremPostgresLogging asks loggkamel whether the given team's on-prem
-// Postgres logs must be collected. If no loggkamel client is configured, it
-// returns false.
-func (r *auditLogReconciler) requiresOnPremPostgresLogging(ctx context.Context, teamSlug string) (bool, error) {
+// requiresOnPremLogging asks loggkamel whether the given team's on-premises logs must be collected.
+// If no loggkamel client is configured, it returns false.
+func (r *auditLogReconciler) requiresOnPremLogging(ctx context.Context, teamSlug string) (bool, error) {
 	if r.onPremPostgresLogClient == nil {
 		return false, nil
 	}
-	return r.onPremPostgresLogClient.RequiresOnPremPostgresLogging(ctx, teamSlug)
+	return r.onPremPostgresLogClient.RequiresOnPremLogging(ctx, teamSlug)
 }
 
-// WithOnPremPostgresLogClient is a test override function for dependency
+// WithOnPremLogClient is a test override function for dependency
 // injection of the loggkamel on-prem Postgres log client.
-func WithOnPremPostgresLogClient(client OnPremPostgresLogClient) OverrideFunc {
+func WithOnPremLogClient(client OnPremLogClient) OverrideFunc {
 	return func(reconciler *auditLogReconciler) {
 		reconciler.onPremPostgresLogClient = client
 	}
