@@ -37,7 +37,6 @@ type azureGroupReconciler struct {
 	lockedAzureClient azureclient.Client
 	lastConfig        clientcredentials.Config
 	azureGroupPrefix  string
-	parentLock        sync.Mutex
 }
 
 type reconcilerConfig struct {
@@ -85,7 +84,7 @@ func (r *azureGroupReconciler) Configuration() *protoapi.NewReconciler {
 			{
 				Key:         configClientID,
 				DisplayName: "Client ID",
-				Description: "The client ID of the application registration that Console will use when communicating with the Azure AD APIs. The application must have the following API permissions: Group.Create, Group.Read.All, GroupMember.ReadWrite.All.",
+				Description: "The client ID of the application registration that Console will use when communicating with the Azure AD APIs. The application must have the Group.ReadWrite.All application permission with admin consent.",
 				Secret:      false,
 			},
 			{
@@ -147,28 +146,22 @@ func (r *azureGroupReconciler) Reconcile(ctx context.Context, client *apiclient.
 }
 
 func (r *azureGroupReconciler) getOrCreateParentGroup(ctx context.Context, azureClient azureclient.Client) (string, error) {
-	// Serialize shared parent lookup and creation across team workers.
-	// Do not cache the parent: recreating a deleted parent must repair membership.
-	r.parentLock.Lock()
-	defer r.parentLock.Unlock()
-
-	parent, err := azureClient.GetGroupByMailNickname(ctx, parentGroupName)
+	parent, err := azureClient.GetGroupByUniqueName(ctx, parentGroupName)
 	if err != nil {
 		return "", fmt.Errorf("get Azure parent group %q: %w", parentGroupName, err)
 	}
 	if parent == nil {
-		parent, err = azureClient.CreateGroup(ctx, &azureclient.Group{
+		// Even when the lookup is stale, the alternate key prevents a second
+		// parent. Transient errors are retried by the manager.
+		parent, err = azureClient.UpsertGroupByUniqueName(ctx, parentGroupName, &azureclient.Group{
 			Description:     "Parent group for all teams synced by Nais.",
 			DisplayName:     parentGroupName,
 			MailNickname:    parentGroupName,
 			SecurityEnabled: true,
 		})
 		if err != nil {
-			return "", fmt.Errorf("create Azure parent group %q: %w", parentGroupName, err)
+			return "", fmt.Errorf("upsert Azure parent group %q: %w", parentGroupName, err)
 		}
-	}
-	if parent.ID == "" || !parent.SecurityEnabled || parent.MailEnabled || len(parent.GroupTypes) != 0 {
-		return "", fmt.Errorf("parent group %q in Azure must be an assigned, mail-disabled security group", parentGroupName)
 	}
 	return parent.ID, nil
 }

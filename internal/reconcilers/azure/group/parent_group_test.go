@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -18,41 +19,37 @@ import (
 )
 
 func TestConnectParentGroup(t *testing.T) {
-	for _, name := range []string{"existing parent", "create parent", "already linked", "lookup failure", "creation failure", "list failure", "add failure", "retry after add failure", "self membership", "invalid parent"} {
+	for _, name := range []string{"existing parent", "create parent", "already linked", "lookup failure", "creation failure", "list failure", "add failure", "retry after add failure", "self membership"} {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
 			client := azureclient.NewMockClient(t)
 			r := &azureGroupReconciler{}
-			parent := &azureclient.Group{ID: "parent-id", MailNickname: parentGroupName, SecurityEnabled: true}
+			parent := &azureclient.GroupReference{ID: "parent-id"}
 			child := &azureclient.Group{ID: "child-id", MailNickname: "nais-team-test"}
 			failure := errors.New("graph failed")
 			var expectedErr string
 			switch name {
 			case "lookup failure":
-				client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(nil, failure).Once()
+				client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, failure).Once()
 				expectedErr = "get Azure parent group"
 			case "create parent", "creation failure":
-				client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(nil, nil).Once()
-				create := client.EXPECT().CreateGroup(ctx, &azureclient.Group{
+				client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, nil).Once()
+				create := client.EXPECT().UpsertGroupByUniqueName(ctx, parentGroupName, &azureclient.Group{
 					Description: "Parent group for all teams synced by Nais.", DisplayName: parentGroupName,
 					MailNickname: parentGroupName, SecurityEnabled: true,
 				}).Once()
 				if name == "creation failure" {
 					create.Return(nil, failure)
-					expectedErr = "create Azure parent group"
+					expectedErr = "upsert Azure parent group"
 				} else {
 					create.Return(parent, nil)
 				}
 			default:
-				client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(parent, nil).Once()
+				client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(parent, nil).Once()
 			}
 			if name == "self membership" {
 				child.ID = parent.ID
 				expectedErr = "reserved for the parent group"
-			}
-			if name == "invalid parent" {
-				parent.GroupTypes = []string{"DynamicMembership"}
-				expectedErr = "must be an assigned, mail-disabled security group"
 			}
 			membershipParent := &azureclient.Group{ID: parent.ID, MailNickname: parentGroupName}
 			if expectedErr == "" {
@@ -85,7 +82,7 @@ func TestConnectParentGroup(t *testing.T) {
 			}
 			if name == "retry after add failure" {
 				// The previous request may have succeeded remotely despite returning an error.
-				client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(parent, nil).Once()
+				client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(parent, nil).Once()
 				client.EXPECT().ListGroupMembers(ctx, membershipParent).Return([]*azureclient.Member{{ID: child.ID}}, nil).Once()
 				parentID, err := r.getOrCreateParentGroup(ctx, client)
 				require.NoError(t, err)
@@ -104,13 +101,31 @@ func TestParentGroupNameIsReserved(t *testing.T) {
 	require.ErrorContains(t, r.Reconcile(ctx, api, &protoapi.Team{Slug: "teams"}, log), "reserved for the parent group")
 }
 
+func TestParentGroupRetryAfterPartialFailure(t *testing.T) {
+	ctx := t.Context()
+	client := azureclient.NewMockClient(t)
+	r := &azureGroupReconciler{}
+	client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, nil).Once()
+	client.EXPECT().UpsertGroupByUniqueName(ctx, parentGroupName, mock.Anything).Return(nil, errors.New("response lost")).Once()
+	_, err := r.getOrCreateParentGroup(ctx, client)
+	require.Error(t, err)
+
+	// Creation succeeded remotely. A retry resolves the same object by its
+	// alternate key and does not attempt another creation.
+	parent := &azureclient.GroupReference{ID: "parent-id"}
+	client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(parent, nil).Once()
+	id, err := r.getOrCreateParentGroup(ctx, client)
+	require.NoError(t, err)
+	require.Equal(t, parent.ID, id)
+}
+
 func TestParentGroupFailureStopsReconciliation(t *testing.T) {
 	ctx := t.Context()
 	client := azureclient.NewMockClient(t)
 	api, _ := apiclient.NewMockClient(t)
 	log, _ := test.NewNullLogger()
 	team := &protoapi.Team{Slug: "test", EntraIdGroupId: new("child-id")}
-	client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(nil, errors.New("graph failed")).Once()
+	client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, errors.New("graph failed")).Once()
 	r := New(ctx, "example.com", "nais-team-", WithAzureClient(client))
 	require.ErrorContains(t, r.Reconcile(ctx, api, team, log), "get Azure parent group")
 	// Neither team group creation, user synchronization nor membership mutations are expected.
@@ -121,17 +136,17 @@ func TestParentGroupIsRecreated(t *testing.T) {
 	client := azureclient.NewMockClient(t)
 	r := &azureGroupReconciler{}
 	child := &azureclient.Group{ID: "child-id"}
-	parent := &azureclient.Group{ID: "old-parent-id", SecurityEnabled: true}
-	client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(parent, nil).Once()
+	parent := &azureclient.GroupReference{ID: "old-parent-id"}
+	client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(parent, nil).Once()
 	client.EXPECT().ListGroupMembers(ctx, &azureclient.Group{ID: parent.ID, MailNickname: parentGroupName}).Return([]*azureclient.Member{{ID: child.ID}}, nil).Once()
 	parentID, err := r.getOrCreateParentGroup(ctx, client)
 	require.NoError(t, err)
 	require.Equal(t, parent.ID, parentID)
 	require.NoError(t, r.connectParentGroup(ctx, client, parentID, child))
 
-	replacement := &azureclient.Group{ID: "new-parent-id", SecurityEnabled: true}
-	client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).Return(nil, nil).Once()
-	client.EXPECT().CreateGroup(ctx, mock.Anything).Return(replacement, nil).Once()
+	replacement := &azureclient.GroupReference{ID: "new-parent-id"}
+	client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, nil).Once()
+	client.EXPECT().UpsertGroupByUniqueName(ctx, parentGroupName, mock.Anything).Return(replacement, nil).Once()
 	membershipParent := &azureclient.Group{ID: replacement.ID, MailNickname: parentGroupName}
 	client.EXPECT().ListGroupMembers(ctx, membershipParent).Return(nil, nil).Once()
 	client.EXPECT().AddMemberToGroup(ctx, membershipParent, &azureclient.Member{ID: child.ID}).Return(nil).Once()
@@ -147,15 +162,17 @@ func TestConcurrentParentGroupCreation(t *testing.T) {
 		client := azureclient.NewMockClient(t)
 		r := &azureGroupReconciler{}
 		const workers = 10
-		var parent *azureclient.Group
-		// These callbacks are serialized by the reconciler's parent lock.
-		client.EXPECT().GetGroupByMailNickname(ctx, parentGroupName).
-			RunAndReturn(func(context.Context, string) (*azureclient.Group, error) { return parent, nil }).Times(workers)
-		client.EXPECT().CreateGroup(ctx, mock.Anything).
-			RunAndReturn(func(context.Context, *azureclient.Group) (*azureclient.Group, error) {
-				parent = &azureclient.Group{ID: "parent-id", SecurityEnabled: true}
+		parent := &azureclient.GroupReference{ID: "parent-id"}
+		// Every worker sees stale reads, including after another worker created
+		// the parent. Only the server-side alternate key can prevent duplicates.
+		client.EXPECT().GetGroupByUniqueName(ctx, parentGroupName).Return(nil, nil).Times(workers)
+		var once sync.Once
+		var creations atomic.Int32
+		client.EXPECT().UpsertGroupByUniqueName(ctx, parentGroupName, mock.Anything).
+			RunAndReturn(func(context.Context, string, *azureclient.Group) (*azureclient.GroupReference, error) {
+				once.Do(func() { creations.Add(1) })
 				return parent, nil
-			}).Once()
+			}).Times(workers)
 		var membershipUpdates atomic.Int32
 		release := make(chan struct{})
 		client.EXPECT().ListGroupMembers(ctx, mock.Anything).
@@ -178,6 +195,7 @@ func TestConcurrentParentGroupCreation(t *testing.T) {
 		synctest.Wait()
 		// Every worker can reach membership synchronization while the others are blocked there.
 		assert.Equal(t, int32(workers), membershipUpdates.Load())
+		assert.Equal(t, int32(1), creations.Load())
 		close(release)
 		for range workers {
 			require.NoError(t, <-errors)

@@ -54,9 +54,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 		Purpose: teamPurpose,
 	}
 	expectParentGroup := func(client *azureclient.MockClient) {
-		parent := &azureclient.Group{ID: "parent-id", MailNickname: "nais-teams", SecurityEnabled: true}
-		client.EXPECT().GetGroupByMailNickname(mock.Anything, "nais-teams").Return(parent, nil).Once()
-		parent = &azureclient.Group{ID: parent.ID, MailNickname: parent.MailNickname}
+		parent := &azureclient.Group{ID: "parent-id", MailNickname: "nais-teams"}
+		client.EXPECT().GetGroupByUniqueName(mock.Anything, "nais-teams").Return(&azureclient.GroupReference{ID: parent.ID}, nil).Once()
 		client.EXPECT().ListGroupMembers(mock.Anything, parent).Return([]*azureclient.Member{}, nil).Once()
 		client.EXPECT().AddMemberToGroup(mock.Anything, parent, &azureclient.Member{ID: group.ID}).Return(nil).Once()
 	}
@@ -111,8 +110,8 @@ func TestAzureReconciler_Reconcile(t *testing.T) {
 	t.Run("GetOrCreateGroup fail", func(t *testing.T) {
 		client, _ := apiclient.NewMockClient(t)
 		mockClient := azureclient.NewMockClient(t)
-		mockClient.EXPECT().GetGroupByMailNickname(ctx, "nais-teams").
-			Return(&azureclient.Group{ID: "parent-id", SecurityEnabled: true}, nil).Once()
+		mockClient.EXPECT().GetGroupByUniqueName(ctx, "nais-teams").
+			Return(&azureclient.GroupReference{ID: "parent-id"}, nil).Once()
 
 		mockClient.EXPECT().
 			GetOrCreateGroup(mock.Anything, mock.Anything, "nais-team-slug").
