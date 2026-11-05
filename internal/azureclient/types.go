@@ -1,8 +1,7 @@
 package azureclient
 
-type GroupResponse struct {
-	Value    []*Group `json:"value"`
-	NextLink string   `json:"@odata.nextLink"`
+type GroupReference struct {
+	ID string `json:"id"`
 }
 
 type Group struct {
