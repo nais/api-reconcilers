@@ -29,7 +29,7 @@ values:
 
   featureFlags.grafanaAlertPilotTeams:
     displayName: Grafana pilot teams
-    description: Team slugs whose folders are reconciled and whose alerting is provisioned when enabled; empty means no teams
+    description: Team slugs whose folders are reconciled and whose alerting is provisioned when enabled; "*" selects all teams; empty means no teams
     config:
       type: string_array
 

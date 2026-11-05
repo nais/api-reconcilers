@@ -1018,298 +1018,310 @@ func TestAlertingFunctionality(t *testing.T) {
 		}
 	})
 
-	t.Run("Reconcile with environments having Slack alerts", func(t *testing.T) {
-		teamName := teamSlug
+	for _, tt := range []struct {
+		name       string
+		team       string
+		pilotTeams []string
+	}{
+		{"explicit team", teamSlug, []string{teamSlug}},
+		{"all teams wildcard", teamSlug, []string{"*"}},
+		{"wildcard alongside explicit teams", teamSlug, []string{"other-team", "*"}},
+		{"team named all selected explicitly", "all", []string{"all"}},
+	} {
+		t.Run("Reconcile with environments having Slack alerts/"+tt.name, func(t *testing.T) {
+			teamSlug := tt.team
+			teamName := teamSlug
 
-		const (
-			teamIDAsString   = "1"
-			resourceName     = "serviceaccounts"
-			serviceAccountID = 1
-			teamID           = 1
-		)
+			const (
+				teamIDAsString   = "1"
+				resourceName     = "serviceaccounts"
+				serviceAccountID = 1
+				teamID           = 1
+			)
 
-		members := []*protoapi.TeamMember{
-			{
-				User: &protoapi.User{
-					Email: "user1@nav.no",
-					Name:  "User 1",
-				},
-			},
-			{
-				User: &protoapi.User{
-					Email: "user2@nav.no",
-					Name:  "User 2",
-				},
-			},
-		}
-
-		naisTeam := &protoapi.Team{
-			Slug:    teamSlug,
-			Purpose: "purpose",
-		}
-
-		serviceAccountName := "team-" + teamSlug
-
-		apiClient, mockServer := apiclient.NewMockClient(t)
-
-		// Mock environments with Slack alert channels
-		environmentsWithSlack := []*protoapi.TeamEnvironment{
-			{
-				EnvironmentName:    "dev",
-				SlackAlertsChannel: "#dev-alerts",
-			},
-			{
-				EnvironmentName:    "prod",
-				SlackAlertsChannel: "#prod-alerts",
-			},
-		}
-
-		mockServer.Teams.EXPECT().
-			Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamMembersResponse{
-				Nodes: members,
-			}, nil).
-			Once()
-
-		mockServer.Teams.EXPECT().
-			Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
-			Return(&protoapi.ListTeamEnvironmentsResponse{
-				Nodes: environmentsWithSlack,
-			}, nil).
-			Once()
-
-		// Mock all the existing services (reuse from previous test)
-		usersService := grafana_reconciler.NewMockUsersClientService(t)
-		usersService.EXPECT().
-			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
-				LoginOrEmail: members[0].User.Email,
-				Context:      ctx,
-			}).
-			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
-			Once()
-
-		usersService.EXPECT().
-			GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
-				LoginOrEmail: members[1].User.Email,
-				Context:      ctx,
-			}).
-			Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
-			Once()
-
-		teamsService := grafana_reconciler.NewMockTeamsClientService(t)
-		teamsService.EXPECT().
-			SearchTeams(&grafana_teams.SearchTeamsParams{
-				Query:   &teamName,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.SearchTeamsOK{
-				Payload: &models.SearchTeamQueryResult{
-					Teams: []*models.TeamDTO{},
-				},
-			}, nil).
-			Once()
-		teamsService.EXPECT().
-			CreateTeamWithParams(&grafana_teams.CreateTeamParams{
-				Body: &models.CreateTeamCommand{
-					Name: teamName,
-				},
-				Context: ctx,
-			}).
-			Return(&grafana_teams.CreateTeamOK{
-				Payload: &models.CreateTeamOKBody{
-					TeamID: teamID,
-				},
-			}, nil).
-			Once()
-		teamsService.EXPECT().
-			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
-				Body: &models.AddTeamMemberCommand{
-					UserID: 1,
-				},
-				TeamID:  teamIDAsString,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).
-			Once()
-		teamsService.EXPECT().
-			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
-				Body: &models.AddTeamMemberCommand{
-					UserID: 2,
-				},
-				TeamID:  teamIDAsString,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.AddTeamMemberOK{}, nil).
-			Once()
-		teamsService.EXPECT().
-			GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
-				TeamID:  teamIDAsString,
-				Context: ctx,
-			}).
-			Return(&grafana_teams.GetTeamMembersOK{
-				Payload: []*models.TeamMemberDTO{},
-			}, nil).
-			Once()
-
-		rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
-		rbacService.EXPECT().
-			GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
-				Resource:   resourceName,
-				ResourceID: strconv.Itoa(int(serviceAccountID)),
-				Context:    ctx,
-			}).
-			Return(&grafana_accesscontrol.GetResourcePermissionsOK{
-				Payload: []*models.ResourcePermissionDTO{},
-			}, nil).
-			Once()
-		rbacService.EXPECT().
-			SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
-				Body: &models.SetPermissionsCommand{
-					Permissions: []*models.SetResourcePermissionCommand{
-						{
-							Permission: "Edit",
-							TeamID:     teamID,
-						},
+			members := []*protoapi.TeamMember{
+				{
+					User: &protoapi.User{
+						Email: "user1@nav.no",
+						Name:  "User 1",
 					},
 				},
-				Resource:   resourceName,
-				ResourceID: strconv.Itoa(int(serviceAccountID)),
-				Context:    ctx,
-			}).
-			Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
-			Once()
-
-		serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
-		serviceAccountsService.EXPECT().
-			SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
-				Query:   &serviceAccountName,
-				Context: ctx,
-			}).
-			Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
-				Payload: &models.SearchOrgServiceAccountsResult{},
-			}, nil).
-			Once()
-		serviceAccountsService.EXPECT().
-			CreateServiceAccount(&grafana_serviceaccounts.CreateServiceAccountParams{
-				Body: &models.CreateServiceAccountForm{
-					Name: serviceAccountName,
+				{
+					User: &protoapi.User{
+						Email: "user2@nav.no",
+						Name:  "User 2",
+					},
 				},
-				Context: ctx,
-			}).
-			Return(&grafana_serviceaccounts.CreateServiceAccountCreated{
-				Payload: &models.ServiceAccountDTO{
-					ID: serviceAccountID,
+			}
+
+			naisTeam := &protoapi.Team{
+				Slug:    teamSlug,
+				Purpose: "purpose",
+			}
+
+			serviceAccountName := "team-" + teamSlug
+
+			apiClient, mockServer := apiclient.NewMockClient(t)
+
+			// Mock environments with Slack alert channels
+			environmentsWithSlack := []*protoapi.TeamEnvironment{
+				{
+					EnvironmentName:    "dev",
+					SlackAlertsChannel: "#dev-alerts",
 				},
-			}, nil).
-			Once()
-
-		adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
-		adminUsersService.
-			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
-				return params.Body.Email == members[0].User.Email
-			})).
-			Return(&grafana_admin_users.AdminCreateUserOK{
-				Payload: &models.AdminCreateUserResponse{
-					ID: 1,
+				{
+					EnvironmentName:    "prod",
+					SlackAlertsChannel: "#prod-alerts",
 				},
-			}, nil).
-			Once()
-		adminUsersService.
-			On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
-				return params.Body.Email == members[1].User.Email
-			})).
-			Return(&grafana_admin_users.AdminCreateUserOK{
-				Payload: &models.AdminCreateUserResponse{
-					ID: 2,
+			}
+
+			mockServer.Teams.EXPECT().
+				Members(mock.Anything, &protoapi.ListTeamMembersRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+				Return(&protoapi.ListTeamMembersResponse{
+					Nodes: members,
+				}, nil).
+				Once()
+
+			mockServer.Teams.EXPECT().
+				Environments(mock.Anything, &protoapi.ListTeamEnvironmentsRequest{Slug: teamSlug, Limit: 100, Offset: 0}).
+				Return(&protoapi.ListTeamEnvironmentsResponse{
+					Nodes: environmentsWithSlack,
+				}, nil).
+				Once()
+
+			// Mock all the existing services (reuse from previous test)
+			usersService := grafana_reconciler.NewMockUsersClientService(t)
+			usersService.EXPECT().
+				GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+					LoginOrEmail: members[0].User.Email,
+					Context:      ctx,
+				}).
+				Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
+				Once()
+
+			usersService.EXPECT().
+				GetUserByLoginOrEmailWithParams(&grafana_users.GetUserByLoginOrEmailParams{
+					LoginOrEmail: members[1].User.Email,
+					Context:      ctx,
+				}).
+				Return(&grafana_users.GetUserByLoginOrEmailOK{}, fmt.Errorf("no user found")).
+				Once()
+
+			teamsService := grafana_reconciler.NewMockTeamsClientService(t)
+			teamsService.EXPECT().
+				SearchTeams(&grafana_teams.SearchTeamsParams{
+					Query:   &teamName,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.SearchTeamsOK{
+					Payload: &models.SearchTeamQueryResult{
+						Teams: []*models.TeamDTO{},
+					},
+				}, nil).
+				Once()
+			teamsService.EXPECT().
+				CreateTeamWithParams(&grafana_teams.CreateTeamParams{
+					Body: &models.CreateTeamCommand{
+						Name: teamName,
+					},
+					Context: ctx,
+				}).
+				Return(&grafana_teams.CreateTeamOK{
+					Payload: &models.CreateTeamOKBody{
+						TeamID: teamID,
+					},
+				}, nil).
+				Once()
+			teamsService.EXPECT().
+				AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+					Body: &models.AddTeamMemberCommand{
+						UserID: 1,
+					},
+					TeamID:  teamIDAsString,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.AddTeamMemberOK{}, nil).
+				Once()
+			teamsService.EXPECT().
+				AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
+					Body: &models.AddTeamMemberCommand{
+						UserID: 2,
+					},
+					TeamID:  teamIDAsString,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.AddTeamMemberOK{}, nil).
+				Once()
+			teamsService.EXPECT().
+				GetTeamMembersWithParams(&grafana_teams.GetTeamMembersParams{
+					TeamID:  teamIDAsString,
+					Context: ctx,
+				}).
+				Return(&grafana_teams.GetTeamMembersOK{
+					Payload: []*models.TeamMemberDTO{},
+				}, nil).
+				Once()
+
+			rbacService := grafana_reconciler.NewMockAccessControlClientService(t)
+			rbacService.EXPECT().
+				GetResourcePermissionsWithParams(&grafana_accesscontrol.GetResourcePermissionsParams{
+					Resource:   resourceName,
+					ResourceID: strconv.Itoa(int(serviceAccountID)),
+					Context:    ctx,
+				}).
+				Return(&grafana_accesscontrol.GetResourcePermissionsOK{
+					Payload: []*models.ResourcePermissionDTO{},
+				}, nil).
+				Once()
+			rbacService.EXPECT().
+				SetResourcePermissions(&grafana_accesscontrol.SetResourcePermissionsParams{
+					Body: &models.SetPermissionsCommand{
+						Permissions: []*models.SetResourcePermissionCommand{
+							{
+								Permission: "Edit",
+								TeamID:     teamID,
+							},
+						},
+					},
+					Resource:   resourceName,
+					ResourceID: strconv.Itoa(int(serviceAccountID)),
+					Context:    ctx,
+				}).
+				Return(&grafana_accesscontrol.SetResourcePermissionsOK{}, nil).
+				Once()
+
+			serviceAccountsService := grafana_reconciler.NewMockServiceAccountsClientService(t)
+			serviceAccountsService.EXPECT().
+				SearchOrgServiceAccountsWithPaging(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingParams{
+					Query:   &serviceAccountName,
+					Context: ctx,
+				}).
+				Return(&grafana_serviceaccounts.SearchOrgServiceAccountsWithPagingOK{
+					Payload: &models.SearchOrgServiceAccountsResult{},
+				}, nil).
+				Once()
+			serviceAccountsService.EXPECT().
+				CreateServiceAccount(&grafana_serviceaccounts.CreateServiceAccountParams{
+					Body: &models.CreateServiceAccountForm{
+						Name: serviceAccountName,
+					},
+					Context: ctx,
+				}).
+				Return(&grafana_serviceaccounts.CreateServiceAccountCreated{
+					Payload: &models.ServiceAccountDTO{
+						ID: serviceAccountID,
+					},
+				}, nil).
+				Once()
+
+			adminUsersService := grafana_reconciler.NewMockAdminUsersClientService(t)
+			adminUsersService.
+				On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
+					return params.Body.Email == members[0].User.Email
+				})).
+				Return(&grafana_admin_users.AdminCreateUserOK{
+					Payload: &models.AdminCreateUserResponse{
+						ID: 1,
+					},
+				}, nil).
+				Once()
+			adminUsersService.
+				On("AdminCreateUserWithParams", mock.MatchedBy(func(params *grafana_admin_users.AdminCreateUserParams) bool {
+					return params.Body.Email == members[1].User.Email
+				})).
+				Return(&grafana_admin_users.AdminCreateUserOK{
+					Payload: &models.AdminCreateUserResponse{
+						ID: 2,
+					},
+				}, nil).
+				Once()
+
+			// Mock provisioning service with specific expectations for alerting
+			provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
+
+			// Mock the notification template creation with GET-then-PUT pattern
+			provisioningService.EXPECT().
+				GetTemplate("nais.slack").
+				Return(nil, fmt.Errorf("template not found")).
+				Once()
+			provisioningService.EXPECT().
+				PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
+				Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
+				Once()
+
+			// Expect contact point creation for both environments
+			// The fix now calls GET first to check existence, then POST/PUT accordingly
+
+			// For first contact point (dev)
+			provisioningService.EXPECT().
+				GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
+					return params.Name != nil && *params.Name == "team-"+teamSlug+"-dev"
+				})).
+				Return(nil, fmt.Errorf("contact point not found")).
+				Once()
+
+			provisioningService.EXPECT().
+				PostContactpoints(mock.MatchedBy(func(params *grafana_provisioning.PostContactpointsParams) bool {
+					return params.Body != nil && params.Body.UID == "team-"+teamSlug+"-dev"
+				})).
+				Return(&grafana_provisioning.PostContactpointsAccepted{}, nil).
+				Once()
+
+			// For second contact point (prod)
+			provisioningService.EXPECT().
+				GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
+					return params.Name != nil && *params.Name == "team-"+teamSlug+"-prod"
+				})).
+				Return(nil, fmt.Errorf("contact point not found")).
+				Once()
+
+			provisioningService.EXPECT().
+				PostContactpoints(mock.MatchedBy(func(params *grafana_provisioning.PostContactpointsParams) bool {
+					return params.Body != nil && params.Body.UID == "team-"+teamSlug+"-prod"
+				})).
+				Return(&grafana_provisioning.PostContactpointsAccepted{}, nil).
+				Once()
+
+			// Expect policy tree operations
+			provisioningService.EXPECT().
+				GetPolicyTree().
+				Return(&grafana_provisioning.GetPolicyTreeOK{
+					Payload: &models.Route{
+						Routes: []*models.Route{},
+					},
+				}, nil).
+				Times(3)
+
+			provisioningService.EXPECT().
+				PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
+					return len(params.Body.Routes) == 1 && len(params.Body.Routes[0].Routes) == 3
+				})).
+				Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
+				Once()
+			expectExistingDiscardMuteTiming(provisioningService)
+
+			folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
+			reconciler := grafana_reconciler.New(
+				usersService,
+				teamsService,
+				folders,
+				folderPermissions,
+				rbacService,
+				serviceAccountsService,
+				adminUsersService,
+				provisioningService,
+				config.FeatureFlags{
+					EnableGrafanaAlerts:    true,
+					GrafanaAlertPilotTeams: tt.pilotTeams,
 				},
-			}, nil).
-			Once()
+				testSlackWebhookURL,
+			)
 
-		// Mock provisioning service with specific expectations for alerting
-		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
-
-		// Mock the notification template creation with GET-then-PUT pattern
-		provisioningService.EXPECT().
-			GetTemplate("nais.slack").
-			Return(nil, fmt.Errorf("template not found")).
-			Once()
-		provisioningService.EXPECT().
-			PutTemplate(mock.AnythingOfType("*provisioning.PutTemplateParams")).
-			Return(&grafana_provisioning.PutTemplateAccepted{}, nil).
-			Once()
-
-		// Expect contact point creation for both environments
-		// The fix now calls GET first to check existence, then POST/PUT accordingly
-
-		// For first contact point (dev)
-		provisioningService.EXPECT().
-			GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
-				return params.Name != nil && *params.Name == "team-test-team-dev"
-			})).
-			Return(nil, fmt.Errorf("contact point not found")).
-			Once()
-
-		provisioningService.EXPECT().
-			PostContactpoints(mock.MatchedBy(func(params *grafana_provisioning.PostContactpointsParams) bool {
-				return params.Body != nil && params.Body.UID == "team-test-team-dev"
-			})).
-			Return(&grafana_provisioning.PostContactpointsAccepted{}, nil).
-			Once()
-
-		// For second contact point (prod)
-		provisioningService.EXPECT().
-			GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
-				return params.Name != nil && *params.Name == "team-test-team-prod"
-			})).
-			Return(nil, fmt.Errorf("contact point not found")).
-			Once()
-
-		provisioningService.EXPECT().
-			PostContactpoints(mock.MatchedBy(func(params *grafana_provisioning.PostContactpointsParams) bool {
-				return params.Body != nil && params.Body.UID == "team-test-team-prod"
-			})).
-			Return(&grafana_provisioning.PostContactpointsAccepted{}, nil).
-			Once()
-
-		// Expect policy tree operations
-		provisioningService.EXPECT().
-			GetPolicyTree().
-			Return(&grafana_provisioning.GetPolicyTreeOK{
-				Payload: &models.Route{
-					Routes: []*models.Route{},
-				},
-			}, nil).
-			Times(3)
-
-		provisioningService.EXPECT().
-			PutPolicyTree(mock.MatchedBy(func(params *grafana_provisioning.PutPolicyTreeParams) bool {
-				return len(params.Body.Routes) == 1 && len(params.Body.Routes[0].Routes) == 3
-			})).
-			Return(&grafana_provisioning.PutPolicyTreeAccepted{}, nil).
-			Once()
-		expectExistingDiscardMuteTiming(provisioningService)
-
-		folders, folderPermissions := expectPilotFolder(t, ctx, teamSlug, teamID)
-		reconciler := grafana_reconciler.New(
-			usersService,
-			teamsService,
-			folders,
-			folderPermissions,
-			rbacService,
-			serviceAccountsService,
-			adminUsersService,
-			provisioningService,
-			config.FeatureFlags{
-				EnableGrafanaAlerts:    true,
-				GrafanaAlertPilotTeams: []string{teamSlug},
-			},
-			testSlackWebhookURL,
-		)
-
-		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
-			t.Fatal(err)
-		}
-	})
+			if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 
 	for _, tt := range []struct {
 		name  string
@@ -1317,8 +1329,10 @@ func TestAlertingFunctionality(t *testing.T) {
 		flags config.FeatureFlags
 	}{
 		{"feature flag disabled", teamSlug, config.FeatureFlags{GrafanaAlertPilotTeams: []string{teamSlug}}},
+		{"feature flag disabled with wildcard", teamSlug, config.FeatureFlags{GrafanaAlertPilotTeams: []string{"*"}}},
 		{"empty pilot", teamSlug, config.FeatureFlags{EnableGrafanaAlerts: true}},
 		{"team outside pilot", teamSlug, config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
+		{"all is not a wildcard", teamSlug, config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"all"}}},
 		{"former hardcoded pilot outside configured pilot", "traktor", config.FeatureFlags{EnableGrafanaAlerts: true, GrafanaAlertPilotTeams: []string{"other-team"}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1437,7 +1451,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
 			folders := grafana_reconciler.NewMockFoldersClientService(t)
 			folderPermissions := grafana_reconciler.NewMockFolderPermissionsClientService(t)
-			if slices.Contains(tt.flags.GrafanaAlertPilotTeams, teamSlug) {
+			if slices.Contains(tt.flags.GrafanaAlertPilotTeams, teamSlug) || slices.Contains(tt.flags.GrafanaAlertPilotTeams, "*") {
 				folders, folderPermissions = expectPilotFolder(t, ctx, teamSlug, testTeamID)
 			}
 
