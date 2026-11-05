@@ -305,6 +305,74 @@ func (_c *MockClient_GetGroupById_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// GetGroupByMailNickname provides a mock function for the type MockClient
+func (_mock *MockClient) GetGroupByMailNickname(ctx context.Context, nickname string) (*Group, error) {
+	ret := _mock.Called(ctx, nickname)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetGroupByMailNickname")
+	}
+
+	var r0 *Group
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*Group, error)); ok {
+		return returnFunc(ctx, nickname)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *Group); ok {
+		r0 = returnFunc(ctx, nickname)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*Group)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, nickname)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_GetGroupByMailNickname_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetGroupByMailNickname'
+type MockClient_GetGroupByMailNickname_Call struct {
+	*mock.Call
+}
+
+// GetGroupByMailNickname is a helper method to define mock.On call
+//   - ctx context.Context
+//   - nickname string
+func (_e *MockClient_Expecter) GetGroupByMailNickname(ctx any, nickname any) *MockClient_GetGroupByMailNickname_Call {
+	return &MockClient_GetGroupByMailNickname_Call{Call: _e.mock.On("GetGroupByMailNickname", ctx, nickname)}
+}
+
+func (_c *MockClient_GetGroupByMailNickname_Call) Run(run func(ctx context.Context, nickname string)) *MockClient_GetGroupByMailNickname_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_GetGroupByMailNickname_Call) Return(group *Group, err error) *MockClient_GetGroupByMailNickname_Call {
+	_c.Call.Return(group, err)
+	return _c
+}
+
+func (_c *MockClient_GetGroupByMailNickname_Call) RunAndReturn(run func(ctx context.Context, nickname string) (*Group, error)) *MockClient_GetGroupByMailNickname_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetOrCreateGroup provides a mock function for the type MockClient
 func (_mock *MockClient) GetOrCreateGroup(ctx context.Context, naisTeam *protoapi.Team, groupName string) (*Group, bool, error) {
 	ret := _mock.Called(ctx, naisTeam, groupName)
