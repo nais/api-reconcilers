@@ -855,7 +855,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
 				return params.Name != nil && *params.Name == "team-test-team-dev"
 			})).
-			Return(nil, fmt.Errorf("contact point not found")).
+			Return(&grafana_provisioning.GetContactpointsOK{}, nil).
 			Once()
 
 		provisioningService.EXPECT().
@@ -870,7 +870,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
 				return params.Name != nil && *params.Name == "team-test-team-prod"
 			})).
-			Return(nil, fmt.Errorf("contact point not found")).
+			Return(&grafana_provisioning.GetContactpointsOK{}, nil).
 			Once()
 
 		provisioningService.EXPECT().
@@ -1256,7 +1256,7 @@ func TestAlertingFunctionality(t *testing.T) {
 				GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
 					return params.Name != nil && *params.Name == "team-"+teamSlug+"-dev"
 				})).
-				Return(nil, fmt.Errorf("contact point not found")).
+				Return(&grafana_provisioning.GetContactpointsOK{}, nil).
 				Once()
 
 			provisioningService.EXPECT().
@@ -1271,7 +1271,7 @@ func TestAlertingFunctionality(t *testing.T) {
 				GetContactpoints(mock.MatchedBy(func(params *grafana_provisioning.GetContactpointsParams) bool {
 					return params.Name != nil && *params.Name == "team-"+teamSlug+"-prod"
 				})).
-				Return(nil, fmt.Errorf("contact point not found")).
+				Return(&grafana_provisioning.GetContactpointsOK{}, nil).
 				Once()
 
 			provisioningService.EXPECT().
