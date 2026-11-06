@@ -331,10 +331,43 @@ func TestNotificationRoutesToAdd(t *testing.T) {
 	}
 }
 
+func TestStructuredTeamMatcherTypes(t *testing.T) {
+	tests := []struct {
+		name      string
+		matchType models.MatchType
+		value     string
+		want      bool
+		wantError bool
+	}{
+		{"equal", 0, "nais", true, false},
+		{"equal mismatch", 0, "other", false, false},
+		{"not equal", 1, "other", true, false},
+		{"not equal mismatch", 1, "nais", false, false},
+		{"regex", 2, "nais|other", true, false},
+		{"regex mismatch", 2, "nai", false, false},
+		{"not regex", 3, "other", true, false},
+		{"not regex mismatch", 3, "nais|other", false, false},
+		{"invalid type", 4, "nais", false, true},
+		{"invalid regex", 2, "[", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			route := &models.Route{Matchers: models.Matchers{{Name: "team", Type: tt.matchType, Value: tt.value}}}
+			got, err := routeMatchesTeam(route, "nais")
+			if (err != nil) != tt.wantError || got != tt.want {
+				t.Fatalf("routeMatchesTeam() = %v, %v; want %v, error %v", got, err, tt.want, tt.wantError)
+			}
+		})
+	}
+}
+
 func TestTeamRegexMatching(t *testing.T) {
 	matcher := func(pattern string, isEqual bool) *models.Matcher {
-		name, isRegex := "team", true
-		return &models.Matcher{Name: &name, Value: &pattern, IsRegex: &isRegex, IsEqual: isEqual}
+		matchType := matchRegexp
+		if !isEqual {
+			matchType = matchNotRegexp
+		}
+		return &models.Matcher{Name: "team", Value: pattern, Type: matchType}
 	}
 
 	tests := []struct {
@@ -375,8 +408,14 @@ func TestTeamRegexMatching(t *testing.T) {
 
 func TestAllTeamMatchersMustMatch(t *testing.T) {
 	matcher := func(value string, isRegex, isEqual bool) *models.Matcher {
-		name := "team"
-		return &models.Matcher{Name: &name, Value: &value, IsRegex: &isRegex, IsEqual: isEqual}
+		matchType := matchEqual
+		if isRegex {
+			matchType = matchRegexp
+		}
+		if !isEqual {
+			matchType++
+		}
+		return &models.Matcher{Name: "team", Value: value, Type: matchType}
 	}
 
 	tests := []struct {

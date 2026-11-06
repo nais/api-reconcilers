@@ -25,7 +25,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.4
 	github.com/google/go-github/v50 v50.2.0
 	github.com/google/uuid v1.6.0
-	github.com/grafana/grafana-openapi-client-go v0.0.0-20250828163705-969607f81baa
+	github.com/grafana/grafana-openapi-client-go v0.0.0-20261015192556-fcf0a80b71e9
 	github.com/joho/godotenv v1.5.1
 	github.com/nais/api/pkg/apiclient v0.0.0-20261019130819-b8c4493fbdaf
 	github.com/nais/dependencytrack v0.0.0-20250908041136-1b5861385ddf
@@ -98,7 +98,8 @@ require (
 	github.com/go-openapi/jsonpointer v1.0.2 // indirect
 	github.com/go-openapi/jsonreference v1.0.3 // indirect
 	github.com/go-openapi/loads v0.25.3 // indirect
-	github.com/go-openapi/runtime v0.28.0 // indirect
+	github.com/go-openapi/runtime v0.32.3 // indirect
+	github.com/go-openapi/runtime/server-middleware v0.30.0 // indirect
 	github.com/go-openapi/spec v1.0.1 // indirect
 	github.com/go-openapi/swag v0.29.2 // indirect
 	github.com/go-openapi/swag/cmdutils v0.29.2 // indirect
@@ -158,7 +159,6 @@ require (
 	github.com/openai/openai-go/v3 v3.82.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pb33f/go-yaml v0.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect

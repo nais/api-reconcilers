@@ -14,7 +14,6 @@ import (
 
 	grafanaaccesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafanaadminusers "github.com/grafana/grafana-openapi-client-go/client/admin_users"
-	grafanafolderpermissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
 	grafanafolders "github.com/grafana/grafana-openapi-client-go/client/folders"
 	grafanaprovisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
 	grafanaserviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
@@ -66,8 +65,8 @@ type FoldersClientService interface {
 }
 
 type FolderPermissionsClientService interface {
-	GetFolderPermissionListWithParams(params *grafanafolderpermissions.GetFolderPermissionListParams, opts ...grafanafolderpermissions.ClientOption) (*grafanafolderpermissions.GetFolderPermissionListOK, error)
-	UpdateFolderPermissionsWithParams(params *grafanafolderpermissions.UpdateFolderPermissionsParams, opts ...grafanafolderpermissions.ClientOption) (*grafanafolderpermissions.UpdateFolderPermissionsOK, error)
+	GetFolderPermissionListWithParams(params *grafanafolders.GetFolderPermissionListParams, opts ...grafanafolders.ClientOption) (*grafanafolders.GetFolderPermissionListOK, error)
+	UpdateFolderPermissionsWithParams(params *grafanafolders.UpdateFolderPermissionsParams, opts ...grafanafolders.ClientOption) (*grafanafolders.UpdateFolderPermissionsOK, error)
 }
 
 type AccessControlClientService interface {
@@ -294,14 +293,17 @@ func (r *grafanaReconciler) getOrCreateTeam(ctx context.Context, teamName string
 	}
 
 	for _, team := range searchResp.Payload.Teams {
-		if team.Name == teamName {
-			return team.ID, nil
+		if team != nil && team.Name != nil && *team.Name == teamName {
+			if team.ID == nil {
+				return 0, fmt.Errorf("team %s has no ID", teamName)
+			}
+			return *team.ID, nil
 		}
 	}
 
 	createResp, err := r.teams.CreateTeamWithParams(&grafanateams.CreateTeamParams{
 		Body: &models.CreateTeamCommand{
-			Name: teamName,
+			Name: &teamName,
 		},
 		Context: ctx,
 	})
@@ -410,7 +412,7 @@ func (r *grafanaReconciler) setFolderTeamPermissions(ctx context.Context, folder
 		editPermission models.PermissionType = 2
 	)
 
-	existing, err := r.folderPermissions.GetFolderPermissionListWithParams(&grafanafolderpermissions.GetFolderPermissionListParams{
+	existing, err := r.folderPermissions.GetFolderPermissionListWithParams(&grafanafolders.GetFolderPermissionListParams{
 		FolderUID: folderUID,
 		Context:   ctx,
 	})
@@ -478,7 +480,7 @@ func (r *grafanaReconciler) setFolderTeamPermissions(ctx context.Context, folder
 		return nil
 	}
 
-	_, err = r.folderPermissions.UpdateFolderPermissionsWithParams(&grafanafolderpermissions.UpdateFolderPermissionsParams{
+	_, err = r.folderPermissions.UpdateFolderPermissionsWithParams(&grafanafolders.UpdateFolderPermissionsParams{
 		FolderUID: folderUID,
 		Body:      &models.UpdateDashboardACLCommand{Items: permissions},
 		Context:   ctx,
@@ -560,7 +562,7 @@ func (r *grafanaReconciler) syncTeamMembers(ctx context.Context, teamID int64, n
 	for _, email := range membersToAdd {
 		_, err = r.teams.AddTeamMemberWithParams(&grafanateams.AddTeamMemberParams{
 			Body: &models.AddTeamMemberCommand{
-				UserID: grafanaUserIDMap[email],
+				UserID: new(grafanaUserIDMap[email]),
 			},
 			TeamID:  teamIDString,
 			Context: ctx,
@@ -1247,14 +1249,14 @@ func routeMatchesTeam(route *models.Route, teamSlug string) (bool, error) {
 		matchesTeam = matchesTeam && matches
 	}
 	for _, matcher := range route.Matchers {
-		if matcher == nil || matcher.Name == nil || matcher.Value == nil || matcher.IsRegex == nil {
+		if matcher == nil || matcher.Name == "" {
 			return false, fmt.Errorf("invalid notification route matcher")
 		}
-		if *matcher.Name != "team" {
+		if matcher.Name != "team" {
 			continue
 		}
 		hasTeamMatcher = true
-		matches, err := teamMatcherApplies(*matcher.IsRegex, matcher.IsEqual, *matcher.Value, teamSlug)
+		matches, err := teamMatcherApplies(matcher.Type, matcher.Value, teamSlug)
 		if err != nil {
 			return false, err
 		}
@@ -1288,15 +1290,29 @@ func routeMatchesTeam(route *models.Route, teamSlug string) (bool, error) {
 	return hasTeamMatcher && matchesTeam, nil
 }
 
-func teamMatcherApplies(isRegex, isEqual bool, value, teamSlug string) (bool, error) {
-	if !isRegex {
-		return (value == teamSlug) == isEqual, nil
+// Match types follow the Alertmanager labels.MatchType enum.
+const (
+	matchEqual models.MatchType = iota
+	matchNotEqual
+	matchRegexp
+	matchNotRegexp
+)
+
+func teamMatcherApplies(matchType models.MatchType, value, teamSlug string) (bool, error) {
+	switch matchType {
+	case matchEqual:
+		return value == teamSlug, nil
+	case matchNotEqual:
+		return value != teamSlug, nil
+	case matchRegexp, matchNotRegexp:
+		matches, err := teamRegexMatches(value, teamSlug)
+		if err != nil {
+			return false, err
+		}
+		return matches == (matchType == matchRegexp), nil
+	default:
+		return false, fmt.Errorf("unsupported team matcher type %d", matchType)
 	}
-	matches, err := teamRegexMatches(value, teamSlug)
-	if err != nil {
-		return false, err
-	}
-	return matches == isEqual, nil
 }
 
 func teamRegexMatches(pattern, teamSlug string) (bool, error) {
@@ -1368,8 +1384,11 @@ func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APICli
 	}
 
 	for _, team := range searchResp.Payload.Teams {
-		if team.Name == teamName {
-			_, err = r.teams.DeleteTeamByID(strconv.Itoa(int(team.ID)))
+		if team != nil && team.Name != nil && *team.Name == teamName {
+			if team.ID == nil {
+				return fmt.Errorf("team %s has no ID", teamName)
+			}
+			_, err = r.teams.DeleteTeamByID(strconv.Itoa(int(*team.ID)))
 			if err != nil {
 				return err
 			}
