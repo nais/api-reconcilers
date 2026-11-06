@@ -649,7 +649,7 @@ func TestNotificationPolicyWrites(t *testing.T) {
 		}}}
 		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: baseline}, nil).Once()
 		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{Payload: changed}, nil).Once()
-		provisioning.EXPECT().GetContactpoints(mock.Anything).Return(nil, nil).Once()
+		provisioning.EXPECT().GetContactpoints(mock.Anything).Return(&grafanaprovisioning.GetContactpointsOK{}, nil).Once()
 		provisioning.EXPECT().PostContactpoints(mock.Anything).Return(&grafanaprovisioning.PostContactpointsAccepted{}, nil).Once()
 		reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
 		reconciler.templatesInitialized = true
@@ -698,7 +698,7 @@ func TestNotificationPolicySerializesTeams(t *testing.T) {
 		}
 		return &grafanaprovisioning.GetPolicyTreeOK{Payload: snapshot}, nil
 	}).Times(6)
-	provisioning.EXPECT().GetContactpoints(mock.Anything).Return(nil, nil).Twice()
+	provisioning.EXPECT().GetContactpoints(mock.Anything).Return(&grafanaprovisioning.GetContactpointsOK{}, nil).Twice()
 	provisioning.EXPECT().PostContactpoints(mock.Anything).Return(&grafanaprovisioning.PostContactpointsAccepted{}, nil).Twice()
 	provisioning.EXPECT().PutPolicyTree(mock.Anything).RunAndReturn(func(params *grafanaprovisioning.PutPolicyTreeParams, _ ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutPolicyTreeAccepted, error) {
 		stateMu.Lock()

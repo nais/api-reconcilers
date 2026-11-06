@@ -3,6 +3,7 @@ package grafana_reconciler
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"reflect"
@@ -794,6 +795,39 @@ func (r *grafanaReconciler) buildContactPointName(teamSlug, environmentName stri
 	return fmt.Sprintf("team-%s-%s", teamSlug, environmentName)
 }
 
+func contactPointUID(name string) string {
+	if len(name) <= 40 {
+		return name
+	}
+	hash := sha256.Sum256([]byte(name))
+	return fmt.Sprintf("team-%x", hash[:16])
+}
+
+func existingContactPointUID(points []*models.EmbeddedContactPoint, name, desiredUID string) (string, error) {
+	var existing *models.EmbeddedContactPoint
+	for _, point := range points {
+		if point == nil || point.Name != name || point.UID == "" || len(point.UID) > 40 {
+			return "", fmt.Errorf("invalid contact point returned for %q", name)
+		}
+		if point.UID == desiredUID {
+			if existing != nil {
+				return "", fmt.Errorf("duplicate contact point UID %q returned for %q", desiredUID, name)
+			}
+			existing = point
+		}
+	}
+	if existing == nil {
+		if len(points) != 1 {
+			return "", fmt.Errorf("multiple integrations for contact point %q without expected UID %q; cannot determine which to update", name, desiredUID)
+		}
+		existing = points[0]
+	}
+	if existing.Type == nil || *existing.Type != contactPointType {
+		return "", fmt.Errorf("contact point %q with UID %q is not a Slack integration", name, existing.UID)
+	}
+	return existing.UID, nil
+}
+
 func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug string, environments []*protoapi.TeamEnvironment, log logrus.FieldLogger) error {
 	r.alertingMu.Lock()
 	defer r.alertingMu.Unlock()
@@ -831,8 +865,8 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	cpType := contactPointType
 
 	contactPoint := &models.EmbeddedContactPoint{
-		UID:      name, // Use name as UID for idempotency
-		Name:     name, // Explicitly set name
+		UID:      contactPointUID(name),
+		Name:     name,
 		Type:     &cpType,
 		Settings: r.buildSlackContactPointSettings(slackChannel),
 	}
@@ -847,14 +881,13 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 	resp, err := r.provisioning.GetContactpoints(getParams)
 
 	var operationErr error
-	if err != nil || resp == nil || len(resp.Payload) == 0 {
+	if err != nil {
+		operationErr = fmt.Errorf("getting contact point %s: %w", name, err)
+	} else if resp == nil {
+		operationErr = fmt.Errorf("getting contact point %s: empty response", name)
+	} else if len(resp.Payload) == 0 {
 		// Contact point doesn't exist, create it
-		log.Debugf("Contact point %s doesn't exist (error: %v, payload length: %d), creating with POST", name, err, func() int {
-			if resp != nil && resp.Payload != nil {
-				return len(resp.Payload)
-			}
-			return 0
-		}())
+		log.Debugf("Contact point %s does not exist, creating with POST", name)
 		createParams := &grafanaprovisioning.PostContactpointsParams{
 			Body: contactPoint,
 		}
@@ -867,19 +900,24 @@ func (r *grafanaReconciler) createOrUpdateContactPoint(ctx context.Context, name
 			log.Debugf("POST contact point %s succeeded", name)
 		}
 	} else {
-		// Contact point exists, update it
-		log.Debugf("Contact point %s exists (found %d contact points), updating with PUT", name, len(resp.Payload))
-		updateParams := &grafanaprovisioning.PutContactpointParams{
-			UID:  name,
-			Body: contactPoint,
-		}
-		updateParams.SetContext(ctx)
-
-		_, operationErr = r.provisioning.PutContactpoint(updateParams)
-		if operationErr != nil {
-			log.Debugf("PUT contact point %s failed: %v", name, operationErr)
+		uid, err := existingContactPointUID(resp.Payload, name, contactPoint.UID)
+		if err != nil {
+			operationErr = err
 		} else {
-			log.Debugf("PUT contact point %s succeeded", name)
+			contactPoint.UID = uid
+			log.Debugf("Contact point %s exists (UID %s), updating with PUT", name, uid)
+			updateParams := &grafanaprovisioning.PutContactpointParams{
+				UID:  uid,
+				Body: contactPoint,
+			}
+			updateParams.SetContext(ctx)
+
+			_, operationErr = r.provisioning.PutContactpoint(updateParams)
+			if operationErr != nil {
+				log.Debugf("PUT contact point %s failed: %v", name, operationErr)
+			} else {
+				log.Debugf("PUT contact point %s succeeded", name)
+			}
 		}
 	}
 
