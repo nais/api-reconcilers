@@ -11,7 +11,6 @@ import (
 
 	grafana_accesscontrol "github.com/grafana/grafana-openapi-client-go/client/access_control"
 	grafana_admin_users "github.com/grafana/grafana-openapi-client-go/client/admin_users"
-	grafana_folderpermissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
 	grafana_folders "github.com/grafana/grafana-openapi-client-go/client/folders"
 	grafana_provisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
 	grafana_serviceaccounts "github.com/grafana/grafana-openapi-client-go/client/service_accounts"
@@ -41,10 +40,10 @@ func expectPilotFolder(t *testing.T, ctx context.Context, teamSlug string, teamI
 		},
 		Context: ctx,
 	}).Return(&grafana_folders.CreateFolderOK{Payload: &models.Folder{UID: folderUID}}, nil).Once()
-	permissions.EXPECT().GetFolderPermissionListWithParams(&grafana_folderpermissions.GetFolderPermissionListParams{
+	permissions.EXPECT().GetFolderPermissionListWithParams(&grafana_folders.GetFolderPermissionListParams{
 		FolderUID: folderUID, Context: ctx,
-	}).Return(&grafana_folderpermissions.GetFolderPermissionListOK{Payload: []*models.DashboardACLInfoDTO{}}, nil).Once()
-	permissions.EXPECT().UpdateFolderPermissionsWithParams(&grafana_folderpermissions.UpdateFolderPermissionsParams{
+	}).Return(&grafana_folders.GetFolderPermissionListOK{Payload: []*models.DashboardACLInfoDTO{}}, nil).Once()
+	permissions.EXPECT().UpdateFolderPermissionsWithParams(&grafana_folders.UpdateFolderPermissionsParams{
 		FolderUID: folderUID,
 		Body: &models.UpdateDashboardACLCommand{Items: []*models.DashboardACLUpdateItem{
 			{Role: "Viewer", Permission: 1},
@@ -52,7 +51,7 @@ func expectPilotFolder(t *testing.T, ctx context.Context, teamSlug string, teamI
 			{TeamID: teamID, Permission: 2},
 		}},
 		Context: ctx,
-	}).Return(&grafana_folderpermissions.UpdateFolderPermissionsOK{}, nil).Once()
+	}).Return(&grafana_folders.UpdateFolderPermissionsOK{}, nil).Once()
 	return folders, permissions
 }
 
@@ -145,7 +144,7 @@ func TestReconcile(t *testing.T) {
 		teamsService.EXPECT().
 			CreateTeamWithParams(&grafana_teams.CreateTeamParams{
 				Body: &models.CreateTeamCommand{
-					Name: teamName,
+					Name: &teamName,
 				},
 				Context: ctx,
 			}).
@@ -158,7 +157,7 @@ func TestReconcile(t *testing.T) {
 		teamsService.EXPECT().
 			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
 				Body: &models.AddTeamMemberCommand{
-					UserID: 1,
+					UserID: new(int64(1)),
 				},
 				TeamID:  teamIDAsString,
 				Context: ctx,
@@ -168,7 +167,7 @@ func TestReconcile(t *testing.T) {
 		teamsService.EXPECT().
 			AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
 				Body: &models.AddTeamMemberCommand{
-					UserID: 2,
+					UserID: new(int64(2)),
 				},
 				TeamID:  teamIDAsString,
 				Context: ctx,
@@ -381,8 +380,8 @@ func TestReconcile(t *testing.T) {
 				Payload: &models.SearchTeamQueryResult{
 					Teams: []*models.TeamDTO{
 						{
-							ID:   teamID,
-							Name: teamName,
+							ID:   new(int64(teamID)),
+							Name: &teamName,
 						},
 					},
 				},
@@ -562,8 +561,8 @@ func TestReconcile(t *testing.T) {
 				Payload: &models.SearchTeamQueryResult{
 					Teams: []*models.TeamDTO{
 						{
-							ID:   teamID,
-							Name: teamName,
+							ID:   new(int64(teamID)),
+							Name: &teamName,
 						},
 					},
 				},
@@ -710,8 +709,8 @@ func TestReconcile(t *testing.T) {
 				Payload: &models.SearchTeamQueryResult{
 					Teams: []*models.TeamDTO{
 						{
-							ID:   teamID,
-							Name: teamName,
+							ID:   new(int64(teamID)),
+							Name: &teamName,
 						},
 					},
 				},
@@ -787,7 +786,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_teams.SearchTeamsOK{
 				Payload: &models.SearchTeamQueryResult{
 					Teams: []*models.TeamDTO{
-						{ID: 1, Name: teamSlug},
+						{ID: new(int64(1)), Name: new(teamSlug)},
 					},
 				},
 			}, nil).
@@ -977,7 +976,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_teams.SearchTeamsOK{
 				Payload: &models.SearchTeamQueryResult{
 					Teams: []*models.TeamDTO{
-						{ID: 1, Name: teamSlug},
+						{ID: new(int64(1)), Name: new(teamSlug)},
 					},
 				},
 			}, nil).
@@ -1122,7 +1121,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			teamsService.EXPECT().
 				CreateTeamWithParams(&grafana_teams.CreateTeamParams{
 					Body: &models.CreateTeamCommand{
-						Name: teamName,
+						Name: &teamName,
 					},
 					Context: ctx,
 				}).
@@ -1135,7 +1134,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			teamsService.EXPECT().
 				AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
 					Body: &models.AddTeamMemberCommand{
-						UserID: 1,
+						UserID: new(int64(1)),
 					},
 					TeamID:  teamIDAsString,
 					Context: ctx,
@@ -1145,7 +1144,7 @@ func TestAlertingFunctionality(t *testing.T) {
 			teamsService.EXPECT().
 				AddTeamMemberWithParams(&grafana_teams.AddTeamMemberParams{
 					Body: &models.AddTeamMemberCommand{
-						UserID: 2,
+						UserID: new(int64(2)),
 					},
 					TeamID:  teamIDAsString,
 					Context: ctx,
@@ -1392,7 +1391,7 @@ func TestAlertingFunctionality(t *testing.T) {
 				Return(&grafana_teams.SearchTeamsOK{
 					Payload: &models.SearchTeamQueryResult{
 						Teams: []*models.TeamDTO{
-							{ID: testTeamID, Name: teamName},
+							{ID: new(int64(testTeamID)), Name: &teamName},
 						},
 					},
 				}, nil).

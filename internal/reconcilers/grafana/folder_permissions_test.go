@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	grafanafolderpermissions "github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
+	grafanafolderpermissions "github.com/grafana/grafana-openapi-client-go/client/folders"
 	"github.com/grafana/grafana-openapi-client-go/models"
 )
 

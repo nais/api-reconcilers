@@ -166,7 +166,7 @@ func run(ctx context.Context, cfg *config.Config, log logrus.FieldLogger) error 
 		grafanaClient.Users,
 		grafanaClient.Teams,
 		grafanaClient.Folders,
-		grafanaClient.FolderPermissions,
+		grafanaClient.Folders,
 		grafanaClient.AccessControl,
 		grafanaClient.ServiceAccounts,
 		grafanaClient.AdminUsers,

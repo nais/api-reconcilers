@@ -5,7 +5,7 @@
 package grafana_reconciler
 
 import (
-	"github.com/grafana/grafana-openapi-client-go/client/folder_permissions"
+	"github.com/grafana/grafana-openapi-client-go/client/folders"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -47,7 +47,7 @@ func (_m *MockFolderPermissionsClientService) EXPECT() *MockFolderPermissionsCli
 }
 
 // GetFolderPermissionListWithParams provides a mock function for the type MockFolderPermissionsClientService
-func (_mock *MockFolderPermissionsClientService) GetFolderPermissionListWithParams(params *folder_permissions.GetFolderPermissionListParams, opts ...folder_permissions.ClientOption) (*folder_permissions.GetFolderPermissionListOK, error) {
+func (_mock *MockFolderPermissionsClientService) GetFolderPermissionListWithParams(params *folders.GetFolderPermissionListParams, opts ...folders.ClientOption) (*folders.GetFolderPermissionListOK, error) {
 	var tmpRet mock.Arguments
 	if len(opts) > 0 {
 		tmpRet = _mock.Called(params, opts)
@@ -60,19 +60,19 @@ func (_mock *MockFolderPermissionsClientService) GetFolderPermissionListWithPara
 		panic("no return value specified for GetFolderPermissionListWithParams")
 	}
 
-	var r0 *folder_permissions.GetFolderPermissionListOK
+	var r0 *folders.GetFolderPermissionListOK
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*folder_permissions.GetFolderPermissionListParams, ...folder_permissions.ClientOption) (*folder_permissions.GetFolderPermissionListOK, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(*folders.GetFolderPermissionListParams, ...folders.ClientOption) (*folders.GetFolderPermissionListOK, error)); ok {
 		return returnFunc(params, opts...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*folder_permissions.GetFolderPermissionListParams, ...folder_permissions.ClientOption) *folder_permissions.GetFolderPermissionListOK); ok {
+	if returnFunc, ok := ret.Get(0).(func(*folders.GetFolderPermissionListParams, ...folders.ClientOption) *folders.GetFolderPermissionListOK); ok {
 		r0 = returnFunc(params, opts...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*folder_permissions.GetFolderPermissionListOK)
+			r0 = ret.Get(0).(*folders.GetFolderPermissionListOK)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(*folder_permissions.GetFolderPermissionListParams, ...folder_permissions.ClientOption) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(*folders.GetFolderPermissionListParams, ...folders.ClientOption) error); ok {
 		r1 = returnFunc(params, opts...)
 	} else {
 		r1 = ret.Error(1)
@@ -86,23 +86,23 @@ type MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call s
 }
 
 // GetFolderPermissionListWithParams is a helper method to define mock.On call
-//   - params *folder_permissions.GetFolderPermissionListParams
-//   - opts ...folder_permissions.ClientOption
+//   - params *folders.GetFolderPermissionListParams
+//   - opts ...folders.ClientOption
 func (_e *MockFolderPermissionsClientService_Expecter) GetFolderPermissionListWithParams(params any, opts ...any) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
 	return &MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call{Call: _e.mock.On("GetFolderPermissionListWithParams",
 		append([]any{params}, opts...)...)}
 }
 
-func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) Run(run func(params *folder_permissions.GetFolderPermissionListParams, opts ...folder_permissions.ClientOption)) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
+func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) Run(run func(params *folders.GetFolderPermissionListParams, opts ...folders.ClientOption)) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *folder_permissions.GetFolderPermissionListParams
+		var arg0 *folders.GetFolderPermissionListParams
 		if args[0] != nil {
-			arg0 = args[0].(*folder_permissions.GetFolderPermissionListParams)
+			arg0 = args[0].(*folders.GetFolderPermissionListParams)
 		}
-		var arg1 []folder_permissions.ClientOption
-		var variadicArgs []folder_permissions.ClientOption
+		var arg1 []folders.ClientOption
+		var variadicArgs []folders.ClientOption
 		if len(args) > 1 {
-			variadicArgs = args[1].([]folder_permissions.ClientOption)
+			variadicArgs = args[1].([]folders.ClientOption)
 		}
 		arg1 = variadicArgs
 		run(
@@ -113,18 +113,18 @@ func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_C
 	return _c
 }
 
-func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) Return(getFolderPermissionListOK *folder_permissions.GetFolderPermissionListOK, err error) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
+func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) Return(getFolderPermissionListOK *folders.GetFolderPermissionListOK, err error) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
 	_c.Call.Return(getFolderPermissionListOK, err)
 	return _c
 }
 
-func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) RunAndReturn(run func(params *folder_permissions.GetFolderPermissionListParams, opts ...folder_permissions.ClientOption) (*folder_permissions.GetFolderPermissionListOK, error)) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
+func (_c *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call) RunAndReturn(run func(params *folders.GetFolderPermissionListParams, opts ...folders.ClientOption) (*folders.GetFolderPermissionListOK, error)) *MockFolderPermissionsClientService_GetFolderPermissionListWithParams_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // UpdateFolderPermissionsWithParams provides a mock function for the type MockFolderPermissionsClientService
-func (_mock *MockFolderPermissionsClientService) UpdateFolderPermissionsWithParams(params *folder_permissions.UpdateFolderPermissionsParams, opts ...folder_permissions.ClientOption) (*folder_permissions.UpdateFolderPermissionsOK, error) {
+func (_mock *MockFolderPermissionsClientService) UpdateFolderPermissionsWithParams(params *folders.UpdateFolderPermissionsParams, opts ...folders.ClientOption) (*folders.UpdateFolderPermissionsOK, error) {
 	var tmpRet mock.Arguments
 	if len(opts) > 0 {
 		tmpRet = _mock.Called(params, opts)
@@ -137,19 +137,19 @@ func (_mock *MockFolderPermissionsClientService) UpdateFolderPermissionsWithPara
 		panic("no return value specified for UpdateFolderPermissionsWithParams")
 	}
 
-	var r0 *folder_permissions.UpdateFolderPermissionsOK
+	var r0 *folders.UpdateFolderPermissionsOK
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(*folder_permissions.UpdateFolderPermissionsParams, ...folder_permissions.ClientOption) (*folder_permissions.UpdateFolderPermissionsOK, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(*folders.UpdateFolderPermissionsParams, ...folders.ClientOption) (*folders.UpdateFolderPermissionsOK, error)); ok {
 		return returnFunc(params, opts...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(*folder_permissions.UpdateFolderPermissionsParams, ...folder_permissions.ClientOption) *folder_permissions.UpdateFolderPermissionsOK); ok {
+	if returnFunc, ok := ret.Get(0).(func(*folders.UpdateFolderPermissionsParams, ...folders.ClientOption) *folders.UpdateFolderPermissionsOK); ok {
 		r0 = returnFunc(params, opts...)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*folder_permissions.UpdateFolderPermissionsOK)
+			r0 = ret.Get(0).(*folders.UpdateFolderPermissionsOK)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(*folder_permissions.UpdateFolderPermissionsParams, ...folder_permissions.ClientOption) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(*folders.UpdateFolderPermissionsParams, ...folders.ClientOption) error); ok {
 		r1 = returnFunc(params, opts...)
 	} else {
 		r1 = ret.Error(1)
@@ -163,23 +163,23 @@ type MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call s
 }
 
 // UpdateFolderPermissionsWithParams is a helper method to define mock.On call
-//   - params *folder_permissions.UpdateFolderPermissionsParams
-//   - opts ...folder_permissions.ClientOption
+//   - params *folders.UpdateFolderPermissionsParams
+//   - opts ...folders.ClientOption
 func (_e *MockFolderPermissionsClientService_Expecter) UpdateFolderPermissionsWithParams(params any, opts ...any) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
 	return &MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call{Call: _e.mock.On("UpdateFolderPermissionsWithParams",
 		append([]any{params}, opts...)...)}
 }
 
-func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) Run(run func(params *folder_permissions.UpdateFolderPermissionsParams, opts ...folder_permissions.ClientOption)) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
+func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) Run(run func(params *folders.UpdateFolderPermissionsParams, opts ...folders.ClientOption)) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 *folder_permissions.UpdateFolderPermissionsParams
+		var arg0 *folders.UpdateFolderPermissionsParams
 		if args[0] != nil {
-			arg0 = args[0].(*folder_permissions.UpdateFolderPermissionsParams)
+			arg0 = args[0].(*folders.UpdateFolderPermissionsParams)
 		}
-		var arg1 []folder_permissions.ClientOption
-		var variadicArgs []folder_permissions.ClientOption
+		var arg1 []folders.ClientOption
+		var variadicArgs []folders.ClientOption
 		if len(args) > 1 {
-			variadicArgs = args[1].([]folder_permissions.ClientOption)
+			variadicArgs = args[1].([]folders.ClientOption)
 		}
 		arg1 = variadicArgs
 		run(
@@ -190,12 +190,12 @@ func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_C
 	return _c
 }
 
-func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) Return(updateFolderPermissionsOK *folder_permissions.UpdateFolderPermissionsOK, err error) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
+func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) Return(updateFolderPermissionsOK *folders.UpdateFolderPermissionsOK, err error) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
 	_c.Call.Return(updateFolderPermissionsOK, err)
 	return _c
 }
 
-func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) RunAndReturn(run func(params *folder_permissions.UpdateFolderPermissionsParams, opts ...folder_permissions.ClientOption) (*folder_permissions.UpdateFolderPermissionsOK, error)) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
+func (_c *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call) RunAndReturn(run func(params *folders.UpdateFolderPermissionsParams, opts ...folders.ClientOption) (*folders.UpdateFolderPermissionsOK, error)) *MockFolderPermissionsClientService_UpdateFolderPermissionsWithParams_Call {
 	_c.Call.Return(run)
 	return _c
 }
