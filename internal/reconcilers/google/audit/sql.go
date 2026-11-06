@@ -63,7 +63,7 @@ AND protoPayload.request.@type="type.googleapis.com/google.cloud.sql.audit.v1.Pg
 }
 
 // BuildNaisPostgresLogFilter constructs a Logs Explorer filter matching pgaudit logs
-// from Nais Postgres pods where the database user is a person (user_name contains "@").
+// from Nais Postgres pods where the database user is a person (user_name is shaped like an email address).
 func BuildNaisPostgresLogFilter() string {
-	return `jsonPayload.logger="pgaudit"`
+	return `jsonPayload.logger="pgaudit" AND jsonPayload.record.user_name=~"^[^@ ]+@[^@ ]+[.][^@ ]+$"`
 }
