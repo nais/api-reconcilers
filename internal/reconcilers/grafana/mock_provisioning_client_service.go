@@ -46,6 +46,154 @@ func (_m *MockProvisioningClientService) EXPECT() *MockProvisioningClientService
 	return &MockProvisioningClientService_Expecter{mock: &_m.Mock}
 }
 
+// DeleteContactpointsWithParams provides a mock function for the type MockProvisioningClientService
+func (_mock *MockProvisioningClientService) DeleteContactpointsWithParams(params *provisioning.DeleteContactpointsParams, opts ...provisioning.ClientOption) (*provisioning.DeleteContactpointsAccepted, error) {
+	var tmpRet mock.Arguments
+	if len(opts) > 0 {
+		tmpRet = _mock.Called(params, opts)
+	} else {
+		tmpRet = _mock.Called(params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteContactpointsWithParams")
+	}
+
+	var r0 *provisioning.DeleteContactpointsAccepted
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.DeleteContactpointsParams, ...provisioning.ClientOption) (*provisioning.DeleteContactpointsAccepted, error)); ok {
+		return returnFunc(params, opts...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(*provisioning.DeleteContactpointsParams, ...provisioning.ClientOption) *provisioning.DeleteContactpointsAccepted); ok {
+		r0 = returnFunc(params, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*provisioning.DeleteContactpointsAccepted)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(*provisioning.DeleteContactpointsParams, ...provisioning.ClientOption) error); ok {
+		r1 = returnFunc(params, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvisioningClientService_DeleteContactpointsWithParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteContactpointsWithParams'
+type MockProvisioningClientService_DeleteContactpointsWithParams_Call struct {
+	*mock.Call
+}
+
+// DeleteContactpointsWithParams is a helper method to define mock.On call
+//   - params *provisioning.DeleteContactpointsParams
+//   - opts ...provisioning.ClientOption
+func (_e *MockProvisioningClientService_Expecter) DeleteContactpointsWithParams(params any, opts ...any) *MockProvisioningClientService_DeleteContactpointsWithParams_Call {
+	return &MockProvisioningClientService_DeleteContactpointsWithParams_Call{Call: _e.mock.On("DeleteContactpointsWithParams",
+		append([]any{params}, opts...)...)}
+}
+
+func (_c *MockProvisioningClientService_DeleteContactpointsWithParams_Call) Run(run func(params *provisioning.DeleteContactpointsParams, opts ...provisioning.ClientOption)) *MockProvisioningClientService_DeleteContactpointsWithParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *provisioning.DeleteContactpointsParams
+		if args[0] != nil {
+			arg0 = args[0].(*provisioning.DeleteContactpointsParams)
+		}
+		var arg1 []provisioning.ClientOption
+		var variadicArgs []provisioning.ClientOption
+		if len(args) > 1 {
+			variadicArgs = args[1].([]provisioning.ClientOption)
+		}
+		arg1 = variadicArgs
+		run(
+			arg0,
+			arg1...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvisioningClientService_DeleteContactpointsWithParams_Call) Return(deleteContactpointsAccepted *provisioning.DeleteContactpointsAccepted, err error) *MockProvisioningClientService_DeleteContactpointsWithParams_Call {
+	_c.Call.Return(deleteContactpointsAccepted, err)
+	return _c
+}
+
+func (_c *MockProvisioningClientService_DeleteContactpointsWithParams_Call) RunAndReturn(run func(params *provisioning.DeleteContactpointsParams, opts ...provisioning.ClientOption) (*provisioning.DeleteContactpointsAccepted, error)) *MockProvisioningClientService_DeleteContactpointsWithParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetAlertRules provides a mock function for the type MockProvisioningClientService
+func (_mock *MockProvisioningClientService) GetAlertRules(opts ...provisioning.ClientOption) (*provisioning.GetAlertRulesOK, error) {
+	var tmpRet mock.Arguments
+	if len(opts) > 0 {
+		tmpRet = _mock.Called(opts)
+	} else {
+		tmpRet = _mock.Called()
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetAlertRules")
+	}
+
+	var r0 *provisioning.GetAlertRulesOK
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(...provisioning.ClientOption) (*provisioning.GetAlertRulesOK, error)); ok {
+		return returnFunc(opts...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(...provisioning.ClientOption) *provisioning.GetAlertRulesOK); ok {
+		r0 = returnFunc(opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*provisioning.GetAlertRulesOK)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(...provisioning.ClientOption) error); ok {
+		r1 = returnFunc(opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProvisioningClientService_GetAlertRules_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAlertRules'
+type MockProvisioningClientService_GetAlertRules_Call struct {
+	*mock.Call
+}
+
+// GetAlertRules is a helper method to define mock.On call
+//   - opts ...provisioning.ClientOption
+func (_e *MockProvisioningClientService_Expecter) GetAlertRules(opts ...any) *MockProvisioningClientService_GetAlertRules_Call {
+	return &MockProvisioningClientService_GetAlertRules_Call{Call: _e.mock.On("GetAlertRules",
+		append([]any{}, opts...)...)}
+}
+
+func (_c *MockProvisioningClientService_GetAlertRules_Call) Run(run func(opts ...provisioning.ClientOption)) *MockProvisioningClientService_GetAlertRules_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 []provisioning.ClientOption
+		var variadicArgs []provisioning.ClientOption
+		if len(args) > 0 {
+			variadicArgs = args[0].([]provisioning.ClientOption)
+		}
+		arg0 = variadicArgs
+		run(
+			arg0...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProvisioningClientService_GetAlertRules_Call) Return(getAlertRulesOK *provisioning.GetAlertRulesOK, err error) *MockProvisioningClientService_GetAlertRules_Call {
+	_c.Call.Return(getAlertRulesOK, err)
+	return _c
+}
+
+func (_c *MockProvisioningClientService_GetAlertRules_Call) RunAndReturn(run func(opts ...provisioning.ClientOption) (*provisioning.GetAlertRulesOK, error)) *MockProvisioningClientService_GetAlertRules_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetContactpoints provides a mock function for the type MockProvisioningClientService
 func (_mock *MockProvisioningClientService) GetContactpoints(params *provisioning.GetContactpointsParams, opts ...provisioning.ClientOption) (*provisioning.GetContactpointsOK, error) {
 	var tmpRet mock.Arguments

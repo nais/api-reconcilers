@@ -25,6 +25,8 @@ func TestTeamWithoutID(t *testing.T) {
 			if operation == "reconcile" {
 				_, err = r.getOrCreateTeam(context.Background(), name)
 			} else {
+				r.folders = NewMockFoldersClientService(t)
+				r.provisioning = NewMockProvisioningClientService(t)
 				err = r.Delete(context.Background(), nil, &protoapi.Team{Slug: name}, logrus.New())
 			}
 			if err == nil || !strings.Contains(err.Error(), "has no ID") {

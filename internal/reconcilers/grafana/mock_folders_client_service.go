@@ -123,6 +123,83 @@ func (_c *MockFoldersClientService_CreateFolderWithParams_Call) RunAndReturn(run
 	return _c
 }
 
+// DeleteFolder provides a mock function for the type MockFoldersClientService
+func (_mock *MockFoldersClientService) DeleteFolder(params *folders.DeleteFolderParams, opts ...folders.ClientOption) (*folders.DeleteFolderOK, error) {
+	var tmpRet mock.Arguments
+	if len(opts) > 0 {
+		tmpRet = _mock.Called(params, opts)
+	} else {
+		tmpRet = _mock.Called(params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteFolder")
+	}
+
+	var r0 *folders.DeleteFolderOK
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(*folders.DeleteFolderParams, ...folders.ClientOption) (*folders.DeleteFolderOK, error)); ok {
+		return returnFunc(params, opts...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(*folders.DeleteFolderParams, ...folders.ClientOption) *folders.DeleteFolderOK); ok {
+		r0 = returnFunc(params, opts...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*folders.DeleteFolderOK)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(*folders.DeleteFolderParams, ...folders.ClientOption) error); ok {
+		r1 = returnFunc(params, opts...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockFoldersClientService_DeleteFolder_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteFolder'
+type MockFoldersClientService_DeleteFolder_Call struct {
+	*mock.Call
+}
+
+// DeleteFolder is a helper method to define mock.On call
+//   - params *folders.DeleteFolderParams
+//   - opts ...folders.ClientOption
+func (_e *MockFoldersClientService_Expecter) DeleteFolder(params any, opts ...any) *MockFoldersClientService_DeleteFolder_Call {
+	return &MockFoldersClientService_DeleteFolder_Call{Call: _e.mock.On("DeleteFolder",
+		append([]any{params}, opts...)...)}
+}
+
+func (_c *MockFoldersClientService_DeleteFolder_Call) Run(run func(params *folders.DeleteFolderParams, opts ...folders.ClientOption)) *MockFoldersClientService_DeleteFolder_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 *folders.DeleteFolderParams
+		if args[0] != nil {
+			arg0 = args[0].(*folders.DeleteFolderParams)
+		}
+		var arg1 []folders.ClientOption
+		var variadicArgs []folders.ClientOption
+		if len(args) > 1 {
+			variadicArgs = args[1].([]folders.ClientOption)
+		}
+		arg1 = variadicArgs
+		run(
+			arg0,
+			arg1...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockFoldersClientService_DeleteFolder_Call) Return(deleteFolderOK *folders.DeleteFolderOK, err error) *MockFoldersClientService_DeleteFolder_Call {
+	_c.Call.Return(deleteFolderOK, err)
+	return _c
+}
+
+func (_c *MockFoldersClientService_DeleteFolder_Call) RunAndReturn(run func(params *folders.DeleteFolderParams, opts ...folders.ClientOption) (*folders.DeleteFolderOK, error)) *MockFoldersClientService_DeleteFolder_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetFolderByUIDWithParams provides a mock function for the type MockFoldersClientService
 func (_mock *MockFoldersClientService) GetFolderByUIDWithParams(params *folders.GetFolderByUIDParams, opts ...folders.ClientOption) (*folders.GetFolderByUIDOK, error) {
 	var tmpRet mock.Arguments
