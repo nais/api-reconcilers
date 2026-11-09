@@ -839,6 +839,20 @@ func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug stri
 	if err != nil {
 		return fmt.Errorf("checking notification policy routes: %w", err)
 	}
+	for i, route := range baseline.Routes {
+		matches, err := routeMatchesTeam(route, teamSlug)
+		if err != nil {
+			return fmt.Errorf("checking legacy notification policy routes: %w", err)
+		}
+		if matches && legacyTeamNotificationRoute(route, teamSlug) {
+			log.WithFields(logrus.Fields{
+				"team":         teamSlug,
+				"receiver":     route.Receiver,
+				"policy_index": i,
+				"continue":     route.Continue,
+			}).Warn("Legacy Grafana notification policy retained; remove it after verifying the new team routes. Earlier policies with continue=false may block the new routes; continue=true may cause duplicate notifications")
+		}
+	}
 
 	// Create notification templates first (only once, they're shared across all teams)
 	if err := r.createNotificationTemplates(ctx); err != nil {
@@ -1109,7 +1123,7 @@ func planTeamNotificationRoutes(existing, desired []*models.Route, teamSlug stri
 		}
 		shell := *route
 		shell.Routes = nil
-		if sameNotificationRoute(&shell, parent) {
+		if sameNotificationRoute(&shell, parent) && !legacyTeamNotificationRoute(route, teamSlug) {
 			if parentIndex != -1 {
 				return nil, fmt.Errorf("duplicate team parent for %s requires manual migration", teamSlug)
 			}
@@ -1169,6 +1183,13 @@ func planTeamNotificationRoutes(existing, desired []*models.Route, teamSlug stri
 			return nil, err
 		}
 		if matches {
+			if legacyTeamNotificationRoute(route, teamSlug) {
+				planned = append(planned, route)
+				if inserted {
+					interrupted = true
+				}
+				continue
+			}
 			if interrupted {
 				return nil, fmt.Errorf("interleaved notification routes for team %s require manual migration", teamSlug)
 			}
@@ -1209,10 +1230,12 @@ func routesToAdd(existing, desired []*models.Route, teamSlug string) ([]*models.
 		}
 		if matches {
 			want, ok := expected[route.Receiver]
-			if !ok || !sameNotificationRoute(route, want) || seen[route.Receiver] {
-				return nil, fmt.Errorf("existing notification route for team %s (receiver %q) requires manual migration", teamSlug, route.Receiver)
+			if !legacyTeamNotificationRoute(route, teamSlug) {
+				if !ok || !sameNotificationRoute(route, want) || seen[route.Receiver] {
+					return nil, fmt.Errorf("existing notification route for team %s (receiver %q) requires manual migration", teamSlug, route.Receiver)
+				}
+				seen[route.Receiver] = true
 			}
-			seen[route.Receiver] = true
 		} else if expected[route.Receiver] != nil {
 			return nil, fmt.Errorf("contact point %q is already used by another notification route", route.Receiver)
 		}
@@ -1228,6 +1251,39 @@ func routesToAdd(existing, desired []*models.Route, teamSlug string) ([]*models.
 		}
 	}
 	return additions, nil
+}
+
+func legacyTeamNotificationRoute(route *models.Route, teamSlug string) bool {
+	if route == nil || hasReconciledNotificationResources(route, teamSlug) {
+		return false
+	}
+	receivers := make(map[string]bool)
+	return notificationRouteReceivers(route, receivers) == nil && len(receivers) > 0
+}
+
+func hasReconciledNotificationResources(route *models.Route, teamSlug string) bool {
+	if route == nil || strings.HasPrefix(route.Receiver, "team-") || slices.Contains(route.MuteTimeIntervals, discardMuteTiming) {
+		return true
+	}
+	for _, matcher := range route.ObjectMatchers {
+		if len(matcher) == 3 && matcher[0] == "env" && matcher[1] == "=" && matcher[2] != "" {
+			expected := buildEnvironmentNotificationRoute(teamSlug, matcher[2])
+			expected.Receiver = route.Receiver
+			if sameNotificationRoute(route, expected) {
+				return true
+			}
+			expected.ObjectMatchers = expected.ObjectMatchers[1:]
+			if sameNotificationRoute(route, expected) {
+				return true
+			}
+		}
+	}
+	for _, child := range route.Routes {
+		if hasReconciledNotificationResources(child, teamSlug) {
+			return true
+		}
+	}
+	return false
 }
 
 func checkNestedTeamRoutes(routes []*models.Route, teamSlug string, expected map[string]*models.Route) error {

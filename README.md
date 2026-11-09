@@ -82,6 +82,21 @@ The retry queue is in memory; the regular 30-minute full sync reschedules teams 
 
 All state and data is stored in NAIS api, and the communication with the API is done through GRPC.
 
+### Grafana legacy notification policies
+
+Reconciliation preserves legacy team policies with their own contact points and
+adds the new team/environment policies alongside them. Existing policy order,
+matchers, receivers, timing settings and `continue` values are not changed.
+Policies referencing reserved `team-` contact points or the reconciler's fallback
+mute timing remain subject to the existing ownership and drift checks.
+
+Each reconciliation logs a warning identifying the team, legacy receiver,
+zero-based top-level policy index and `continue` value. Remove the legacy policy only after
+verifying delivery through the new routes. Earlier policies with `continue=false`
+can prevent the new routes from matching; enabling `continue` can result in
+duplicate notifications. Reconciliation does not change `continue` automatically.
+These compatibility rules do not relax the stricter team-deletion checks below.
+
 ### Grafana team deletion
 
 Deleting a team removes its reconciled Grafana folder and all folder contents,
