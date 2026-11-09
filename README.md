@@ -81,39 +81,3 @@ Team request metadata is released once no active, pending, or delayed work remai
 The retry queue is in memory; the regular 30-minute full sync reschedules teams after a restart.
 
 All state and data is stored in NAIS api, and the communication with the API is done through GRPC.
-
-### Grafana legacy notification policies
-
-Reconciliation preserves legacy team policies with their own contact points and
-adds the new team/environment policies alongside them. Existing policy order,
-matchers, receivers, timing settings and `continue` values are not changed.
-Policies referencing reserved `team-` contact points or the reconciler's fallback
-mute timing remain subject to the existing ownership and drift checks.
-
-Each reconciliation logs a warning identifying the team, legacy receiver,
-zero-based top-level policy index and `continue` value. Remove the legacy policy only after
-verifying delivery through the new routes. Earlier policies with `continue=false`
-can prevent the new routes from matching; enabling `continue` can result in
-duplicate notifications. Reconciliation does not change `continue` automatically.
-These compatibility rules do not relax the stricter team-deletion checks below.
-
-### Grafana team deletion
-
-Deleting a team removes its reconciled Grafana folder and all folder contents,
-including dashboards, alert rules and subfolders. This is destructive: resources
-are not exported or archived. The folder is deleted before its notification
-policies so remaining rules are not left running without their routing.
-
-Cleanup runs regardless of alerting feature flags or pilot membership. It removes
-only top-level policies matching either the reconciler's generated team parent
-with environment routes and final always-muted fallback, or its older flat format
-with exact `team` and `env` matchers and no child routes. Both formats must have
-the expected receivers, grouping and timing settings. Namespace and folder
-matchers do not establish policy ownership. Manual or modified policies matching
-the team, including nested or broad team matchers, block cleanup before any
-resource is deleted and require manual review.
-
-Unreferenced reconciler-named `team-<slug>-<environment>` contact points are removed,
-then the Grafana team is deleted. Legacy contact points are retained, and shared
-contact points are retained with warnings for manual review. Already-deleted
-resources are tolerated so partial cleanup can be retried.
