@@ -21,6 +21,7 @@ import (
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
+	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/mock"
 )
@@ -140,6 +141,13 @@ func TestTeamNotificationHierarchyConflicts(t *testing.T) {
 	changedChild.Routes[0] = &child
 	duplicateChild := *nested[0]
 	duplicateChild.Routes = []*models.Route{nested[0].Routes[0], nested[0].Routes[0], nested[0].Routes[2]}
+	changedReceiver := *desired[0]
+	changedReceiver.Receiver = "manual"
+	changedNestedReceiver := *nested[0]
+	changedNestedReceiver.Routes = slices.Clone(nested[0].Routes)
+	nestedChild := *nested[0].Routes[0]
+	nestedChild.Receiver = "manual"
+	changedNestedReceiver.Routes[0] = &nestedChild
 	tests := []struct {
 		name     string
 		existing []*models.Route
@@ -148,6 +156,16 @@ func TestTeamNotificationHierarchyConflicts(t *testing.T) {
 		{"missing fallback", []*models.Route{&withoutFallback}, desired},
 		{"changed parent", []*models.Route{&changedParent}, desired},
 		{"changed child", []*models.Route{&changedChild}, desired},
+		{"changed flat receiver", []*models.Route{&changedReceiver}, desired},
+		{"changed nested receiver", []*models.Route{&changedNestedReceiver}, desired},
+		{"legacy parent references generated receiver", []*models.Route{{
+			Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
+			Routes: []*models.Route{{Receiver: desired[0].Receiver}},
+		}}, desired},
+		{"legacy parent uses reconciler fallback", []*models.Route{{
+			Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
+			MuteTimeIntervals: []string{discardMuteTiming},
+		}}, desired},
 		{"duplicate parent", []*models.Route{nested[0], nested[0]}, desired},
 		{"duplicate child", []*models.Route{&duplicateChild}, desired},
 		{"removed environment", nested, desired[:1]},
@@ -164,6 +182,134 @@ func TestTeamNotificationHierarchyConflicts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if _, err := planTeamNotificationRoutes(tt.existing, tt.desired, "idm"); err == nil {
 				t.Fatal("expected manual migration conflict")
+			}
+		})
+	}
+}
+
+func TestLegacyTeamNotificationPolicyCoexistence(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		team   string
+		legacy []*models.Route
+	}{
+		{
+			name: "tsm stopping", team: "tsm",
+			legacy: []*models.Route{{
+				Receiver: "TSM Spam", ObjectMatchers: models.ObjectMatchers{{"team", "=", "tsm"}},
+				Routes: []*models.Route{
+					{Receiver: "TSM Panic", ObjectMatchers: models.ObjectMatchers{{"severity", "=", "panic"}}, RepeatInterval: "10m"},
+					{Receiver: "TSM Watch", ObjectMatchers: models.ObjectMatchers{{"severity", "=", "watch"}}},
+				},
+			}},
+		},
+		{
+			name: "tsm continuing", team: "tsm",
+			legacy: []*models.Route{{
+				Receiver: "TSM Spam", Continue: true, ObjectMatchers: models.ObjectMatchers{{"team", "=", "tsm"}},
+				Routes: []*models.Route{
+					{Receiver: "TSM Panic", ObjectMatchers: models.ObjectMatchers{{"severity", "=", "panic"}}, RepeatInterval: "10m"},
+					{Receiver: "TSM Watch", ObjectMatchers: models.ObjectMatchers{{"severity", "=", "watch"}}},
+				},
+			}},
+		},
+		{
+			name: "inherited parent receiver", team: "tsm",
+			legacy: []*models.Route{{
+				ObjectMatchers: models.ObjectMatchers{{"team", "=", "tsm"}},
+				Routes: []*models.Route{
+					{Receiver: "TSM Panic", ObjectMatchers: models.ObjectMatchers{{"severity", "=", "panic"}}, RepeatInterval: "10m"},
+				},
+			}},
+		},
+		{
+			name: "personoversikt environments", team: "personoversikt",
+			legacy: []*models.Route{
+				{
+					Receiver: "Slack personoversikt prod", Continue: true,
+					ObjectMatchers: models.ObjectMatchers{{"team", "=", "personoversikt"}, {"env", "=~", "prod.*"}},
+					GroupBy:        []string{"team", "env"}, GroupWait: "1m",
+				},
+				{
+					Receiver: "Slack personoversikt dev", Continue: true,
+					ObjectMatchers:    models.ObjectMatchers{{"team", "=", "personoversikt"}, {"env", "=~", "dev.*"}},
+					MuteTimeIntervals: []string{"Kveld+natt"}, ActiveTimeIntervals: []string{"daytime"},
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			provisioning := NewMockProvisioningClientService(t)
+			expectDiscardMuteTiming(provisioning)
+			original := []*models.Route{
+				{Receiver: "legacy contacts", Continue: true, ObjectMatchers: models.ObjectMatchers{{"__contacts__", "=~", ".*"}}},
+				{ObjectMatchers: models.ObjectMatchers{{"app", "!=", ""}}},
+			}
+			original = slices.Insert(original, 1, tt.legacy...)
+			before, err := json.Marshal(original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tree := &models.Route{Receiver: "default", Provenance: models.Provenance("api"), Routes: original}
+			provisioning.EXPECT().GetPolicyTree().RunAndReturn(func(...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetPolicyTreeOK, error) {
+				snapshot := *tree
+				snapshot.Routes = slices.Clone(tree.Routes)
+				return &grafanaprovisioning.GetPolicyTreeOK{Payload: &snapshot}, nil
+			}).Times(5)
+			provisioning.EXPECT().PutPolicyTree(mock.Anything).RunAndReturn(func(params *grafanaprovisioning.PutPolicyTreeParams, _ ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutPolicyTreeAccepted, error) {
+				if params.XDisableProvenance != nil {
+					t.Fatal("coexistence must preserve provisioning")
+				}
+				tree = params.Body
+				return &grafanaprovisioning.PutPolicyTreeAccepted{}, nil
+			}).Once()
+			name := buildContactPointName(tt.team, "dev-gcp")
+			matchContact := mock.MatchedBy(func(params *grafanaprovisioning.GetContactpointsParams) bool {
+				return params.Name != nil && *params.Name == name
+			})
+			provisioning.EXPECT().GetContactpoints(matchContact).Return(&grafanaprovisioning.GetContactpointsOK{}, nil).Once()
+			provisioning.EXPECT().GetContactpoints(matchContact).Return(&grafanaprovisioning.GetContactpointsOK{
+				Payload: []*models.EmbeddedContactPoint{{Name: name, UID: contactPointUID(name), Type: new(contactPointType)}},
+			}, nil).Once()
+			provisioning.EXPECT().PostContactpoints(mock.MatchedBy(func(params *grafanaprovisioning.PostContactpointsParams) bool {
+				return params.Body.Name == name
+			})).Return(&grafanaprovisioning.PostContactpointsAccepted{}, nil).Once()
+			provisioning.EXPECT().PutContactpoint(mock.MatchedBy(func(params *grafanaprovisioning.PutContactpointParams) bool {
+				return params.Body.Name == name && params.UID == contactPointUID(name)
+			})).Return(&grafanaprovisioning.PutContactpointAccepted{}, nil).Once()
+			reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook").(*grafanaReconciler)
+			reconciler.templatesInitialized = true
+			log, hook := test.NewNullLogger()
+			for range 2 {
+				err := reconciler.reconcileAlerting(context.Background(), tt.team, []*protoapi.TeamEnvironment{{
+					EnvironmentName: "dev-gcp", SlackAlertsChannel: "#alerts",
+				}}, log)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(tree.Routes) != len(original)+1 {
+					t.Fatalf("new team parent must be added exactly once: %+v", tree.Routes)
+				}
+				after, err := json.Marshal(tree.Routes[:len(original)])
+				if err != nil || string(before) != string(after) {
+					t.Fatal("legacy policies, app gate or their order changed")
+				}
+				parent := tree.Routes[len(original)]
+				if !reconciledTeamNotificationRoute(parent, tt.team) || len(parent.Routes) != 2 || parent.Routes[0].Receiver != name {
+					t.Fatalf("expected generated environment policy and fallback: %+v", parent)
+				}
+				entries := hook.AllEntries()
+				if len(entries) != len(tt.legacy) {
+					t.Fatalf("expected one warning per legacy policy on each reconciliation, got %d", len(entries))
+				}
+				for i, entry := range entries {
+					if entry.Level != logrus.WarnLevel || entry.Data["team"] != tt.team ||
+						entry.Data["receiver"] != tt.legacy[i].Receiver || entry.Data["continue"] != tt.legacy[i].Continue ||
+						entry.Data["policy_index"] != i+1 || !strings.Contains(entry.Message, "remove it after verifying") {
+						t.Fatalf("missing actionable legacy policy warning: %+v", entry)
+					}
+				}
+				hook.Reset()
 			}
 		})
 	}
@@ -289,6 +435,16 @@ func TestNotificationRoutesToAdd(t *testing.T) {
 		}
 	})
 
+	t.Run("preserves legacy regex team route", func(t *testing.T) {
+		legacy := &models.Route{
+			Receiver: "custom", ObjectMatchers: models.ObjectMatchers{{"team", "=~", "id.*"}},
+		}
+		additions, err := routesToAdd([]*models.Route{legacy}, desired, "idm")
+		if err != nil || !reflect.DeepEqual(additions, desired) {
+			t.Fatalf("expected new routes alongside legacy regex policy, got %v, %v", additions, err)
+		}
+	})
+
 	tests := []struct {
 		name     string
 		existing []*models.Route
@@ -310,10 +466,6 @@ func TestNotificationRoutesToAdd(t *testing.T) {
 		{"nested route reuses contact point", []*models.Route{{Routes: []*models.Route{{
 			Receiver: desired[0].Receiver,
 		}}}}, desired},
-		{"regex team route", []*models.Route{{
-			Receiver:       "custom",
-			ObjectMatchers: models.ObjectMatchers{{"team", "=~", "id.*"}},
-		}}, desired},
 		{"legacy match route", []*models.Route{{Match: map[string]string{"team": "idm"}}}, desired},
 		{"nil route", []*models.Route{nil}, desired},
 		{"duplicate desired environments", nil, []*models.Route{desired[0], desired[0]}},
@@ -484,10 +636,11 @@ func TestNotificationRoutesToAddWithRegex(t *testing.T) {
 		t.Fatalf("substring regex should not conflict: additions = %v, err = %v", additions, err)
 	}
 
-	if _, err := routesToAdd([]*models.Route{{
+	additions, err = routesToAdd([]*models.Route{{
 		Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", "!~", "idm"}},
-	}}, desired, "idm-dev"); err == nil {
-		t.Fatal("negated substring regex should conflict")
+	}}, desired, "idm-dev")
+	if err != nil || len(additions) != 1 || additions[0] != desired[0] {
+		t.Fatalf("legacy negated regex should allow new routes: additions = %v, err = %v", additions, err)
 	}
 }
 
@@ -511,8 +664,8 @@ func TestNotificationRoutesWithExcludedTeam(t *testing.T) {
 	auraRoutes := (&grafanaReconciler{}).buildNotificationRoutes("aura", []*protoapi.TeamEnvironment{{
 		EnvironmentName: "prod-gcp", SlackAlertsChannel: "#aura",
 	}}, log)
-	if _, err := routesToAdd([]*models.Route{manual}, auraRoutes, "aura"); err == nil {
-		t.Fatal("applicable manual route should conflict")
+	if additions, err := routesToAdd([]*models.Route{manual}, auraRoutes, "aura"); err != nil || !reflect.DeepEqual(additions, auraRoutes) {
+		t.Fatalf("applicable legacy route should allow new routes: additions = %v, err = %v", additions, err)
 	}
 
 	for _, tt := range []struct {
