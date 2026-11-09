@@ -17,7 +17,6 @@ import (
 	"github.com/go-openapi/strfmt"
 	grafanaclient "github.com/grafana/grafana-openapi-client-go/client"
 	grafanaprovisioning "github.com/grafana/grafana-openapi-client-go/client/provisioning"
-	grafanateams "github.com/grafana/grafana-openapi-client-go/client/teams"
 	"github.com/grafana/grafana-openapi-client-go/models"
 	"github.com/nais/api-reconcilers/internal/cmd/reconciler/config"
 	"github.com/nais/api/pkg/apiclient"
@@ -524,15 +523,9 @@ func TestNotificationRoutesWithExcludedTeam(t *testing.T) {
 		{"aura", true},
 	} {
 		t.Run(tt.team, func(t *testing.T) {
-			provisioning := NewMockProvisioningClientService(t)
-			provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{
-				Payload: &models.Route{Routes: []*models.Route{manual}},
-			}, nil).Once()
-			reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning,
-				config.FeatureFlags{EnableGrafanaAlerts: true}, "webhook").(*grafanaReconciler)
-			err := reconciler.ensureNoNotificationRoutes(tt.team)
+			_, err := removeTeamNotificationRoutes(&models.Route{Routes: []*models.Route{manual}}, tt.team, make(map[string]bool))
 			if (err != nil) != tt.blocked {
-				t.Fatalf("ensureNoNotificationRoutes() error = %v, want blocked = %v", err, tt.blocked)
+				t.Fatalf("removeTeamNotificationRoutes() error = %v, want blocked = %v", err, tt.blocked)
 			}
 		})
 	}
@@ -820,55 +813,32 @@ func TestNotificationRoutesOnDelete(t *testing.T) {
 	log, _ := test.NewNullLogger()
 	team := &protoapi.Team{Slug: "idm"}
 
-	t.Run("disabled flag never reads the policy tree", func(t *testing.T) {
+	t.Run("missing clients fail closed even when alerting is disabled", func(t *testing.T) {
 		provisioning := NewMockProvisioningClientService(t)
 		teams := NewMockTeamsClientService(t)
-		teams.EXPECT().SearchTeams(&grafanateams.SearchTeamsParams{
-			Query: &team.Slug, Context: ctx,
-		}).Return(&grafanateams.SearchTeamsOK{
-			Payload: &models.SearchTeamQueryResult{},
-		}, nil).Once()
 		reconciler := New(nil, teams, nil, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, "webhook")
-		if err := reconciler.Delete(ctx, &apiclient.APIClient{}, team, log); err != nil {
-			t.Fatal(err)
+		if err := reconciler.Delete(ctx, &apiclient.APIClient{}, team, log); err == nil {
+			t.Fatal("expected missing folders client to block deletion")
 		}
 	})
 
-	t.Run("existing team route blocks deletion without writing the tree", func(t *testing.T) {
-		provisioning := NewMockProvisioningClientService(t)
-		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{
-			Payload: &models.Route{Provenance: models.Provenance("api"), Routes: []*models.Route{{
-				Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
-			}}},
-		}, nil).Once()
-		reconciler := New(nil, NewMockTeamsClientService(t), nil, nil, nil, nil, nil, provisioning,
-			config.FeatureFlags{EnableGrafanaAlerts: true}, "webhook")
-		if err := reconciler.Delete(ctx, &apiclient.APIClient{}, team, log); err == nil || !strings.Contains(err.Error(), "manual cleanup") {
-			t.Fatalf("expected a manual cleanup error, got %v", err)
-		}
-	})
-
-	t.Run("failed policy read blocks team deletion", func(t *testing.T) {
-		provisioning := NewMockProvisioningClientService(t)
-		provisioning.EXPECT().GetPolicyTree().Return(nil, errors.New("policy read failed")).Once()
-		reconciler := New(nil, NewMockTeamsClientService(t), nil, nil, nil, nil, nil, provisioning,
-			config.FeatureFlags{EnableGrafanaAlerts: true}, "webhook")
-		if err := reconciler.Delete(ctx, &apiclient.APIClient{}, team, log); err == nil || !strings.Contains(err.Error(), "policy read failed") {
-			t.Fatalf("expected a policy read error, got %v", err)
+	t.Run("manual team route blocks deletion", func(t *testing.T) {
+		tree := &models.Route{Provenance: models.Provenance("api"), Routes: []*models.Route{{
+			Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
+		}}}
+		_, err := removeTeamNotificationRoutes(tree, team.Slug, make(map[string]bool))
+		if err == nil || len(tree.Routes) != 1 {
+			t.Fatalf("expected manual route to block deletion without mutating baseline, got %v", err)
 		}
 	})
 
 	t.Run("nested team route blocks deletion", func(t *testing.T) {
-		provisioning := NewMockProvisioningClientService(t)
-		provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{
-			Payload: &models.Route{Routes: []*models.Route{{Routes: []*models.Route{{
-				ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
-			}}}}},
-		}, nil).Once()
-		reconciler := New(nil, NewMockTeamsClientService(t), nil, nil, nil, nil, nil, provisioning,
-			config.FeatureFlags{EnableGrafanaAlerts: true}, "webhook")
-		if err := reconciler.Delete(ctx, &apiclient.APIClient{}, team, log); err == nil || !strings.Contains(err.Error(), "manual migration") {
-			t.Fatalf("expected a nested route conflict, got %v", err)
+		tree := &models.Route{Routes: []*models.Route{{Routes: []*models.Route{{
+			ObjectMatchers: models.ObjectMatchers{{"team", "=", "idm"}},
+		}}}}}
+		_, err := removeTeamNotificationRoutes(tree, team.Slug, make(map[string]bool))
+		if err == nil || len(tree.Routes[0].Routes) != 1 {
+			t.Fatalf("expected nested route to block deletion, got %v", err)
 		}
 	})
 
@@ -882,17 +852,12 @@ func TestNotificationRoutesOnDelete(t *testing.T) {
 			{"negated substring regex", "!~", true},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				provisioning := NewMockProvisioningClientService(t)
-				provisioning.EXPECT().GetPolicyTree().Return(&grafanaprovisioning.GetPolicyTreeOK{
-					Payload: &models.Route{Routes: []*models.Route{{
-						Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", tt.op, "idm"}},
-					}}},
-				}, nil).Once()
-				reconciler := New(nil, nil, nil, nil, nil, nil, nil, provisioning,
-					config.FeatureFlags{EnableGrafanaAlerts: true}, "webhook").(*grafanaReconciler)
-				err := reconciler.ensureNoNotificationRoutes("idm-dev")
+				tree := &models.Route{Routes: []*models.Route{{
+					Receiver: "manual", ObjectMatchers: models.ObjectMatchers{{"team", tt.op, "idm"}},
+				}}}
+				_, err := removeTeamNotificationRoutes(tree, "idm-dev", make(map[string]bool))
 				if (err != nil) != tt.blocked {
-					t.Fatalf("ensureNoNotificationRoutes() error = %v, want blocked = %v", err, tt.blocked)
+					t.Fatalf("removeTeamNotificationRoutes() error = %v, want blocked = %v", err, tt.blocked)
 				}
 			})
 		}

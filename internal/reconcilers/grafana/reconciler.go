@@ -59,6 +59,7 @@ type TeamsClientService interface {
 }
 
 type FoldersClientService interface {
+	DeleteFolder(params *grafanafolders.DeleteFolderParams, opts ...grafanafolders.ClientOption) (*grafanafolders.DeleteFolderOK, error)
 	GetFolders(params *grafanafolders.GetFoldersParams, opts ...grafanafolders.ClientOption) (*grafanafolders.GetFoldersOK, error)
 	GetFolderByUIDWithParams(params *grafanafolders.GetFolderByUIDParams, opts ...grafanafolders.ClientOption) (*grafanafolders.GetFolderByUIDOK, error)
 	CreateFolderWithParams(params *grafanafolders.CreateFolderParams, opts ...grafanafolders.ClientOption) (*grafanafolders.CreateFolderOK, error)
@@ -85,6 +86,8 @@ type AdminUsersClientService interface {
 }
 
 type ProvisioningClientService interface {
+	DeleteContactpointsWithParams(params *grafanaprovisioning.DeleteContactpointsParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.DeleteContactpointsAccepted, error)
+	GetAlertRules(opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetAlertRulesOK, error)
 	GetTemplate(name string, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetTemplateOK, error)
 	PutTemplate(params *grafanaprovisioning.PutTemplateParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.PutTemplateAccepted, error)
 	GetContactpoints(params *grafanaprovisioning.GetContactpointsParams, opts ...grafanaprovisioning.ClientOption) (*grafanaprovisioning.GetContactpointsOK, error)
@@ -791,7 +794,7 @@ func (r *grafanaReconciler) getTeamMembers(ctx context.Context, client *apiclien
 	return members, nil
 }
 
-func (r *grafanaReconciler) buildContactPointName(teamSlug, environmentName string) string {
+func buildContactPointName(teamSlug, environmentName string) string {
 	return fmt.Sprintf("team-%s-%s", teamSlug, environmentName)
 }
 
@@ -847,7 +850,7 @@ func (r *grafanaReconciler) reconcileAlerting(ctx context.Context, teamSlug stri
 			continue
 		}
 
-		contactPointName := r.buildContactPointName(teamSlug, env.EnvironmentName)
+		contactPointName := buildContactPointName(teamSlug, env.EnvironmentName)
 		if err := r.createOrUpdateContactPoint(ctx, contactPointName, env.SlackAlertsChannel, log); err != nil {
 			return fmt.Errorf("creating contact point for %s-%s: %w", teamSlug, env.EnvironmentName, err)
 		}
@@ -1369,24 +1372,11 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 			continue
 		}
 
-		contactPointName := r.buildContactPointName(teamSlug, env.EnvironmentName)
-
-		teamMatcher := models.ObjectMatcher{"team", "=", teamSlug}
-		envMatcher := models.ObjectMatcher{"env", "=", env.EnvironmentName}
-
-		route := &models.Route{
-			Receiver:       contactPointName,
-			ObjectMatchers: models.ObjectMatchers{teamMatcher, envMatcher},
-			Continue:       false,
-			GroupBy:        []string{"alertname", "team", "env"},
-			GroupWait:      defaultGroupWait,
-			GroupInterval:  defaultGroupInterval,
-			RepeatInterval: defaultRepeatInterval,
-		}
+		route := buildEnvironmentNotificationRoute(teamSlug, env.EnvironmentName)
 
 		// Debug: Log what we're creating
 		log.Debugf("Creating route - Receiver: %s, Team: %s, Environment: %s",
-			contactPointName, teamSlug, env.EnvironmentName)
+			route.Receiver, teamSlug, env.EnvironmentName)
 		log.Debugf("Route details - ObjectMatchers: %+v, GroupBy: %+v",
 			route.ObjectMatchers, route.GroupBy)
 
@@ -1396,78 +1386,18 @@ func (r *grafanaReconciler) buildNotificationRoutes(teamSlug string, environment
 	return routes
 }
 
-func (r *grafanaReconciler) Delete(ctx context.Context, client *apiclient.APIClient, naisTeam *protoapi.Team, log logrus.FieldLogger) error {
-	r.alertingMu.Lock()
-	defer r.alertingMu.Unlock()
-
-	teamName := naisTeam.GetSlug()
-
-	if r.flags.EnableGrafanaAlerts {
-		if r.provisioning == nil {
-			return fmt.Errorf("cannot check notification routes before deleting team %s: provisioning client is unavailable", teamName)
-		}
-		if err := r.ensureNoNotificationRoutes(teamName); err != nil {
-			return fmt.Errorf("checking notification routes before deleting team %s: %w", teamName, err)
-		}
+func buildEnvironmentNotificationRoute(teamSlug, environmentName string) *models.Route {
+	return &models.Route{
+		Receiver: buildContactPointName(teamSlug, environmentName),
+		ObjectMatchers: models.ObjectMatchers{
+			{"team", "=", teamSlug},
+			{"env", "=", environmentName},
+		},
+		GroupBy:        []string{"alertname", "team", "env"},
+		GroupWait:      defaultGroupWait,
+		GroupInterval:  defaultGroupInterval,
+		RepeatInterval: defaultRepeatInterval,
 	}
-
-	params := &grafanateams.SearchTeamsParams{
-		Query:   &teamName,
-		Context: ctx,
-	}
-
-	searchResp, err := r.teams.SearchTeams(params)
-	if err != nil {
-		return err
-	}
-
-	for _, team := range searchResp.Payload.Teams {
-		if team != nil && team.Name != nil && *team.Name == teamName {
-			if team.ID == nil {
-				return fmt.Errorf("team %s has no ID", teamName)
-			}
-			_, err = r.teams.DeleteTeamByID(strconv.Itoa(int(*team.ID)))
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (r *grafanaReconciler) ensureNoNotificationRoutes(teamSlug string) error {
-	resp, err := r.provisioning.GetPolicyTree()
-	if err != nil {
-		return fmt.Errorf("getting policy tree: %w", err)
-	}
-	if resp == nil || resp.Payload == nil {
-		return fmt.Errorf("getting policy tree: empty response")
-	}
-	matches, err := routeMatchesTeam(resp.Payload, teamSlug)
-	if err != nil {
-		return err
-	}
-	if matches {
-		return fmt.Errorf("root notification route for team %s requires manual cleanup before deletion", teamSlug)
-	}
-	for _, route := range resp.Payload.Routes {
-		if route == nil {
-			return fmt.Errorf("nil notification route in policy tree")
-		}
-		matches, err := routeMatchesTeam(route, teamSlug)
-		if err != nil {
-			return err
-		}
-		if matches {
-			return fmt.Errorf("notification route for team %s (receiver %q) requires manual cleanup before deletion", teamSlug, route.Receiver)
-		}
-		if err := checkNestedTeamRoutes(route.Routes, teamSlug, nil); err != nil {
-			return fmt.Errorf("manual cleanup before deleting team %s: %w", teamSlug, err)
-		}
-	}
-	return nil
 }
 
 func createSecurePassword() string {

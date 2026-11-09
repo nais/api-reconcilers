@@ -27,6 +27,18 @@ import (
 
 const testSlackWebhookURL = "https://hooks.slack.com/test/webhook"
 
+func expectEmptyGrafanaCleanup(t *testing.T) (*grafana_reconciler.MockFoldersClientService, *grafana_reconciler.MockProvisioningClientService) {
+	t.Helper()
+	folders := grafana_reconciler.NewMockFoldersClientService(t)
+	folders.EXPECT().GetFolderByUIDWithParams(mock.Anything).Return(nil, grafana_folders.NewGetFolderByUIDNotFound()).Once()
+	folders.EXPECT().GetFolders(mock.Anything).Return(&grafana_folders.GetFoldersOK{}, nil).Once()
+	provisioning := grafana_reconciler.NewMockProvisioningClientService(t)
+	provisioning.EXPECT().GetPolicyTree().Return(&grafana_provisioning.GetPolicyTreeOK{Payload: &models.Route{}}, nil).Times(3)
+	provisioning.EXPECT().GetContactpoints(mock.Anything).Return(&grafana_provisioning.GetContactpointsOK{}, nil).Once()
+	provisioning.EXPECT().GetAlertRules().Return(&grafana_provisioning.GetAlertRulesOK{}, nil).Once()
+	return folders, provisioning
+}
+
 func expectPilotFolder(t *testing.T, ctx context.Context, teamSlug string, teamID int64) (*grafana_reconciler.MockFoldersClientService, *grafana_reconciler.MockFolderPermissionsClientService) {
 	t.Helper()
 	folders := grafana_reconciler.NewMockFoldersClientService(t)
@@ -703,6 +715,8 @@ func TestReconcile(t *testing.T) {
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamName,
+				Page:    new(int64(1)),
+				Perpage: new(int64(1000)),
 				Context: ctx,
 			}).
 			Return(&grafana_teams.SearchTeamsOK{
@@ -721,7 +735,8 @@ func TestReconcile(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, nil, config.FeatureFlags{}, testSlackWebhookURL)
+		folders, provisioning := expectEmptyGrafanaCleanup(t)
+		reconciler := grafana_reconciler.New(nil, teamsService, folders, nil, nil, nil, nil, provisioning, config.FeatureFlags{}, testSlackWebhookURL)
 
 		if err := reconciler.Delete(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatal(err)
@@ -958,10 +973,7 @@ func TestAlertingFunctionality(t *testing.T) {
 		t.Skip("Covered by integration test")
 	})
 
-	t.Run("Delete does not remove notification routes", func(t *testing.T) {
-		t.Skip("Covered by Delete test cases")
-	})
-	t.Run("Delete with provisioning service checks existing routes", func(t *testing.T) {
+	t.Run("Delete with provisioning service cleans up resources", func(t *testing.T) {
 		apiClient, _ := apiclient.NewMockClient(t)
 		teamSlugVar := teamSlug
 		naisTeam := &protoapi.Team{Slug: teamSlug}
@@ -971,6 +983,8 @@ func TestAlertingFunctionality(t *testing.T) {
 		teamsService.EXPECT().
 			SearchTeams(&grafana_teams.SearchTeamsParams{
 				Query:   &teamSlugVar,
+				Page:    new(int64(1)),
+				Perpage: new(int64(1000)),
 				Context: ctx,
 			}).
 			Return(&grafana_teams.SearchTeamsOK{
@@ -986,16 +1000,8 @@ func TestAlertingFunctionality(t *testing.T) {
 			Return(&grafana_teams.DeleteTeamByIDOK{}, nil).
 			Once()
 
-		// Check policy routes without changing the tree.
-		provisioningService := grafana_reconciler.NewMockProvisioningClientService(t)
-		provisioningService.EXPECT().
-			GetPolicyTree().
-			Return(&grafana_provisioning.GetPolicyTreeOK{
-				Payload: &models.Route{Routes: []*models.Route{}},
-			}, nil).
-			Once()
-
-		reconciler := grafana_reconciler.New(nil, teamsService, nil, nil, nil, nil, nil, provisioningService, config.FeatureFlags{
+		folders, provisioningService := expectEmptyGrafanaCleanup(t)
+		reconciler := grafana_reconciler.New(nil, teamsService, folders, nil, nil, nil, nil, provisioningService, config.FeatureFlags{
 			EnableGrafanaAlerts: true,
 		}, testSlackWebhookURL)
 
