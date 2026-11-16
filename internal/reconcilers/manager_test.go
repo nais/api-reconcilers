@@ -3,6 +3,7 @@ package reconcilers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nais/api/pkg/apiclient"
 	"github.com/nais/api/pkg/apiclient/protoapi"
 	"github.com/sirupsen/logrus"
@@ -165,6 +167,83 @@ func expectManagerSuccess(servers *apiclient.MockServers, slug string, count int
 		Return(&protoapi.RemoveReconcilerErrorForTeamResponse{}, nil).Times(count)
 	servers.Reconcilers.EXPECT().SuccessfulTeamSync(mock.Anything, &protoapi.SuccessfulTeamSyncRequest{TeamSlug: slug}).
 		Return(&protoapi.SuccessfulTeamSyncResponse{}, nil).Times(count)
+}
+
+func TestManagerGrafanaSyncedCount(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		reconciler string
+		failing    bool
+		deleting   bool
+		want       uint64
+	}{
+		{name: "successful sync", reconciler: "grafana", want: 1},
+		{name: "failed sync", reconciler: "grafana", failing: true},
+		{name: "other reconciler", reconciler: "other"},
+		{name: "deletion", reconciler: "grafana", deleting: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			servers := managerTestServers(t)
+			m := newManagerTest(t, servers)
+			team := &protoapi.Team{Slug: "team"}
+			if tt.deleting {
+				team.DeleteKeyConfirmedAt = timestamppb.Now()
+			}
+			operation := func(*protoapi.Team) error {
+				if tt.failing {
+					return errors.New("temporary failure")
+				}
+				return nil
+			}
+			r := &managerTestReconciler{name: tt.reconciler, reconcile: operation, delete: operation}
+			if tt.failing {
+				servers.Reconcilers.EXPECT().SetReconcilerErrorForTeam(mock.Anything, mock.Anything).
+					Return(&protoapi.SetReconcilerErrorForTeamResponse{}, nil).Once()
+			} else {
+				servers.Reconcilers.EXPECT().RemoveReconcilerErrorForTeam(mock.Anything, mock.Anything).
+					Return(&protoapi.RemoveReconcilerErrorForTeamResponse{}, nil).Once()
+				if tt.deleting {
+					servers.Teams.EXPECT().Delete(mock.Anything, mock.Anything).
+						Return(&protoapi.DeleteTeamResponse{}, nil).Once()
+				} else {
+					servers.Reconcilers.EXPECT().SuccessfulTeamSync(mock.Anything, mock.Anything).
+						Return(&protoapi.SuccessfulTeamSyncResponse{}, nil).Once()
+				}
+			}
+			if got := m.runTeamReconcilers(t.Context(), []Reconciler{r}, team, ReconcileRequest{TeamSlug: team.Slug}); got == tt.failing {
+				t.Fatalf("runTeamReconcilers() = %v, want %v", got, !tt.failing)
+			}
+			if got := m.grafanaTeamsSynced.Load(); got != tt.want {
+				t.Fatalf("synced count = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestManagerGrafanaSyncedCountLogging(t *testing.T) {
+	servers := managerTestServers(t)
+	m := newManagerTest(t, servers)
+	log, hook := logrustest.NewNullLogger()
+	m.log = log
+	m.grafanaTeamsSynced.Add(42)
+	servers.Reconcilers.EXPECT().List(mock.Anything, mock.Anything).
+		Return(nil, status.Error(codes.Unavailable, "API unavailable")).Twice()
+
+	for _, want := range []uint64{42, 0} {
+		hook.Reset()
+		if err := m.scheduleAllTeams(t.Context(), uuid.New()); err == nil {
+			t.Fatal("expected API error")
+		}
+		entries := hook.AllEntries()
+		if len(entries) != 1 {
+			t.Fatalf("expected one info line, got %+v", entries)
+		}
+		entry := entries[0]
+		if entry.Level != logrus.InfoLevel || entry.Data["reconciler"] != "grafana" || entry.Data["num_teams"] != want ||
+			entry.Message != fmt.Sprintf("synced %d teams to Grafana", want) {
+			t.Fatalf("unexpected sync count log: %+v", entry)
+		}
+	}
 }
 
 func TestManagerReconcilerOrder(t *testing.T) {

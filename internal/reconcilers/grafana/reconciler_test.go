@@ -1322,8 +1322,12 @@ func TestAlertingFunctionality(t *testing.T) {
 				testSlackWebhookURL,
 			)
 
+			log, hook := test.NewNullLogger()
 			if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 				t.Fatal(err)
+			}
+			if entries := hook.AllEntries(); len(entries) != 0 {
+				t.Fatalf("unexpected per-team info logs: %+v", entries)
 			}
 		})
 	}
@@ -1473,8 +1477,12 @@ func TestAlertingFunctionality(t *testing.T) {
 				testSlackWebhookURL,
 			)
 
+			log, hook := test.NewNullLogger()
 			if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 				t.Fatal(err)
+			}
+			if entries := hook.AllEntries(); len(entries) != 0 {
+				t.Fatalf("unexpected per-team info logs: %+v", entries)
 			}
 		})
 	}
