@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
@@ -36,6 +37,8 @@ type Manager struct {
 	log                 logrus.FieldLogger
 	pubsubSubscription  *pubsub.Subscriber
 	syncQueue           Queue
+
+	grafanaTeamsSynced atomic.Uint64
 
 	metricReconcilerTime metric.Int64Histogram
 	metricReconcileTeam  metric.Int64Histogram
@@ -321,6 +324,9 @@ func (m *Manager) runTeamReconcilers(ctx context.Context, reconcilers []Reconcil
 
 		log.WithField("time", start).Debugf("start %s", action)
 		err := operation(ctx, m.apiclient, naisTeam, log)
+		if !deleting && r.Name() == "grafana" && err == nil {
+			m.grafanaTeamsSynced.Add(1)
+		}
 		if err != nil {
 			success = false
 			log.WithError(err).Errorf("error during team %s", process)
@@ -387,6 +393,10 @@ func (m *Manager) runTeamReconcilers(ctx context.Context, reconcilers []Reconcil
 
 // scheduleAllTeams will fetch all teams from the NAIS API and put them on the reconciler queue
 func (m *Manager) scheduleAllTeams(ctx context.Context, correlationID uuid.UUID) error {
+	num := m.grafanaTeamsSynced.Swap(0)
+	m.log.WithField("reconciler", "grafana").WithField("num_teams", num).
+		Infof("synced %d teams to Grafana", num)
+
 	reconcilers, err := m.enabledReconcilers(ctx)
 	if err != nil {
 		return err

@@ -692,7 +692,6 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 
 	inPilot := naisTeam.Slug != "" && (slices.Contains(r.flags.GrafanaAlertPilotTeams, "*") || slices.Contains(r.flags.GrafanaAlertPilotTeams, naisTeam.Slug))
 	if inPilot {
-		log.Infof("Reconciling folder %s", naisTeam.Slug)
 		folderUID, err := r.getOrCreateFolder(ctx, naisTeam.Slug)
 		if err != nil {
 			return fmt.Errorf("getting or creating folder: %w", err)
@@ -735,8 +734,6 @@ func (r *grafanaReconciler) Reconcile(ctx context.Context, client *apiclient.API
 		if err := r.reconcileAlerting(ctx, naisTeam.Slug, environments, log); err != nil {
 			return fmt.Errorf("reconciling alerting: %w", err)
 		}
-	} else {
-		log.Info("Grafana alerting is disabled or team is not in the alerting pilot, skipping alerting reconciliation")
 	}
 
 	return nil
