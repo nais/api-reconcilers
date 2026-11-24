@@ -87,10 +87,6 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure namespace for project %q in environment %q: %w", ptr.Deref(env.GcpProjectId, ""), env.EnvironmentName, err)
 		}
 
-		if err := r.ensurePgNamespace(ctx, naisTeam, env, c.Clientset.CoreV1().Namespaces(), log); err != nil {
-			return fmt.Errorf("ensure pg namespace for team %s in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
-		}
-
 		if err := r.ensureServiceAccount(ctx, naisTeam, c.Clientset.CoreV1().ServiceAccounts(naisTeam.Slug), log); err != nil {
 			return fmt.Errorf("ensure service account in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
@@ -99,15 +95,7 @@ func (r *naisNamespaceReconciler) Reconcile(ctx context.Context, client *apiclie
 			return fmt.Errorf("ensure service account rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
-		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), "nais:developer", fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug), log); err != nil {
-			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
-		}
-
-		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings("pg-"+naisTeam.Slug), "postgres-operator:users:view", fmt.Sprintf("team-%s-pgviewer", naisTeam.Slug), log); err != nil {
-			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
-		}
-
-		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings("pg-"+naisTeam.Slug), "nais:postgres-user", fmt.Sprintf("team-%s-pguser", naisTeam.Slug), log); err != nil {
+		if err := r.ensureTeamRolebinding(ctx, naisTeam, c.Clientset.RbacV1().RoleBindings(naisTeam.Slug), log); err != nil {
 			return fmt.Errorf("ensure team rolebinding in namespace %q in environment %q: %w", naisTeam.Slug, env.EnvironmentName, err)
 		}
 
@@ -148,44 +136,6 @@ func (r *naisNamespaceReconciler) ensureNamespace(ctx context.Context, naisTeam 
 	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "workload")
-	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
-
-	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("updating namespace: %w", err)
-	}
-
-	log.Debug("Updated namespace")
-
-	return nil
-}
-
-func (r *naisNamespaceReconciler) ensurePgNamespace(ctx context.Context, naisTeam *protoapi.Team, env *protoapi.TeamEnvironment, c corev1Typed.NamespaceInterface, log logrus.FieldLogger) error {
-	var ns *corev1.Namespace
-	pgNamespaceName := "pg-" + naisTeam.Slug
-
-	log = log.WithField("slug", env.Slug).
-		WithField("environment", env.EnvironmentName).
-		WithField("pgNamespaceName", pgNamespaceName)
-
-	ns, err := c.Get(ctx, pgNamespaceName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		ns.Name = pgNamespaceName
-		ns, err = c.Create(ctx, ns, metav1.CreateOptions{})
-		if err != nil {
-			return fmt.Errorf("creating namespace: %w", err)
-		}
-		log.Debug("Created namespace")
-	} else if err != nil {
-		return fmt.Errorf("getting namespace: %w", err)
-	} else {
-		log.Debug("Namespace already exists")
-	}
-
-	delete(ns.Annotations, "cnrm.cloud.google.com/project-id")
-	metav1.SetMetaDataAnnotation(&ns.ObjectMeta, "replicator.nais.io/slackAlertsChannel", env.SlackAlertsChannel)
-	metav1.SetMetaDataLabel(&ns.ObjectMeta, "team", naisTeam.Slug)
-	metav1.SetMetaDataLabel(&ns.ObjectMeta, "nais.io/type", "postgres")
 	metav1.SetMetaDataLabel(&ns.ObjectMeta, "google-cloud-project", ptr.Deref(env.GcpProjectId, ""))
 
 	_, err = c.Update(ctx, ns, metav1.UpdateOptions{})
@@ -258,14 +208,15 @@ func (r *naisNamespaceReconciler) ensureSARolebinding(ctx context.Context, naisT
 	return nil
 }
 
-func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, targetRole, roleBindingName string, log logrus.FieldLogger) error {
+func (r *naisNamespaceReconciler) ensureTeamRolebinding(ctx context.Context, naisTeam *protoapi.Team, c rbacTypedV1.RoleBindingInterface, log logrus.FieldLogger) error {
+	roleBindingName := fmt.Sprintf("team-%s-naisdeveloper", naisTeam.Slug)
 	log = log.WithField("rolebinding_name", roleBindingName)
 	rb, err := c.Get(ctx, roleBindingName, metav1.GetOptions{})
 
 	rb.RoleRef = v1.RoleRef{
 		APIGroup: "rbac.authorization.k8s.io",
 		Kind:     "ClusterRole",
-		Name:     targetRole,
+		Name:     "nais:developer",
 	}
 
 	rb.Subjects = []v1.Subject{
@@ -417,11 +368,6 @@ func (r *naisNamespaceReconciler) Delete(ctx context.Context, client *apiclient.
 			continue
 		}
 
-		err = r.deleteNamespace(ctx, fmt.Sprintf("pg-%s", naisTeam.Slug), c.Clientset.CoreV1().Namespaces(), log)
-		if err != nil {
-			log.WithError(err).Errorf("deleting namespace")
-			continue
-		}
 		log.Debugf("Deleted namespace")
 	}
 
